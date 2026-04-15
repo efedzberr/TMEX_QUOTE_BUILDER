@@ -1,0 +1,420 @@
+import { User, Ruler, DollarSign, Globe, Edit2, Check, X } from 'lucide-react';
+import { Quote } from '../lib/supabase';
+import { useState } from 'react';
+
+interface QuoteHeaderProps {
+  quote: Quote;
+  onToggleUnits: () => void;
+  onToggleCurrency: () => void;
+  onToggleLanguage: () => void;
+  onUpdateQuote: (updates: Partial<Quote>) => void;
+}
+
+const MOCK_REPRESENTATIVES = [
+  'John Smith',
+  'Maria Garcia',
+  'Carlos Rodriguez',
+  'Sarah Johnson',
+  'David Martinez',
+  'Jennifer Lee',
+];
+
+export function QuoteHeader({ quote, onToggleUnits, onToggleCurrency, onToggleLanguage, onUpdateQuote }: QuoteHeaderProps) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedData, setEditedData] = useState({
+    quote_number: quote.quote_number,
+    opportunity: quote.opportunity,
+    owner_name: quote.owner_name,
+    mx_sales_rep: quote.mx_sales_rep,
+    us_sales_rep: quote.us_sales_rep,
+    total_amount: quote.total_amount,
+    border_crossing_fee: quote.border_crossing_fee,
+    us_portion: quote.us_portion,
+    mx_rate: quote.mx_rate,
+    type_of_service: quote.type_of_service,
+    partner_account: quote.partner_account,
+    bill_to_customer: quote.bill_to_customer,
+    shipper: quote.shipper,
+    bco_partner: quote.bco_partner,
+    units: quote.units,
+  });
+
+  const handleEdit = () => {
+    setIsEditing(true);
+  };
+
+  const handleSave = () => {
+    onUpdateQuote(editedData);
+    setIsEditing(false);
+  };
+
+  const handleCancel = () => {
+    setEditedData({
+      quote_number: quote.quote_number,
+      opportunity: quote.opportunity,
+      owner_name: quote.owner_name,
+      mx_sales_rep: quote.mx_sales_rep,
+      us_sales_rep: quote.us_sales_rep,
+      total_amount: quote.total_amount,
+      border_crossing_fee: quote.border_crossing_fee,
+      us_portion: quote.us_portion,
+      mx_rate: quote.mx_rate,
+      type_of_service: quote.type_of_service,
+      partner_account: quote.partner_account,
+      bill_to_customer: quote.bill_to_customer,
+      shipper: quote.shipper,
+      bco_partner: quote.bco_partner,
+      units: quote.units,
+    });
+    setIsEditing(false);
+  };
+
+  const handleChange = (field: string, value: string | number) => {
+    setEditedData(prev => ({ ...prev, [field]: value }));
+  };
+
+  return (
+    <div className="bg-white">
+      <div className="px-6 py-4 flex items-center justify-between">
+        <div className="flex-1 grid grid-cols-5 gap-8">
+          <div className="text-center">
+            <div className="text-4xl mb-2">🔢</div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Quote Number</div>
+            <div className="text-lg font-bold text-gray-900">{quote.quote_number}</div>
+          </div>
+          <div className="text-center border-l border-gray-200 pl-8">
+            <div className="text-4xl mb-2">🏢</div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Parent Account</div>
+            <div className="text-lg font-bold text-gray-900">{quote.partner_account}</div>
+          </div>
+          <div className="text-center border-l border-gray-200 pl-8">
+            <div className="text-4xl mb-2">🚚</div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Shipper</div>
+            <div className="text-lg font-bold text-gray-900">{quote.shipper}</div>
+          </div>
+          <div className="text-center border-l border-gray-200 pl-8">
+            <div className="text-4xl mb-2">💵</div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Rate</div>
+            <div className="text-lg font-bold text-gray-900">${quote.total_amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+          </div>
+          <div className="text-center border-l border-gray-200 pl-8">
+            <div className="text-4xl mb-2">💱</div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Currency</div>
+            <div className="text-lg font-bold text-gray-900">{quote.currency}</div>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2 ml-8">
+          <button
+            onClick={onToggleUnits}
+            className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+            title="Toggle Units"
+          >
+            <Ruler className="w-3.5 h-3.5 text-gray-700" />
+            <span className="text-xs font-medium text-gray-700">
+              {quote.units === 'Miles' ? 'Miles' : 'Kilometers'}
+            </span>
+          </button>
+          <button
+            onClick={onToggleCurrency}
+            className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+            title="Toggle Currency"
+          >
+            <DollarSign className="w-3.5 h-3.5 text-gray-700" />
+            <span className="text-xs font-medium text-gray-700">
+              {quote.currency}
+            </span>
+          </button>
+          <button
+            onClick={onToggleLanguage}
+            className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+            title="Toggle Language"
+          >
+            <Globe className="w-3.5 h-3.5 text-gray-700" />
+            <span className="text-xs font-medium text-gray-700">
+              EN
+            </span>
+          </button>
+        </div>
+      </div>
+
+      <div className="px-6 py-2 border-t border-gray-100 relative">
+        <div className="absolute right-6 top-2 flex items-center gap-2">
+          {!isEditing ? (
+            <button
+              onClick={handleEdit}
+              className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+              title="Edit"
+            >
+              <Edit2 className="w-3.5 h-3.5" />
+            </button>
+          ) : (
+            <>
+              <button
+                onClick={handleSave}
+                className="p-1 text-white bg-green-600 hover:bg-green-700 rounded transition-colors"
+                title="Save"
+              >
+                <Check className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={handleCancel}
+                className="p-1 text-gray-600 bg-gray-200 hover:bg-gray-300 rounded transition-colors"
+                title="Cancel"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </>
+          )}
+        </div>
+
+        <div className="space-y-1.5">
+          <div className="grid grid-cols-5 gap-x-6">
+            <div>
+              <div className="text-[10px] text-gray-500 uppercase tracking-wide mb-0.5">Quote Number</div>
+              {!isEditing ? (
+                <div className="text-xs text-gray-900">{quote.quote_number}</div>
+              ) : (
+                <input
+                  type="text"
+                  value={editedData.quote_number}
+                  onChange={(e) => handleChange('quote_number', e.target.value)}
+                  className="w-full px-1.5 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                />
+              )}
+            </div>
+            <div>
+              <div className="text-[10px] text-gray-500 uppercase tracking-wide mb-0.5">Opportunity</div>
+              {!isEditing ? (
+                <a href="#" className="text-xs text-blue-600 hover:text-blue-800 hover:underline">
+                  {quote.opportunity}
+                </a>
+              ) : (
+                <input
+                  type="text"
+                  value={editedData.opportunity}
+                  onChange={(e) => handleChange('opportunity', e.target.value)}
+                  className="w-full px-1.5 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                />
+              )}
+            </div>
+            <div>
+              <div className="text-[10px] text-gray-500 uppercase tracking-wide mb-0.5">Owner</div>
+              {!isEditing ? (
+                <div className="text-xs text-gray-900 flex items-center gap-1">
+                  <User className="w-2.5 h-2.5 text-blue-600" />
+                  {quote.owner_name}
+                </div>
+              ) : (
+                <select
+                  value={editedData.owner_name}
+                  onChange={(e) => handleChange('owner_name', e.target.value)}
+                  className="w-full px-1.5 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  {MOCK_REPRESENTATIVES.map((rep) => (
+                    <option key={rep} value={rep}>{rep}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+            <div>
+              <div className="text-[10px] text-gray-500 uppercase tracking-wide mb-0.5">MX Sales Representative</div>
+              {!isEditing ? (
+                <div className="text-xs text-gray-900">{quote.mx_sales_rep}</div>
+              ) : (
+                <select
+                  value={editedData.mx_sales_rep}
+                  onChange={(e) => handleChange('mx_sales_rep', e.target.value)}
+                  className="w-full px-1.5 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  {MOCK_REPRESENTATIVES.map((rep) => (
+                    <option key={rep} value={rep}>{rep}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+            <div>
+              <div className="text-[10px] text-gray-500 uppercase tracking-wide mb-0.5">US Sales Representative</div>
+              {!isEditing ? (
+                <div className="text-xs text-gray-900">{quote.us_sales_rep}</div>
+              ) : (
+                <select
+                  value={editedData.us_sales_rep}
+                  onChange={(e) => handleChange('us_sales_rep', e.target.value)}
+                  className="w-full px-1.5 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  {MOCK_REPRESENTATIVES.map((rep) => (
+                    <option key={rep} value={rep}>{rep}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+          </div>
+
+          <div className="border-t border-gray-100 pt-1.5"></div>
+
+          <div className="grid grid-cols-5 gap-x-6">
+            <div>
+              <div className="text-[10px] text-gray-500 uppercase tracking-wide mb-0.5">Total Amount</div>
+              {!isEditing ? (
+                <div className="text-xs text-gray-900">${quote.total_amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+              ) : (
+                <input
+                  type="number"
+                  step="0.01"
+                  value={editedData.total_amount}
+                  onChange={(e) => handleChange('total_amount', parseFloat(e.target.value) || 0)}
+                  className="w-full px-1.5 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                />
+              )}
+            </div>
+            <div>
+              <div className="text-[10px] text-gray-500 uppercase tracking-wide mb-0.5">Border Crossing Fee</div>
+              {!isEditing ? (
+                <div className="text-xs text-gray-900">${quote.border_crossing_fee.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+              ) : (
+                <input
+                  type="number"
+                  step="0.01"
+                  value={editedData.border_crossing_fee}
+                  onChange={(e) => handleChange('border_crossing_fee', parseFloat(e.target.value) || 0)}
+                  className="w-full px-1.5 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                />
+              )}
+            </div>
+            <div>
+              <div className="text-[10px] text-gray-500 uppercase tracking-wide mb-0.5">US Portion</div>
+              {!isEditing ? (
+                <div className="text-xs text-gray-900">${quote.us_portion.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+              ) : (
+                <input
+                  type="number"
+                  step="0.01"
+                  value={editedData.us_portion}
+                  onChange={(e) => handleChange('us_portion', parseFloat(e.target.value) || 0)}
+                  className="w-full px-1.5 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                />
+              )}
+            </div>
+            <div>
+              <div className="text-[10px] text-gray-500 uppercase tracking-wide mb-0.5">MX Rate</div>
+              {!isEditing ? (
+                <div className="text-xs text-gray-900">${quote.mx_rate.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+              ) : (
+                <input
+                  type="number"
+                  step="0.01"
+                  value={editedData.mx_rate}
+                  onChange={(e) => handleChange('mx_rate', parseFloat(e.target.value) || 0)}
+                  className="w-full px-1.5 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                />
+              )}
+            </div>
+            <div>
+              <div className="text-[10px] text-gray-500 uppercase tracking-wide mb-0.5">Equipment Type</div>
+              {!isEditing ? (
+                <div className="text-xs text-gray-900">{quote.type_of_service}</div>
+              ) : (
+                <select
+                  value={editedData.type_of_service}
+                  onChange={(e) => handleChange('type_of_service', e.target.value)}
+                  className="w-full px-1.5 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="Dry Van">Dry Van</option>
+                  <option value="Flatbed">Flatbed</option>
+                  <option value="Refrigerated / Reefer">Refrigerated / Reefer</option>
+                  <option value="Hazmat">Hazmat</option>
+                  <option value="Step Deck">Step Deck</option>
+                  <option value="Tanker">Tanker</option>
+                  <option value="Intermodal">Intermodal</option>
+                </select>
+              )}
+            </div>
+          </div>
+
+          <div className="border-t border-gray-100 pt-1.5"></div>
+
+          <div className="grid grid-cols-5 gap-x-6">
+            <div>
+              <div className="text-[10px] text-gray-500 uppercase tracking-wide mb-0.5">Parent Account</div>
+              {!isEditing ? (
+                <a href="#" className="text-xs text-blue-600 hover:text-blue-800 hover:underline">
+                  {quote.partner_account}
+                </a>
+              ) : (
+                <input
+                  type="text"
+                  value={editedData.partner_account}
+                  onChange={(e) => handleChange('partner_account', e.target.value)}
+                  className="w-full px-1.5 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                />
+              )}
+            </div>
+            <div>
+              <div className="text-[10px] text-gray-500 uppercase tracking-wide mb-0.5">Bill To Customer</div>
+              {!isEditing ? (
+                <a href="#" className="text-xs text-blue-600 hover:text-blue-800 hover:underline">
+                  {quote.bill_to_customer}
+                </a>
+              ) : (
+                <input
+                  type="text"
+                  value={editedData.bill_to_customer}
+                  onChange={(e) => handleChange('bill_to_customer', e.target.value)}
+                  className="w-full px-1.5 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                />
+              )}
+            </div>
+            <div>
+              <div className="text-[10px] text-gray-500 uppercase tracking-wide mb-0.5">Shipper</div>
+              {!isEditing ? (
+                <a href="#" className="text-xs text-blue-600 hover:text-blue-800 hover:underline">
+                  {quote.shipper}
+                </a>
+              ) : (
+                <input
+                  type="text"
+                  value={editedData.shipper}
+                  onChange={(e) => handleChange('shipper', e.target.value)}
+                  className="w-full px-1.5 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                />
+              )}
+            </div>
+            <div>
+              <div className="text-[10px] text-gray-500 uppercase tracking-wide mb-0.5">BCO / Partner</div>
+              {!isEditing ? (
+                <a href="#" className="text-xs text-blue-600 hover:text-blue-800 hover:underline">
+                  {quote.bco_partner}
+                </a>
+              ) : (
+                <input
+                  type="text"
+                  value={editedData.bco_partner}
+                  onChange={(e) => handleChange('bco_partner', e.target.value)}
+                  className="w-full px-1.5 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                />
+              )}
+            </div>
+            <div>
+              <div className="text-[10px] text-gray-500 uppercase tracking-wide mb-0.5">Units</div>
+              {!isEditing ? (
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-blue-100 text-blue-800">
+                  {quote.units}
+                </span>
+              ) : (
+                <select
+                  value={editedData.units}
+                  onChange={(e) => handleChange('units', e.target.value)}
+                  className="w-full px-1.5 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="Miles">Miles</option>
+                  <option value="Kilometers">Kilometers</option>
+                </select>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

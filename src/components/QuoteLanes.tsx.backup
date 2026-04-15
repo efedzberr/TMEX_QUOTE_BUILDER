@@ -1,0 +1,2254 @@
+import { useState, useEffect } from 'react';
+import { CreditCard as Edit2, Trash2, FileText, Plus, Check, X, Truck, ChevronDown, Ruler, DollarSign, Route, Copy, Link2, Lock, CheckCircle, ArrowRight, ArrowLeftRight } from 'lucide-react';
+import { QuoteLane } from '../lib/supabase';
+import { EQUIPMENT_TYPES, TRIP_TYPES, BORDER_CROSSINGS, RATE_TYPES, LOAD_FREQUENCIES, LANE_TYPES } from '../lib/constants';
+import { CityLookupField } from './CityLookupField';
+import { CityAutocompleteInput } from './CityAutocompleteInput';
+import { TripTypeModal } from './TripTypeModal';
+import { ServiceTypeModal } from './ServiceTypeModal';
+import { LaneBadge } from './LaneBadge';
+import { supabase } from '../lib/supabase';
+
+interface QuoteLanesProps {
+  lanes: QuoteLane[];
+  onUpdateLane: (id: string, updates: Partial<QuoteLane>) => void;
+  onAddLane: (newLane: Partial<QuoteLane>, newLane2?: Partial<QuoteLane>) => void;
+  onDeleteLane: (id: string) => void;
+  onShowDetails: (lane: QuoteLane) => void;
+  onGlobalEquipmentTypeChange?: (equipmentType: string) => void;
+  onDeleteLinkedLanes?: (laneId: string, linkedLaneId: string) => void;
+  onDuplicateLane?: (lane: QuoteLane) => void;
+  onUpdateLinkedLanes?: (laneId: string, updates: Partial<QuoteLane>, pairedLaneId: string, pairedUpdates: Partial<QuoteLane>) => void;
+}
+
+export function QuoteLanes({
+  lanes,
+  onUpdateLane,
+  onAddLane,
+  onDeleteLane,
+  onShowDetails,
+  onGlobalEquipmentTypeChange,
+  onDeleteLinkedLanes,
+  onDuplicateLane,
+  onUpdateLinkedLanes,
+}: QuoteLanesProps) {
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingPairedId, setEditingPairedId] = useState<string | null>(null);
+  const [isAdding, setIsAdding] = useState(false);
+  const [selectedServiceType, setSelectedServiceType] = useState<'Loop' | 'Door to Door' | 'Domestic' | null>(null);
+  const [selectedTripType, setSelectedTripType] = useState<'One Way' | 'Round Trip' | 'Circuit' | null>(null);
+  const [editData, setEditData] = useState<Partial<QuoteLane>>({});
+  const [editData2, setEditData2] = useState<Partial<QuoteLane>>({});
+  const [originalEditData, setOriginalEditData] = useState<Partial<QuoteLane>>({});
+  const [originalEditData2, setOriginalEditData2] = useState<Partial<QuoteLane>>({});
+  const [showEquipmentDropdown, setShowEquipmentDropdown] = useState(false);
+  const [isDetailView, setIsDetailView] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<{laneId: string, linkedLaneId?: string} | null>(null);
+  const [showDuplicateConfirm, setShowDuplicateConfirm] = useState<QuoteLane | null>(null);
+  const [showServiceTypeModal, setShowServiceTypeModal] = useState(false);
+  const [showTripTypeModal, setShowTripTypeModal] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<{
+    lane1: { origin_city: string; destination_city: string; border_crossing: string; us_rate: string; us_miles: string; us_rate_per_mile: string; mx_rate: string; mx_miles: string; mx_rate_per_mile: string; border_crossing_fee: string };
+    lane2: { origin_city: string; destination_city: string; border_crossing: string; us_rate: string; us_miles: string; us_rate_per_mile: string; mx_rate: string; mx_miles: string; mx_rate_per_mile: string; border_crossing_fee: string };
+  }>({
+    lane1: { origin_city: '', destination_city: '', border_crossing: '', us_rate: '', us_miles: '', us_rate_per_mile: '', mx_rate: '', mx_miles: '', mx_rate_per_mile: '', border_crossing_fee: '' },
+    lane2: { origin_city: '', destination_city: '', border_crossing: '', us_rate: '', us_miles: '', us_rate_per_mile: '', mx_rate: '', mx_miles: '', mx_rate_per_mile: '', border_crossing_fee: '' },
+  });
+  const [validationTriggered, setValidationTriggered] = useState<{
+    origin_city: boolean;
+    destination_city: boolean;
+  }>({
+    origin_city: false,
+    destination_city: false,
+  });
+
+  const calculateTotalRate = (lane: Partial<QuoteLane>) => {
+    return (lane.us_rate || 0) + (lane.mx_rate || 0) + (lane.border_crossing_fee || 0) + (lane.toll_rate || 0);
+  };
+
+  const getFieldVisibility = (serviceType: string | null | undefined) => {
+    const defaults = {
+      usFieldsDisabled: false,
+      mxFieldsDisabled: false,
+      borderCrossingDisabled: false,
+      clearUsFields: false,
+      clearMxFields: false,
+    };
+
+    if (serviceType === 'Loop') {
+      return {
+        usFieldsDisabled: true,
+        mxFieldsDisabled: false,
+        borderCrossingDisabled: true,
+        clearUsFields: true,
+        clearMxFields: false,
+      };
+    } else if (serviceType === 'Domestic') {
+      return {
+        usFieldsDisabled: false,
+        mxFieldsDisabled: true,
+        borderCrossingDisabled: true,
+        clearUsFields: false,
+        clearMxFields: true,
+      };
+    }
+
+    return defaults;
+  };
+
+  const getFieldClassName = (isDisabled: boolean, hasError: boolean) => {
+    if (isDisabled) {
+      return 'w-20 px-2 py-1 text-xs rounded text-right bg-gray-200 text-gray-500 border-0 cursor-not-allowed';
+    }
+    if (hasError) {
+      return 'w-20 px-2 py-1 text-xs border-2 border-red-500 rounded text-right';
+    }
+    return 'w-20 px-2 py-1 text-xs border rounded text-right';
+  };
+
+  const handleFieldChange = (fieldName: string, value: any, isLane1: boolean) => {
+    if (isLane1) {
+      setEditData({ ...editData, [fieldName]: value });
+    } else {
+      setEditData2({ ...editData2, [fieldName]: value });
+    }
+  };
+
+  const isFieldDisabled = (fieldName: string, serviceType: string | null | undefined) => {
+    const fieldVis = getFieldVisibility(serviceType);
+    if (fieldName.startsWith('us_')) return fieldVis.usFieldsDisabled;
+    if (fieldName.startsWith('mx_')) return fieldVis.mxFieldsDisabled;
+    if (fieldName === 'border_crossing_fee') return fieldVis.borderCrossingDisabled;
+    return false;
+  };
+
+  const handleGlobalEquipmentChange = (type: string) => {
+    setShowEquipmentDropdown(false);
+    if (onGlobalEquipmentTypeChange) {
+      onGlobalEquipmentTypeChange(type);
+    }
+  };
+
+  const handleEdit = (lane: QuoteLane) => {
+    setEditingId(lane.id);
+    setEditData(lane);
+    setOriginalEditData(lane);
+
+    if ((lane.trip_type === 'Round Trip' || lane.trip_type === 'Circuit') && lane.paired_lane_id) {
+      const pairedLane = lanes.find(l => l.id === lane.paired_lane_id);
+      if (pairedLane) {
+        setEditingPairedId(pairedLane.id);
+        setEditData2(pairedLane);
+        setOriginalEditData2(pairedLane);
+      }
+    }
+
+    setValidationTriggered({ origin_city: false, destination_city: false });
+    setValidationErrors({
+      lane1: { origin_city: '', destination_city: '', border_crossing: '', us_rate: '', us_miles: '', us_rate_per_mile: '', mx_rate: '', mx_miles: '', mx_rate_per_mile: '', border_crossing_fee: '' },
+      lane2: { origin_city: '', destination_city: '', border_crossing: '', us_rate: '', us_miles: '', us_rate_per_mile: '', mx_rate: '', mx_miles: '', mx_rate_per_mile: '', border_crossing_fee: '' },
+    });
+  };
+
+
+  const handleSaveEdit = async () => {
+    if (!editingId) return;
+
+    const currentLane = lanes.find(l => l.id === editingId);
+
+    const rateType = editData.rate_type || 'FLT';
+    const isFlatRate = rateType === 'FLT' || rateType === 'Flat Rate';
+    const isRPM = rateType === 'RPM' || rateType === 'Rate Per Mile';
+
+    const lane1Errors = {
+      origin_city: !editData.origin_city ? 'This field is required' : '',
+      destination_city: !editData.destination_city ? 'This field is required' : '',
+      border_crossing: '',
+      us_rate: '',
+      us_miles: '',
+      us_rate_per_mile: '',
+      mx_rate: '',
+      mx_miles: '',
+      mx_rate_per_mile: '',
+      border_crossing_fee: '',
+    };
+
+    const rateType2 = editData2.rate_type || 'FLT';
+    const isFlatRate2 = rateType2 === 'FLT' || rateType2 === 'Flat Rate';
+    const isRPM2 = rateType2 === 'RPM' || rateType2 === 'Rate Per Mile';
+
+    const lane2Errors = {
+      origin_city: editingPairedId && !editData2.origin_city ? 'This field is required' : '',
+      destination_city: editingPairedId && !editData2.destination_city ? 'This field is required' : '',
+      border_crossing: '',
+      us_rate: '',
+      us_miles: '',
+      us_rate_per_mile: '',
+      mx_rate: '',
+      mx_miles: '',
+      mx_rate_per_mile: '',
+      border_crossing_fee: '',
+    };
+
+    const hasErrors = Object.values(lane1Errors).some(e => e) || Object.values(lane2Errors).some(e => e);
+
+    if (hasErrors) {
+      setValidationErrors({ lane1: lane1Errors, lane2: lane2Errors });
+      return;
+    }
+
+    if (editingPairedId && currentLane?.trip_type === 'Circuit') {
+      const marketValidation = await validateMarketMatchEdit(editData, editData2);
+      if (!marketValidation.valid) {
+        setValidationErrors(prev => ({
+          ...prev,
+          lane2: {
+            ...prev.lane2,
+            ...marketValidation.errors,
+          },
+        }));
+        return;
+      }
+    }
+
+    if (editingId) {
+      onUpdateLane(editingId, editData);
+    }
+
+    if (editingPairedId) {
+      const pairedLaneUpdate = {
+        ...editData2,
+        service_type: editData.service_type || 'Door to Door',
+      };
+      onUpdateLane(editingPairedId, pairedLaneUpdate);
+    }
+
+    setEditingId(null);
+    setEditingPairedId(null);
+    setEditData({});
+    setEditData2({});
+    setOriginalEditData({});
+    setOriginalEditData2({});
+    setValidationTriggered({ origin_city: false, destination_city: false });
+    setValidationErrors({
+      lane1: { origin_city: '', destination_city: '', border_crossing: '', us_rate: '', us_miles: '', us_rate_per_mile: '', mx_rate: '', mx_miles: '', mx_rate_per_mile: '', border_crossing_fee: '' },
+      lane2: { origin_city: '', destination_city: '', border_crossing: '', us_rate: '', us_miles: '', us_rate_per_mile: '', mx_rate: '', mx_miles: '', mx_rate_per_mile: '', border_crossing_fee: '' },
+    });
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setEditingPairedId(null);
+    setEditData({});
+    setEditData2({});
+    setOriginalEditData({});
+    setOriginalEditData2({});
+    setValidationTriggered({ origin_city: false, destination_city: false });
+    setValidationErrors({
+      lane1: { origin_city: '', destination_city: '', border_crossing: '', us_rate: '', us_miles: '', us_rate_per_mile: '', mx_rate: '', mx_miles: '', mx_rate_per_mile: '', border_crossing_fee: '' },
+      lane2: { origin_city: '', destination_city: '', border_crossing: '', us_rate: '', us_miles: '', us_rate_per_mile: '', mx_rate: '', mx_miles: '', mx_rate_per_mile: '', border_crossing_fee: '' },
+    });
+  };
+
+  const handleStartAdd = () => {
+    setIsDetailView(true);
+    setShowServiceTypeModal(true);
+  };
+
+  const handleServiceTypeSelect = (serviceType: 'Loop' | 'Door to Door' | 'Domestic') => {
+    setShowServiceTypeModal(false);
+    setSelectedServiceType(serviceType);
+    setShowTripTypeModal(true);
+  };
+
+  const handleTripTypeSelect = (tripType: 'One Way' | 'Round Trip' | 'Circuit') => {
+    setShowTripTypeModal(false);
+    setSelectedTripType(tripType);
+    setIsAdding(true);
+
+    const defaultLaneData = {
+      origin_city: '',
+      destination_city: '',
+      border_crossing: '',
+      border_crossing_fee: 0,
+      border_crossing_rate: 0,
+      us_rate: 0,
+      mx_rate: 0,
+      toll_rate: 0,
+      equipment_type: 'Dry Van',
+      effective_from_date: '2026-02-01',
+      effective_to_date: '2026-12-31',
+      units_type: 'Miles',
+      currency_type: 'USD',
+      trip_type: tripType,
+      service_type: selectedServiceType || 'Door to Door',
+      rate_type: 'FLT',
+      lane_type: '',
+      load_frequency: '',
+      load_volume: '',
+      us_miles: 0,
+      mx_miles: 0,
+      us_rate_per_mile: 0,
+      mx_rate_per_mile: 0,
+      us_fuel_rate: 0,
+      mx_fuel_rate: 0,
+    };
+
+    setEditData(defaultLaneData);
+
+    if (tripType === 'Round Trip' || tripType === 'Circuit') {
+      setEditData2({
+        ...defaultLaneData,
+        origin_city: '',
+        destination_city: '',
+      });
+    }
+  };
+
+  useEffect(() => {
+    if (isAdding && selectedTripType === 'Round Trip') {
+      setEditData2(prev => ({
+        ...prev,
+        origin_city: editData.destination_city || '',
+        destination_city: editData.origin_city || '',
+        border_crossing: editData.border_crossing || '',
+        equipment_type: editData.equipment_type,
+      }));
+    } else if (isAdding && selectedTripType === 'Circuit') {
+      setEditData2(prev => ({
+        ...prev,
+        border_crossing: editData.border_crossing || '',
+        equipment_type: editData.equipment_type,
+      }));
+    }
+  }, [editData.origin_city, editData.destination_city, editData.border_crossing, editData.equipment_type, selectedTripType, isAdding]);
+
+  useEffect(() => {
+    if (editingId && editingPairedId) {
+      const currentLane = lanes.find(l => l.id === editingId);
+      if (currentLane?.trip_type === 'Round Trip') {
+        setEditData2(prev => ({
+          ...prev,
+          origin_city: editData.destination_city || '',
+          destination_city: editData.origin_city || '',
+          border_crossing: editData.border_crossing || '',
+        }));
+      } else if (currentLane?.trip_type === 'Circuit') {
+        setEditData2(prev => ({
+          ...prev,
+          border_crossing: editData.border_crossing || '',
+        }));
+      }
+    }
+  }, [editData.origin_city, editData.destination_city, editData.border_crossing, editingId, editingPairedId, lanes]);
+
+  useEffect(() => {
+    const rateType = editData.rate_type || 'FLT';
+
+    if (rateType === 'FLT' || rateType === 'Flat Rate') {
+      const usMiles = editData.us_miles || 0;
+      const usRate = editData.us_rate || 0;
+      const mxMiles = editData.mx_miles || 0;
+      const mxRate = editData.mx_rate || 0;
+
+      const newUsRatePerMile = usMiles > 0 ? usRate / usMiles : 0;
+      const newMxRatePerMile = mxMiles > 0 ? mxRate / mxMiles : 0;
+
+      if (editData.us_rate_per_mile !== newUsRatePerMile || editData.mx_rate_per_mile !== newMxRatePerMile) {
+        setEditData(prev => ({
+          ...prev,
+          us_rate_per_mile: newUsRatePerMile,
+          mx_rate_per_mile: newMxRatePerMile,
+        }));
+      }
+    } else if (rateType === 'RPM' || rateType === 'Rate Per Mile') {
+      const usMiles = editData.us_miles || 0;
+      const usRatePerMile = editData.us_rate_per_mile || 0;
+      const mxMiles = editData.mx_miles || 0;
+      const mxRatePerMile = editData.mx_rate_per_mile || 0;
+
+      const newUsRate = usMiles * usRatePerMile;
+      const newMxRate = mxMiles * mxRatePerMile;
+
+      if (editData.us_rate !== newUsRate || editData.mx_rate !== newMxRate) {
+        setEditData(prev => ({
+          ...prev,
+          us_rate: newUsRate,
+          mx_rate: newMxRate,
+        }));
+      }
+    }
+  }, [editData.rate_type, editData.us_rate, editData.us_miles, editData.us_rate_per_mile, editData.mx_rate, editData.mx_miles, editData.mx_rate_per_mile]);
+
+  useEffect(() => {
+    if (!editingPairedId) return;
+
+    const rateType = editData2.rate_type || 'FLT';
+
+    if (rateType === 'FLT' || rateType === 'Flat Rate') {
+      const usMiles = editData2.us_miles || 0;
+      const usRate = editData2.us_rate || 0;
+      const mxMiles = editData2.mx_miles || 0;
+      const mxRate = editData2.mx_rate || 0;
+
+      const newUsRatePerMile = usMiles > 0 ? usRate / usMiles : 0;
+      const newMxRatePerMile = mxMiles > 0 ? mxRate / mxMiles : 0;
+
+      if (editData2.us_rate_per_mile !== newUsRatePerMile || editData2.mx_rate_per_mile !== newMxRatePerMile) {
+        setEditData2(prev => ({
+          ...prev,
+          us_rate_per_mile: newUsRatePerMile,
+          mx_rate_per_mile: newMxRatePerMile,
+        }));
+      }
+    } else if (rateType === 'RPM' || rateType === 'Rate Per Mile') {
+      const usMiles = editData2.us_miles || 0;
+      const usRatePerMile = editData2.us_rate_per_mile || 0;
+      const mxMiles = editData2.mx_miles || 0;
+      const mxRatePerMile = editData2.mx_rate_per_mile || 0;
+
+      const newUsRate = usMiles * usRatePerMile;
+      const newMxRate = mxMiles * mxRatePerMile;
+
+      if (editData2.us_rate !== newUsRate || editData2.mx_rate !== newMxRate) {
+        setEditData2(prev => ({
+          ...prev,
+          us_rate: newUsRate,
+          mx_rate: newMxRate,
+        }));
+      }
+    }
+  }, [editData2.rate_type, editData2.us_rate, editData2.us_miles, editData2.us_rate_per_mile, editData2.mx_rate, editData2.mx_miles, editData2.mx_rate_per_mile, editingPairedId]);
+
+  const handleSaveAdd = async () => {
+    const lane1Errors = {
+      origin_city: !editData.origin_city ? 'This field is required' : '',
+      destination_city: !editData.destination_city ? 'This field is required' : '',
+      border_crossing: '',
+      us_rate: '',
+      us_miles: '',
+      us_rate_per_mile: '',
+      mx_rate: '',
+      mx_miles: '',
+      mx_rate_per_mile: '',
+      border_crossing_fee: '',
+    };
+
+    let lane2Errors = {
+      origin_city: '',
+      destination_city: '',
+      border_crossing: '',
+      us_rate: '',
+      us_miles: '',
+      us_rate_per_mile: '',
+      mx_rate: '',
+      mx_miles: '',
+      mx_rate_per_mile: '',
+      border_crossing_fee: '',
+    };
+
+    if (selectedTripType === 'Round Trip' || selectedTripType === 'Circuit') {
+      lane2Errors = {
+        origin_city: !editData2.origin_city ? 'This field is required' : '',
+        destination_city: !editData2.destination_city ? 'This field is required' : '',
+        border_crossing: '',
+        us_rate: '',
+        us_miles: '',
+        us_rate_per_mile: '',
+        mx_rate: '',
+        mx_miles: '',
+        mx_rate_per_mile: '',
+        border_crossing_fee: '',
+      };
+    }
+
+    const hasBasicErrors = Object.values(lane1Errors).some(e => e) || Object.values(lane2Errors).some(e => e);
+
+    if (hasBasicErrors) {
+      setValidationErrors({ lane1: lane1Errors, lane2: lane2Errors });
+      return;
+    }
+
+    if (selectedTripType === 'Circuit') {
+      const marketValidation = await validateMarketMatch(selectedTripType, editData, editData2);
+      if (!marketValidation.valid) {
+        const lane2ErrorsWithMarket = {
+          ...lane2Errors,
+          ...marketValidation.errors,
+        };
+
+        setValidationErrors({
+          lane1: lane1Errors,
+          lane2: lane2ErrorsWithMarket,
+        });
+        return;
+      }
+    }
+
+    if (selectedTripType === 'Round Trip' || selectedTripType === 'Circuit') {
+      onAddLane(editData, editData2);
+    } else {
+      onAddLane(editData);
+    }
+    setIsAdding(false);
+    setEditData({});
+    setEditData2({});
+    setSelectedTripType(null);
+    setValidationTriggered({ origin_city: false, destination_city: false });
+    setValidationErrors({
+      lane1: { origin_city: '', destination_city: '', border_crossing: '', us_rate: '', us_miles: '', us_rate_per_mile: '', mx_rate: '', mx_miles: '', mx_rate_per_mile: '', border_crossing_fee: '' },
+      lane2: { origin_city: '', destination_city: '', border_crossing: '', us_rate: '', us_miles: '', us_rate_per_mile: '', mx_rate: '', mx_miles: '', mx_rate_per_mile: '', border_crossing_fee: '' },
+    });
+  };
+
+  const handleCancelAdd = () => {
+    setIsAdding(false);
+    setEditData({});
+    setEditData2({});
+    setSelectedTripType(null);
+    setValidationTriggered({ origin_city: false, destination_city: false });
+    setValidationErrors({
+      lane1: { origin_city: '', destination_city: '', border_crossing: '', us_rate: '', us_miles: '', us_rate_per_mile: '', mx_rate: '', mx_miles: '', mx_rate_per_mile: '', border_crossing_fee: '' },
+      lane2: { origin_city: '', destination_city: '', border_crossing: '', us_rate: '', us_miles: '', us_rate_per_mile: '', mx_rate: '', mx_miles: '', mx_rate_per_mile: '', border_crossing_fee: '' },
+    });
+  };
+
+  const clearFieldError = (lane: 'lane1' | 'lane2', field: 'origin_city' | 'destination_city' | 'border_crossing') => {
+    setValidationErrors(prev => ({
+      ...prev,
+      [lane]: {
+        ...prev[lane],
+        [field]: '',
+      },
+    }));
+  };
+
+  const validateMarketMatch = async (tripType: string, lane1Data: Partial<QuoteLane>, lane2Data: Partial<QuoteLane>) => {
+    if (tripType !== 'Circuit') return { valid: true, errors: { origin_city: '', destination_city: '' } };
+
+    const { data: cities } = await supabase
+      .from('cities')
+      .select('city_full_name, market_name')
+      .in('city_full_name', [
+        lane1Data.origin_city,
+        lane1Data.destination_city,
+        lane2Data.origin_city,
+        lane2Data.destination_city,
+      ].filter(Boolean) as string[]);
+
+    if (!cities) return { valid: true, errors: { origin_city: '', destination_city: '' } };
+
+    const cityMarketMap = new Map(cities.map(c => [c.city_full_name, c.market_name]));
+
+    const lane1OriginMarket = cityMarketMap.get(lane1Data.origin_city || '');
+    const lane1DestMarket = cityMarketMap.get(lane1Data.destination_city || '');
+    const lane2OriginMarket = cityMarketMap.get(lane2Data.origin_city || '');
+    const lane2DestMarket = cityMarketMap.get(lane2Data.destination_city || '');
+
+    let errors = { origin_city: '', destination_city: '' };
+    let valid = true;
+
+    if (lane2DestMarket && lane1OriginMarket && lane2DestMarket !== lane1OriginMarket) {
+      errors.destination_city = `Destination City market must match Origin City market from Lane 1 (Market: ${lane1OriginMarket})`;
+      valid = false;
+    }
+
+    if (lane2OriginMarket && lane1DestMarket && lane2OriginMarket !== lane1DestMarket) {
+      errors.origin_city = `Origin City market must match Destination City market from Lane 1 (Market: ${lane1DestMarket})`;
+      valid = false;
+    }
+
+    return { valid, errors };
+  };
+
+  const validateMarketMatchEdit = async (lane1Data: Partial<QuoteLane>, lane2Data: Partial<QuoteLane>) => {
+    const { data: cities } = await supabase
+      .from('cities')
+      .select('city_full_name, market_name')
+      .in('city_full_name', [
+        lane1Data.origin_city,
+        lane1Data.destination_city,
+        lane2Data.origin_city,
+        lane2Data.destination_city,
+      ].filter(Boolean) as string[]);
+
+    if (!cities) return { valid: true, errors: { origin_city: '', destination_city: '' } };
+
+    const cityMarketMap = new Map(cities.map(c => [c.city_full_name, c.market_name]));
+
+    const lane1OriginMarket = cityMarketMap.get(lane1Data.origin_city || '');
+    const lane1DestMarket = cityMarketMap.get(lane1Data.destination_city || '');
+    const lane2OriginMarket = cityMarketMap.get(lane2Data.origin_city || '');
+    const lane2DestMarket = cityMarketMap.get(lane2Data.destination_city || '');
+
+    let errors = { origin_city: '', destination_city: '' };
+    let valid = true;
+
+    if (lane2DestMarket && lane1OriginMarket && lane2DestMarket !== lane1OriginMarket) {
+      errors.destination_city = `Destination City market must match Origin City market from Lane 1 (Market: ${lane1OriginMarket})`;
+      valid = false;
+    }
+
+    if (lane2OriginMarket && lane1DestMarket && lane2OriginMarket !== lane1DestMarket) {
+      errors.origin_city = `Origin City market must match Destination City market from Lane 1 (Market: ${lane1DestMarket})`;
+      valid = false;
+    }
+
+    return { valid, errors };
+  };
+
+  const toggleLaneUnits = (lane: QuoteLane) => {
+    const isKilometers = lane.units_type === 'Kilometers' || lane.units_type === 'KM';
+    const conversionFactor = isKilometers ? 1 / 1.60934 : 1.60934;
+    const newUnits = isKilometers ? 'Miles' : 'Kilometers';
+
+    onUpdateLane(lane.id, {
+      units_type: newUnits,
+      us_miles: lane.us_miles * conversionFactor,
+      mx_miles: lane.mx_miles * conversionFactor,
+    });
+  };
+
+  const toggleLaneCurrency = (lane: QuoteLane) => {
+    const isMXN = lane.currency_type === 'MXN';
+    const conversionRate = isMXN ? 1 / 17.15 : 17.15;
+    const newCurrency = isMXN ? 'USD' : 'MXN';
+
+    onUpdateLane(lane.id, {
+      currency_type: newCurrency,
+      us_rate: lane.us_rate * conversionRate,
+      mx_rate: lane.mx_rate * conversionRate,
+      border_crossing_fee: lane.border_crossing_fee * conversionRate,
+      toll_rate: (lane.toll_rate || 0) * conversionRate,
+    });
+  };
+
+  const handleDeleteClick = (lane: QuoteLane) => {
+    if (lane.paired_lane_id && (lane.trip_type === 'Round Trip' || lane.trip_type === 'Circuit')) {
+      const pairedLane = lanes.find(l => l.id === lane.paired_lane_id);
+      const isLane1 = pairedLane && pairedLane.paired_lane_id === lane.id && lanes.indexOf(lane) < lanes.indexOf(pairedLane);
+
+      if (!isLane1) {
+        setShowDeleteConfirm({ laneId: lane.id, linkedLaneId: 'lane2-only' });
+      } else {
+        setShowDeleteConfirm({ laneId: lane.id, linkedLaneId: lane.paired_lane_id });
+      }
+    } else {
+      onDeleteLane(lane.id);
+    }
+  };
+
+  const handleConfirmDelete = () => {
+    if (showDeleteConfirm) {
+      if (showDeleteConfirm.linkedLaneId === 'lane2-only') {
+        setShowDeleteConfirm(null);
+        return;
+      }
+
+      if (showDeleteConfirm.linkedLaneId && onDeleteLinkedLanes) {
+        onDeleteLinkedLanes(showDeleteConfirm.laneId, showDeleteConfirm.linkedLaneId);
+      } else {
+        onDeleteLane(showDeleteConfirm.laneId);
+      }
+      setShowDeleteConfirm(null);
+    }
+  };
+
+  const handleDuplicateClick = (lane: QuoteLane) => {
+    if ((lane.trip_type === 'Round Trip' || lane.trip_type === 'Circuit') && lane.paired_lane_id) {
+      setShowDuplicateConfirm(lane);
+    } else {
+      if (onDuplicateLane) {
+        onDuplicateLane(lane);
+      }
+    }
+  };
+
+  const handleConfirmDuplicate = () => {
+    if (showDuplicateConfirm && onDuplicateLane) {
+      onDuplicateLane(showDuplicateConfirm);
+      setShowDuplicateConfirm(null);
+    }
+  };
+
+  const renderListViewRow = (lane: QuoteLane, index: number) => {
+    const isLinked = lane.paired_lane_id && (lane.trip_type === 'Round Trip' || lane.trip_type === 'Circuit');
+    const serviceType = lane.service_type || 'Door to Door';
+
+    const getServiceTypeBgColor = (type: string) => {
+      switch (type) {
+        case 'Loop': return 'bg-blue-100 text-blue-700';
+        case 'Domestic': return 'bg-purple-100 text-purple-700';
+        case 'Door to Door':
+        default: return 'bg-green-100 text-green-700';
+      }
+    };
+
+    const getTripTypeIcon = (type: string) => {
+      switch (type) {
+        case 'One Way':
+          return <ArrowRight className="w-3 h-3" />;
+        case 'Round Trip':
+          return <ArrowLeftRight className="w-3 h-3" />;
+        case 'Circuit':
+          return <Route className="w-3 h-3" />;
+        default:
+          return <ArrowRight className="w-3 h-3" />;
+      }
+    };
+
+    const borderColor = lane.trip_type === 'Round Trip' ? 'border-l-4 border-l-green-400' : lane.trip_type === 'Circuit' ? 'border-l-4 border-l-orange-400' : '';
+
+    return (
+      <tr key={lane.id} className={`hover:bg-gray-50 transition-colors ${isLinked ? borderColor : ''}`}>
+        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+          <div className="flex items-center gap-2">
+            <span>{index + 1}</span>
+            <span className={`inline-flex items-center justify-center w-6 h-6 rounded ${getServiceTypeBgColor(serviceType)}`}>
+              {getTripTypeIcon(lane.trip_type || 'One Way')}
+            </span>
+          </div>
+        </td>
+        <td className="px-4 py-3 whitespace-nowrap">
+          <a href="#" className="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline">
+            {lane.origin_city}
+          </a>
+        </td>
+      <td className="px-4 py-3 whitespace-nowrap">
+        <a href="#" className="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline">
+          {lane.destination_city}
+        </a>
+      </td>
+      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{lane.border_crossing}</td>
+      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 text-right font-medium">
+        {lane.currency_type === 'MXN' ? 'MX$' : '$'}{lane.border_crossing_fee.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+      </td>
+      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 text-right font-medium">
+        {lane.currency_type === 'MXN' ? 'MX$' : '$'}{lane.us_rate.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+      </td>
+      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 text-right font-medium">
+        {lane.currency_type === 'MXN' ? 'MX$' : '$'}{lane.mx_rate.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+      </td>
+      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 text-right font-bold">
+        {lane.currency_type === 'MXN' ? 'MX$' : '$'}{calculateTotalRate(lane).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+      </td>
+      <td className="px-4 py-3 whitespace-nowrap">
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+          {lane.equipment_type}
+        </span>
+      </td>
+      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+        {new Date(lane.effective_from_date).toLocaleDateString('en-US')}
+      </td>
+      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+        {new Date(lane.effective_to_date).toLocaleDateString('en-US')}
+      </td>
+      <td className="px-4 py-3 whitespace-nowrap">
+        <div className="flex items-center justify-center gap-1">
+          <button
+            onClick={() => toggleLaneUnits(lane)}
+            className="p-1 text-xs text-gray-600 hover:bg-gray-100 rounded transition-colors"
+            title="Toggle Units"
+          >
+            <Ruler className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={() => toggleLaneCurrency(lane)}
+            className="p-1 text-xs text-gray-600 hover:bg-gray-100 rounded transition-colors"
+            title="Toggle Currency"
+          >
+            <DollarSign className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={() => handleEdit(lane)}
+            className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+            title="Edit"
+          >
+            <Edit2 className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => handleDeleteClick(lane)}
+            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+            title="Delete"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => onShowDetails(lane)}
+            className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+            title="Additional Details"
+          >
+            <FileText className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => handleDuplicateClick(lane)}
+            className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded transition-colors"
+            title="Duplicate Lane"
+          >
+            <Copy className="w-4 h-4" />
+          </button>
+        </div>
+      </td>
+    </tr>
+    );
+  };
+
+  const renderDetailViewRow = (lane: QuoteLane, index: number) => {
+    return (
+      <tr key={lane.id} className="hover:bg-gray-50 transition-colors">
+        <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500">
+          <div className="flex items-center gap-2">
+            <span>{index + 1}</span>
+            <LaneBadge serviceType={lane.service_type || 'Door to Door'} tripType={lane.trip_type || 'One Way'} />
+          </div>
+        </td>
+      <td className="px-3 py-3 whitespace-nowrap text-sm text-blue-600">{lane.origin_city}</td>
+      <td className="px-3 py-3 whitespace-nowrap text-sm text-blue-600">{lane.destination_city}</td>
+      <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900">{lane.border_crossing}</td>
+      <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900 text-right">
+        ${lane.border_crossing_fee.toFixed(2)}
+      </td>
+      <td className="px-3 py-3 whitespace-nowrap text-sm font-bold text-gray-900 text-right">
+        ${calculateTotalRate(lane).toFixed(2)}
+      </td>
+      <td className="px-3 py-3 whitespace-nowrap text-xs text-gray-700">{lane.rate_type || 'FLT'}</td>
+      <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900 text-right">
+        ${lane.us_rate.toFixed(2)}
+      </td>
+      <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900 text-right">{lane.us_miles || 0}</td>
+      <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900 text-right">
+        ${lane.us_rate_per_mile ? lane.us_rate_per_mile.toFixed(2) : '0.00'}
+      </td>
+      <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900 text-right">
+        ${lane.us_fuel_rate ? lane.us_fuel_rate.toFixed(2) : '0.00'}
+      </td>
+      <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900 text-right">
+        ${lane.mx_rate.toFixed(2)}
+      </td>
+      <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900 text-right">{lane.mx_miles || 0}</td>
+      <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900 text-right">
+        ${lane.mx_rate_per_mile ? lane.mx_rate_per_mile.toFixed(2) : '0.00'}
+      </td>
+      <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900 text-right">
+        ${lane.mx_fuel_rate ? lane.mx_fuel_rate.toFixed(2) : '0.00'}
+      </td>
+      <td className="px-3 py-3 whitespace-nowrap text-xs text-gray-700">{lane.lane_type || '-'}</td>
+      <td className="px-3 py-3 whitespace-nowrap text-xs text-gray-700">{lane.trip_type || 'One Way'}</td>
+      <td className="px-3 py-3 whitespace-nowrap text-xs text-gray-800">{lane.equipment_type}</td>
+      <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900 text-right">{lane.load_volume || '-'}</td>
+      <td className="px-3 py-3 whitespace-nowrap text-xs text-gray-700">{lane.load_frequency || '-'}</td>
+      <td className="px-3 py-3 whitespace-nowrap text-xs text-gray-900">
+        {new Date(lane.effective_from_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+      </td>
+      <td className="px-3 py-3 whitespace-nowrap text-xs text-gray-900">
+        {new Date(lane.effective_to_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+      </td>
+      <td className="px-3 py-3 whitespace-nowrap">
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => toggleLaneUnits(lane)}
+            className="p-1 text-xs text-gray-600 hover:bg-gray-100 rounded"
+            title="Toggle Units"
+          >
+            <Ruler className="w-3 h-3" />
+          </button>
+          <button
+            onClick={() => toggleLaneCurrency(lane)}
+            className="p-1 text-xs text-gray-600 hover:bg-gray-100 rounded"
+            title="Toggle Currency"
+          >
+            <DollarSign className="w-3 h-3" />
+          </button>
+          <button
+            onClick={() => handleEdit(lane)}
+            className="p-1 text-gray-400 hover:text-blue-600 rounded"
+            title="Edit"
+          >
+            <Edit2 className="w-3 h-3" />
+          </button>
+          <button
+            onClick={() => handleDeleteClick(lane)}
+            className="p-1 text-gray-400 hover:text-red-600 rounded"
+            title="Delete"
+          >
+            <Trash2 className="w-3 h-3" />
+          </button>
+          <button
+            onClick={() => onShowDetails(lane)}
+            className="p-1 text-gray-400 hover:text-blue-600 rounded"
+            title="Details"
+          >
+            <FileText className="w-3 h-3" />
+          </button>
+          <button
+            onClick={() => handleDuplicateClick(lane)}
+            className="p-1 text-gray-400 hover:text-green-600 rounded"
+            title="Duplicate"
+          >
+            <Copy className="w-3 h-3" />
+          </button>
+        </div>
+      </td>
+    </tr>
+    );
+  };
+
+  return (
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+      <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <h2 className="text-lg font-semibold text-gray-900">Quote Lanes</h2>
+          <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+            {lanes.length} {lanes.length === 1 ? 'lane' : 'lanes'}
+          </span>
+          <button
+            onClick={() => setIsDetailView(!isDetailView)}
+            className="inline-flex items-center gap-2 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-md transition-colors"
+          >
+            {isDetailView ? 'Compact View' : 'Detail View'}
+          </button>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <button
+              onClick={() => setShowEquipmentDropdown(!showEquipmentDropdown)}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-50 transition-colors shadow-sm"
+            >
+              <Truck className="w-4 h-4" />
+              <span>Equipment Type</span>
+              <ChevronDown className="w-4 h-4" />
+            </button>
+            {showEquipmentDropdown && (
+              <div className="absolute right-0 mt-2 w-56 bg-white border border-gray-200 rounded-md shadow-lg z-10">
+                {EQUIPMENT_TYPES.map((type) => (
+                  <button
+                    key={type}
+                    onClick={() => handleGlobalEquipmentChange(type)}
+                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors first:rounded-t-md last:rounded-b-md"
+                  >
+                    {type}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <button
+            onClick={handleStartAdd}
+            disabled={isAdding || editingId !== null}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Plus className="w-4 h-4" />
+            New Lane
+          </button>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto overflow-y-auto min-h-[680px] max-h-[680px] custom-scrollbar" style={{ position: 'relative' }}>
+        {!isDetailView ? (
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">#</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Origin City</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Destination City</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Border Crossing</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Border Fee</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">US Rate</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">MX Rate</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Total Rate</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Equipment Type</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Effective From</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Effective To</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {lanes.map((lane, index) => {
+                const isEditing = editingId === lane.id;
+                const isPairedEditing = editingPairedId === lane.id;
+                const isLane1 = isEditing;
+                const isLane2 = isPairedEditing;
+                const isLinked = lane.paired_lane_id && (lane.trip_type === 'Round Trip' || lane.trip_type === 'Circuit');
+                const borderColor = lane.trip_type === 'Round Trip' ? 'border-l-4 border-l-green-400' : lane.trip_type === 'Circuit' ? 'border-l-4 border-l-orange-400' : '';
+
+                return (isEditing || isPairedEditing) ? (
+                  <tr key={lane.id} className="bg-blue-50">
+                    <td className="px-4 py-3 text-sm text-gray-500">
+                      <div className="flex items-center gap-2">
+                        <span>{index + 1}</span>
+                        <LaneBadge serviceType={lane.service_type || 'Door to Door'} tripType={lane.trip_type || 'One Way'} />
+                      </div>
+                    </td>
+                    <td className="px-2 py-2">
+                      {isLane2 && lane.trip_type === 'Round Trip' ? (
+                        <div className="relative">
+                          <div className="bg-gray-100 rounded border border-gray-300 px-3 py-2">
+                            <div className="flex items-center gap-2">
+                              <Lock className="w-3.5 h-3.5 text-gray-500" />
+                              <span className="text-sm text-gray-700 italic">{editData2.origin_city || 'Auto-filled'}</span>
+                            </div>
+                          </div>
+                          <div className="text-[10px] text-gray-500 mt-1">Auto from Lane 1 Dest</div>
+                        </div>
+                      ) : (
+                        <CityLookupField
+                          value={isLane1 ? (editData.origin_city || '') : (editData2.origin_city || '')}
+                          onChange={async (value) => {
+                            if (isLane1) {
+                              setEditData({ ...editData, origin_city: value });
+                            } else {
+                              setEditData2({ ...editData2, origin_city: value });
+                              setValidationTriggered(prev => ({ ...prev, origin_city: true }));
+                              if (lane.trip_type === 'Circuit' && value) {
+                                const result = await validateMarketMatchEdit(editData, { ...editData2, origin_city: value });
+                                if (!result.valid) {
+                                  setValidationErrors(prev => ({
+                                    ...prev,
+                                    lane2: { ...prev.lane2, origin_city: result.errors.origin_city },
+                                  }));
+                                } else {
+                                  setValidationErrors(prev => ({
+                                    ...prev,
+                                    lane2: { ...prev.lane2, origin_city: '' },
+                                  }));
+                                }
+                              }
+                            }
+                          }}
+                          placeholder="Origin City"
+                        />
+                      )}
+                      {isLane2 && lane.trip_type === 'Circuit' && validationTriggered.origin_city && validationErrors.lane2.origin_city && (
+                        <div className="text-xs text-red-600 mt-1">{validationErrors.lane2.origin_city}</div>
+                      )}
+                      {isLane2 && lane.trip_type === 'Circuit' && validationTriggered.origin_city && !validationErrors.lane2.origin_city && editData2.origin_city && editData.destination_city && (
+                        <div className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                          <CheckCircle className="w-3 h-3" />
+                          <span>Market validated</span>
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-2 py-2">
+                      {isLane2 && lane.trip_type === 'Round Trip' ? (
+                        <div className="relative">
+                          <div className="bg-gray-100 rounded border border-gray-300 px-3 py-2">
+                            <div className="flex items-center gap-2">
+                              <Lock className="w-3.5 h-3.5 text-gray-500" />
+                              <span className="text-sm text-gray-700 italic">{editData2.destination_city || 'Auto-filled'}</span>
+                            </div>
+                          </div>
+                          <div className="text-[10px] text-gray-500 mt-1">Auto from Lane 1 Origin</div>
+                        </div>
+                      ) : (
+                        <CityLookupField
+                          value={isLane1 ? (editData.destination_city || '') : (editData2.destination_city || '')}
+                          onChange={async (value) => {
+                            if (isLane1) {
+                              setEditData({ ...editData, destination_city: value });
+                            } else {
+                              setEditData2({ ...editData2, destination_city: value });
+                              setValidationTriggered(prev => ({ ...prev, destination_city: true }));
+                              if (lane.trip_type === 'Circuit' && value) {
+                                const result = await validateMarketMatchEdit(editData, { ...editData2, destination_city: value });
+                                if (!result.valid) {
+                                  setValidationErrors(prev => ({
+                                    ...prev,
+                                    lane2: { ...prev.lane2, destination_city: result.errors.destination_city },
+                                  }));
+                                } else {
+                                  setValidationErrors(prev => ({
+                                    ...prev,
+                                    lane2: { ...prev.lane2, destination_city: '' },
+                                  }));
+                                }
+                              }
+                            }
+                          }}
+                          placeholder="Destination"
+                        />
+                      )}
+                      {isLane2 && lane.trip_type === 'Circuit' && validationTriggered.destination_city && validationErrors.lane2.destination_city && (
+                        <div className="text-xs text-red-600 mt-1">{validationErrors.lane2.destination_city}</div>
+                      )}
+                      {isLane2 && lane.trip_type === 'Circuit' && validationTriggered.destination_city && !validationErrors.lane2.destination_city && editData2.destination_city && editData.origin_city && (
+                        <div className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                          <CheckCircle className="w-3 h-3" />
+                          <span>Market validated</span>
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-2 py-2">
+                      {isLane2 && (lane.trip_type === 'Round Trip' || lane.trip_type === 'Circuit') ? (
+                        <div className="relative">
+                          <div className="bg-gray-100 rounded border border-gray-300 px-3 py-2">
+                            <div className="flex items-center gap-2">
+                              <Lock className="w-3.5 h-3.5 text-gray-500" />
+                              <span className="text-sm text-gray-700 italic">{editData2.border_crossing || 'Auto-filled'}</span>
+                            </div>
+                          </div>
+                          <div className="text-[10px] text-gray-500 mt-1">Auto from Lane 1</div>
+                        </div>
+                      ) : (
+                        <select
+                          value={isLane1 ? (editData.border_crossing || '') : (editData2.border_crossing || '')}
+                          onChange={(e) => {
+                            if (isLane1) {
+                              setEditData({ ...editData, border_crossing: e.target.value });
+                            } else {
+                              setEditData2({ ...editData2, border_crossing: e.target.value });
+                            }
+                          }}
+                          className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                        >
+                          <option value="">Select Border</option>
+                          {BORDER_CROSSINGS.map(border => (
+                            <option key={border} value={border}>{border}</option>
+                          ))}
+                        </select>
+                      )}
+                    </td>
+                    <td className="px-2 py-2">
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={isLane1 ? (editData.border_crossing_fee || 0) : (editData2.border_crossing_fee || 0)}
+                        onChange={(e) => {
+                          if (isLane1) {
+                            setEditData({ ...editData, border_crossing_fee: parseFloat(e.target.value) || 0 });
+                          } else {
+                            setEditData2({ ...editData2, border_crossing_fee: parseFloat(e.target.value) || 0 });
+                          }
+                        }}
+                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded text-right"
+                      />
+                    </td>
+                    <td className="px-2 py-2">
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={isLane1 ? (editData.us_rate || 0) : (editData2.us_rate || 0)}
+                        onChange={(e) => {
+                          if (isLane1) {
+                            setEditData({ ...editData, us_rate: parseFloat(e.target.value) || 0 });
+                          } else {
+                            setEditData2({ ...editData2, us_rate: parseFloat(e.target.value) || 0 });
+                          }
+                        }}
+                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded text-right"
+                      />
+                    </td>
+                    <td className="px-2 py-2">
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={isLane1 ? (editData.mx_rate || 0) : (editData2.mx_rate || 0)}
+                        onChange={(e) => {
+                          if (isLane1) {
+                            setEditData({ ...editData, mx_rate: parseFloat(e.target.value) || 0 });
+                          } else {
+                            setEditData2({ ...editData2, mx_rate: parseFloat(e.target.value) || 0 });
+                          }
+                        }}
+                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded text-right"
+                      />
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-900 text-right font-bold">
+                      ${calculateTotalRate(isLane1 ? editData : editData2).toFixed(2)}
+                    </td>
+                    <td className="px-2 py-2">
+                      <select
+                        value={isLane1 ? (editData.equipment_type || 'Dry Van') : (editData2.equipment_type || 'Dry Van')}
+                        onChange={(e) => {
+                          if (isLane1) {
+                            setEditData({ ...editData, equipment_type: e.target.value });
+                          } else {
+                            setEditData2({ ...editData2, equipment_type: e.target.value });
+                          }
+                        }}
+                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                      >
+                        {EQUIPMENT_TYPES.map(type => (
+                          <option key={type} value={type}>{type}</option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="px-2 py-2">
+                      <input
+                        type="date"
+                        value={isLane1 ? (editData.effective_from_date || '2026-02-01') : (editData2.effective_from_date || '2026-02-01')}
+                        onChange={(e) => {
+                          if (isLane1) {
+                            setEditData({ ...editData, effective_from_date: e.target.value });
+                          } else {
+                            setEditData2({ ...editData2, effective_from_date: e.target.value });
+                          }
+                        }}
+                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                      />
+                    </td>
+                    <td className="px-2 py-2">
+                      <input
+                        type="date"
+                        value={isLane1 ? (editData.effective_to_date || '2026-12-31') : (editData2.effective_to_date || '2026-12-31')}
+                        onChange={(e) => {
+                          if (isLane1) {
+                            setEditData({ ...editData, effective_to_date: e.target.value });
+                          } else {
+                            setEditData2({ ...editData2, effective_to_date: e.target.value });
+                          }
+                        }}
+                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                      />
+                    </td>
+                    <td className="px-4 py-3">
+                      {isLane1 && (
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            onClick={handleSaveEdit}
+                            className="p-1.5 text-green-600 hover:bg-green-50 rounded transition-colors"
+                            title={editingPairedId ? "Save Both Lanes" : "Save"}
+                          >
+                            <Check className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={handleCancelEdit}
+                            className="p-1.5 text-gray-600 hover:bg-gray-100 rounded transition-colors"
+                            title="Cancel"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ) : renderListViewRow(lane, index);
+              })}
+              {isAdding && (
+                <>
+                  <tr className="bg-blue-50">
+                    <td className="px-4 py-3 text-sm text-gray-500">
+                      <div className="flex items-center gap-2">
+                        <span>{lanes.length + 1}</span>
+                        <LaneBadge serviceType={selectedServiceType || 'Door to Door'} tripType={selectedTripType || 'One Way'} />
+                        {selectedTripType !== 'One Way' && <div className="text-xs text-blue-600 font-semibold ml-2">Lane 1</div>}
+                      </div>
+                    </td>
+                    <td className="px-2 py-2">
+                      <div className={validationErrors.lane1.origin_city ? 'border-2 border-red-500 rounded' : ''}>
+                        <CityLookupField
+                          value={editData.origin_city || ''}
+                          onChange={(value) => {
+                            setEditData({ ...editData, origin_city: value });
+                            clearFieldError('lane1', 'origin_city');
+                          }}
+                          placeholder="Origin City"
+                        />
+                      </div>
+                      {validationErrors.lane1.origin_city && (
+                        <div className="text-xs text-red-600 mt-1">{validationErrors.lane1.origin_city}</div>
+                      )}
+                    </td>
+                    <td className="px-2 py-2">
+                      <div className={validationErrors.lane1.destination_city ? 'border-2 border-red-500 rounded' : ''}>
+                        <CityLookupField
+                          value={editData.destination_city || ''}
+                          onChange={(value) => {
+                            setEditData({ ...editData, destination_city: value });
+                            clearFieldError('lane1', 'destination_city');
+                          }}
+                          placeholder="Destination"
+                        />
+                      </div>
+                      {validationErrors.lane1.destination_city && (
+                        <div className="text-xs text-red-600 mt-1">{validationErrors.lane1.destination_city}</div>
+                      )}
+                    </td>
+                    <td className="px-2 py-2">
+                      <select
+                        value={editData.border_crossing || ''}
+                        onChange={(e) => {
+                          setEditData({ ...editData, border_crossing: e.target.value });
+                          clearFieldError('lane1', 'border_crossing');
+                        }}
+                        className={`w-full px-2 py-1 text-sm border rounded ${
+                          validationErrors.lane1.border_crossing ? 'border-red-500 border-2' : 'border-gray-300'
+                        }`}
+                      >
+                        <option value="">Select Border</option>
+                        {BORDER_CROSSINGS.map(border => (
+                          <option key={border} value={border}>{border}</option>
+                        ))}
+                      </select>
+                      {validationErrors.lane1.border_crossing && (
+                        <div className="text-xs text-red-600 mt-1">{validationErrors.lane1.border_crossing}</div>
+                      )}
+                    </td>
+                    <td className="px-2 py-2">
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={editData.border_crossing_fee || 0}
+                        onChange={(e) => setEditData({ ...editData, border_crossing_fee: parseFloat(e.target.value) || 0 })}
+                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded text-right"
+                      />
+                    </td>
+                    <td className="px-2 py-2">
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={editData.us_rate || 0}
+                        onChange={(e) => setEditData({ ...editData, us_rate: parseFloat(e.target.value) || 0 })}
+                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded text-right"
+                      />
+                    </td>
+                    <td className="px-2 py-2">
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={editData.mx_rate || 0}
+                        onChange={(e) => setEditData({ ...editData, mx_rate: parseFloat(e.target.value) || 0 })}
+                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded text-right"
+                      />
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-900 text-right font-bold">
+                      ${calculateTotalRate(editData).toFixed(2)}
+                    </td>
+                    <td className="px-2 py-2">
+                      <select
+                        value={editData.equipment_type || 'Dry Van'}
+                        onChange={(e) => setEditData({ ...editData, equipment_type: e.target.value })}
+                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                      >
+                        {EQUIPMENT_TYPES.map(type => (
+                          <option key={type} value={type}>{type}</option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="px-2 py-2">
+                      <input
+                        type="date"
+                        value={editData.effective_from_date || '2026-02-01'}
+                        onChange={(e) => setEditData({ ...editData, effective_from_date: e.target.value })}
+                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                      />
+                    </td>
+                    <td className="px-2 py-2">
+                      <input
+                        type="date"
+                        value={editData.effective_to_date || '2026-12-31'}
+                        onChange={(e) => setEditData({ ...editData, effective_to_date: e.target.value })}
+                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                      />
+                    </td>
+                    <td className="px-4 py-3">
+                      {selectedTripType === 'One Way' && (
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            onClick={handleSaveAdd}
+                            className="p-1.5 text-green-600 hover:bg-green-50 rounded transition-colors"
+                            title="Save"
+                          >
+                            <Check className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={handleCancelAdd}
+                            className="p-1.5 text-gray-600 hover:bg-gray-100 rounded transition-colors"
+                            title="Cancel"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+
+                  {(selectedTripType === 'Round Trip' || selectedTripType === 'Circuit') && (
+                    <tr className="bg-green-50">
+                      <td className="px-4 py-3 text-sm text-gray-500">
+                        <div className="flex items-center gap-2">
+                          <span>{lanes.length + 2}</span>
+                          <LaneBadge serviceType={selectedServiceType || 'Door to Door'} tripType={selectedTripType || 'One Way'} />
+                          <div className="text-xs text-green-600 font-semibold">Lane 2</div>
+                        </div>
+                      </td>
+                      <td className="px-2 py-2">
+                        {selectedTripType === 'Round Trip' ? (
+                          <div className="relative">
+                            <div className="bg-gray-100 rounded border border-gray-300 px-3 py-2">
+                              <div className="flex items-center gap-2">
+                                <Lock className="w-3.5 h-3.5 text-gray-500" />
+                                <span className="text-sm text-gray-700 italic">{editData2.origin_city || 'Auto-filled'}</span>
+                              </div>
+                            </div>
+                            <div className="text-[10px] text-gray-500 mt-1">Auto from Lane 1 Dest</div>
+                          </div>
+                        ) : (
+                          <>
+                            <div className={validationErrors.lane2.origin_city ? 'border-2 border-red-500 rounded' : ''}>
+                              <CityLookupField
+                                value={editData2.origin_city || ''}
+                                onChange={async (value) => {
+                                  setEditData2({ ...editData2, origin_city: value });
+                                  setValidationTriggered(prev => ({ ...prev, origin_city: true }));
+                                  if (value) {
+                                    const result = await validateMarketMatch(selectedTripType || 'Circuit', editData, { ...editData2, origin_city: value });
+                                    if (!result.valid) {
+                                      setValidationErrors(prev => ({
+                                        ...prev,
+                                        lane2: { ...prev.lane2, origin_city: result.errors.origin_city },
+                                      }));
+                                    } else {
+                                      clearFieldError('lane2', 'origin_city');
+                                    }
+                                  } else {
+                                    clearFieldError('lane2', 'origin_city');
+                                  }
+                                }}
+                                placeholder="Origin City"
+                              />
+                            </div>
+                            {validationTriggered.origin_city && validationErrors.lane2.origin_city && (
+                              <div className="text-xs text-red-600 mt-1 flex items-start gap-1">
+                                <span>{validationErrors.lane2.origin_city}</span>
+                              </div>
+                            )}
+                            {validationTriggered.origin_city && !validationErrors.lane2.origin_city && editData2.origin_city && editData.destination_city && (
+                              <div className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                                <CheckCircle className="w-3 h-3" />
+                                <span>Market validated</span>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </td>
+                      <td className="px-2 py-2">
+                        {selectedTripType === 'Round Trip' ? (
+                          <div className="relative">
+                            <div className="bg-gray-100 rounded border border-gray-300 px-3 py-2">
+                              <div className="flex items-center gap-2">
+                                <Lock className="w-3.5 h-3.5 text-gray-500" />
+                                <span className="text-sm text-gray-700 italic">{editData2.destination_city || 'Auto-filled'}</span>
+                              </div>
+                            </div>
+                            <div className="text-[10px] text-gray-500 mt-1">Auto from Lane 1 Origin</div>
+                          </div>
+                        ) : (
+                          <>
+                            <div className={validationErrors.lane2.destination_city ? 'border-2 border-red-500 rounded' : ''}>
+                              <CityLookupField
+                                value={editData2.destination_city || ''}
+                                onChange={async (value) => {
+                                  setEditData2({ ...editData2, destination_city: value });
+                                  setValidationTriggered(prev => ({ ...prev, destination_city: true }));
+                                  if (value) {
+                                    const result = await validateMarketMatch(selectedTripType || 'Circuit', editData, { ...editData2, destination_city: value });
+                                    if (!result.valid) {
+                                      setValidationErrors(prev => ({
+                                        ...prev,
+                                        lane2: { ...prev.lane2, destination_city: result.errors.destination_city },
+                                      }));
+                                    } else {
+                                      clearFieldError('lane2', 'destination_city');
+                                    }
+                                  } else {
+                                    clearFieldError('lane2', 'destination_city');
+                                  }
+                                }}
+                                placeholder="Destination City"
+                              />
+                            </div>
+                            {validationTriggered.destination_city && validationErrors.lane2.destination_city && (
+                              <div className="text-xs text-red-600 mt-1 flex items-start gap-1">
+                                <span>{validationErrors.lane2.destination_city}</span>
+                              </div>
+                            )}
+                            {validationTriggered.destination_city && !validationErrors.lane2.destination_city && editData2.destination_city && editData.origin_city && (
+                              <div className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                                <CheckCircle className="w-3 h-3" />
+                                <span>Market validated</span>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </td>
+                      <td className="px-2 py-2">
+                        {selectedTripType === 'Circuit' ? (
+                          <div className="relative">
+                            <div className="bg-gray-100 rounded border border-gray-300 px-3 py-2">
+                              <div className="flex items-center gap-2">
+                                <Lock className="w-3.5 h-3.5 text-gray-500" />
+                                <span className="text-sm text-gray-700 italic">{editData2.border_crossing || 'Auto-filled'}</span>
+                              </div>
+                            </div>
+                            <div className="text-[10px] text-gray-500 mt-1">Auto from Lane 1</div>
+                          </div>
+                        ) : (
+                          <div className="relative">
+                            <div className="bg-gray-100 rounded border border-gray-300 px-3 py-2">
+                              <div className="flex items-center gap-2">
+                                <Lock className="w-3.5 h-3.5 text-gray-500" />
+                                <span className="text-sm text-gray-700 italic">{editData2.border_crossing || 'Auto-filled'}</span>
+                              </div>
+                            </div>
+                            <div className="text-[10px] text-gray-500 mt-1">Auto from Lane 1</div>
+                          </div>
+                        )}
+                        {validationErrors.lane2.border_crossing && (
+                          <div className="text-xs text-red-600 mt-1">{validationErrors.lane2.border_crossing}</div>
+                        )}
+                      </td>
+                      <td className="px-2 py-2">
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={editData2.border_crossing_fee || 0}
+                          onChange={(e) => setEditData2({ ...editData2, border_crossing_fee: parseFloat(e.target.value) || 0 })}
+                          className="w-full px-2 py-1 text-sm border border-gray-300 rounded text-right"
+                        />
+                      </td>
+                      <td className="px-2 py-2">
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={editData2.us_rate || 0}
+                          onChange={(e) => setEditData2({ ...editData2, us_rate: parseFloat(e.target.value) || 0 })}
+                          className="w-full px-2 py-1 text-sm border border-gray-300 rounded text-right"
+                        />
+                      </td>
+                      <td className="px-2 py-2">
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={editData2.mx_rate || 0}
+                          onChange={(e) => setEditData2({ ...editData2, mx_rate: parseFloat(e.target.value) || 0 })}
+                          className="w-full px-2 py-1 text-sm border border-gray-300 rounded text-right"
+                        />
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-900 text-right font-bold">
+                        ${calculateTotalRate(editData2).toFixed(2)}
+                      </td>
+                      <td className="px-2 py-2">
+                        <input
+                          type="text"
+                          value={editData2.equipment_type || 'Dry Van'}
+                          readOnly
+                          className="w-full px-2 py-1 text-sm border border-gray-300 rounded bg-gray-100"
+                        />
+                      </td>
+                      <td className="px-2 py-2">
+                        <input
+                          type="date"
+                          value={editData2.effective_from_date || '2026-02-01'}
+                          onChange={(e) => setEditData2({ ...editData2, effective_from_date: e.target.value })}
+                          className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                        />
+                      </td>
+                      <td className="px-2 py-2">
+                        <input
+                          type="date"
+                          value={editData2.effective_to_date || '2026-12-31'}
+                          onChange={(e) => setEditData2({ ...editData2, effective_to_date: e.target.value })}
+                          className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                        />
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            onClick={handleSaveAdd}
+                            className="p-1.5 text-green-600 hover:bg-green-50 rounded transition-colors"
+                            title="Save Both Lanes"
+                          >
+                            <Check className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={handleCancelAdd}
+                            className="p-1.5 text-gray-600 hover:bg-gray-100 rounded transition-colors"
+                            title="Cancel"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </>
+              )}
+            </tbody>
+          </table>
+        ) : (
+          <div className="overflow-x-scroll">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-3 py-2 text-left text-[10px] font-semibold text-gray-600 uppercase">#</th>
+                  <th className="px-3 py-2 text-left text-[10px] font-semibold text-gray-600 uppercase">Origin City</th>
+                  <th className="px-3 py-2 text-left text-[10px] font-semibold text-gray-600 uppercase">Destination</th>
+                  <th className="px-3 py-2 text-left text-[10px] font-semibold text-gray-600 uppercase">Border Crossing</th>
+                  <th className="px-3 py-2 text-right text-[10px] font-semibold text-gray-600 uppercase">Border Fee</th>
+                  <th className="px-3 py-2 text-right text-[10px] font-semibold text-gray-600 uppercase">Total Rate</th>
+                  <th className="px-3 py-2 text-left text-[10px] font-semibold text-gray-600 uppercase">Rate Type</th>
+                  <th className="px-3 py-2 text-right text-[10px] font-semibold text-gray-600 uppercase">US Rate</th>
+                  <th className="px-3 py-2 text-right text-[10px] font-semibold text-gray-600 uppercase">US Miles</th>
+                  <th className="px-3 py-2 text-right text-[10px] font-semibold text-gray-600 uppercase">US $/Mile</th>
+                  <th className="px-3 py-2 text-right text-[10px] font-semibold text-gray-600 uppercase">US Fuel Rate</th>
+                  <th className="px-3 py-2 text-right text-[10px] font-semibold text-gray-600 uppercase">MX Rate</th>
+                  <th className="px-3 py-2 text-right text-[10px] font-semibold text-gray-600 uppercase">MX Miles</th>
+                  <th className="px-3 py-2 text-right text-[10px] font-semibold text-gray-600 uppercase">MX $/Mile</th>
+                  <th className="px-3 py-2 text-right text-[10px] font-semibold text-gray-600 uppercase">MX Fuel Rate</th>
+                  <th className="px-3 py-2 text-left text-[10px] font-semibold text-gray-600 uppercase">Lane Type</th>
+                  <th className="px-3 py-2 text-left text-[10px] font-semibold text-gray-600 uppercase">Trip Type</th>
+                  <th className="px-3 py-2 text-left text-[10px] font-semibold text-gray-600 uppercase">Equipment</th>
+                  <th className="px-3 py-2 text-right text-[10px] font-semibold text-gray-600 uppercase">Load Volume</th>
+                  <th className="px-3 py-2 text-left text-[10px] font-semibold text-gray-600 uppercase">Load Frequency</th>
+                  <th className="px-3 py-2 text-left text-[10px] font-semibold text-gray-600 uppercase">From</th>
+                  <th className="px-3 py-2 text-left text-[10px] font-semibold text-gray-600 uppercase">To</th>
+                  <th className="px-3 py-2 text-center text-[10px] font-semibold text-gray-600 uppercase">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {lanes.map((lane, index) => {
+                  const isEditing = editingId === lane.id;
+                  const isPairedEditing = editingPairedId === lane.id;
+                  const isLane1 = isEditing;
+                  const isLane2 = isPairedEditing;
+                  const currentData = isLane1 ? editData : editData2;
+                  return (isEditing || isPairedEditing) ? (
+                    <tr key={lane.id} className="bg-blue-50">
+                      <td className="px-3 py-3 text-sm text-gray-500">
+                        <div className="flex items-center gap-2">
+                          <span>{index + 1}</span>
+                          <LaneBadge serviceType={lane.service_type || 'Door to Door'} tripType={lane.trip_type || 'One Way'} />
+                        </div>
+                      </td>
+                      <td className="px-2 py-2">
+                        {isLane2 && lane.trip_type === 'Round Trip' ? (
+                          <div className="bg-gray-100 italic text-xs text-gray-700 px-2 py-1 rounded border">{editData2.origin_city || 'Auto'}</div>
+                        ) : (
+                          <CityAutocompleteInput value={currentData.origin_city || ''} onChange={(value) => { if (isLane1) setEditData({ ...editData, origin_city: value }); else setEditData2({ ...editData2, origin_city: value }); }} className="w-32 px-2 py-1 text-xs border rounded" placeholder="Origin" />
+                        )}
+                      </td>
+                      <td className="px-2 py-2">
+                        {isLane2 && lane.trip_type === 'Round Trip' ? (
+                          <div className="bg-gray-100 italic text-xs text-gray-700 px-2 py-1 rounded border">{editData2.destination_city || 'Auto'}</div>
+                        ) : (
+                          <CityAutocompleteInput value={currentData.destination_city || ''} onChange={(value) => { if (isLane1) setEditData({ ...editData, destination_city: value }); else setEditData2({ ...editData2, destination_city: value }); }} className="w-32 px-2 py-1 text-xs border rounded" placeholder="Destination" />
+                        )}
+                      </td>
+                      <td className="px-2 py-2">
+                        {isLane2 && (lane.trip_type === 'Round Trip' || lane.trip_type === 'Circuit') ? (
+                          <div className="bg-gray-100 italic text-xs text-gray-700 px-2 py-1 rounded border">{editData2.border_crossing || 'Auto'}</div>
+                        ) : (
+                          <select value={currentData.border_crossing || ''} onChange={(e) => { if (isLane1) setEditData({ ...editData, border_crossing: e.target.value }); else setEditData2({ ...editData2, border_crossing: e.target.value }); }} className="w-24 px-2 py-1 text-xs border rounded">{BORDER_CROSSINGS.map(b => <option key={b} value={b}>{b}</option>)}</select>
+                        )}
+                      </td>
+                      <td className="px-2 py-2">
+                        {(() => {
+                          const serviceType = isLane1 ? editData.service_type : editData2.service_type;
+                          const fieldVis = getFieldVisibility(serviceType);
+                          const isDisabled = fieldVis.borderCrossingDisabled;
+                          const hasError = isLane1 ? !!validationErrors.lane1.border_crossing_fee : !!validationErrors.lane2.border_crossing_fee;
+                          return (
+                            <input type="number" step="0.01" value={currentData.border_crossing_fee || 0} onChange={(e) => {
+                              if (!isDisabled) {
+                                if (isLane1) {
+                                  setEditData({ ...editData, border_crossing_fee: parseFloat(e.target.value) || 0 });
+                                  setValidationErrors(prev => ({ ...prev, lane1: { ...prev.lane1, border_crossing_fee: '' } }));
+                                } else {
+                                  setEditData2({ ...editData2, border_crossing_fee: parseFloat(e.target.value) || 0 });
+                                  setValidationErrors(prev => ({ ...prev, lane2: { ...prev.lane2, border_crossing_fee: '' } }));
+                                }
+                              }
+                            }} disabled={isDisabled} className={getFieldClassName(isDisabled, hasError)} />
+                          );
+                        })()}
+                        {isLane1 && validationErrors.lane1.border_crossing_fee && (
+                          <div className="text-xs text-red-500 mt-0.5">{validationErrors.lane1.border_crossing_fee}</div>
+                        )}
+                        {isLane2 && validationErrors.lane2.border_crossing_fee && (
+                          <div className="text-xs text-red-500 mt-0.5">{validationErrors.lane2.border_crossing_fee}</div>
+                        )}
+                        {isLane1 && validationErrors.lane1.border_crossing_fee && (
+                          <div className="text-xs text-red-500 mt-0.5">{validationErrors.lane1.border_crossing_fee}</div>
+                        )}
+                        {isLane2 && validationErrors.lane2.border_crossing_fee && (
+                          <div className="text-xs text-red-500 mt-0.5">{validationErrors.lane2.border_crossing_fee}</div>
+                        )}
+                      </td>
+                      <td className="px-3 py-3 text-xs font-bold">${calculateTotalRate(currentData).toFixed(2)}</td>
+                      <td className="px-2 py-2"><select value={currentData.rate_type || 'FLT'} onChange={(e) => { if (isLane1) setEditData({ ...editData, rate_type: e.target.value }); else setEditData2({ ...editData2, rate_type: e.target.value }); }} className="w-16 px-2 py-1 text-xs border rounded">{RATE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></td>
+                      <td className="px-2 py-2">
+                        {(() => {
+                          const serviceType = isLane1 ? editData.service_type : editData2.service_type;
+                          const fieldVis = getFieldVisibility(serviceType);
+                          const isDisabledField = fieldVis.usFieldsDisabled;
+                          return ['FLT', 'Flat Rate', '', null].includes(currentData.rate_type) ? (
+                            <>
+                              <input type="number" step="0.01" value={currentData.us_rate || 0} onChange={(e) => {
+                                if (!isDisabledField) {
+                                  if (isLane1) {
+                                    setEditData({ ...editData, us_rate: parseFloat(e.target.value) || 0 });
+                                    setValidationErrors(prev => ({ ...prev, lane1: { ...prev.lane1, us_rate: '' } }));
+                                  } else {
+                                    setEditData2({ ...editData2, us_rate: parseFloat(e.target.value) || 0 });
+                                    setValidationErrors(prev => ({ ...prev, lane2: { ...prev.lane2, us_rate: '' } }));
+                                  }
+                                }
+                              }} disabled={isDisabledField} className={getFieldClassName(isDisabledField, isLane1 ? !!validationErrors.lane1.us_rate : !!validationErrors.lane2.us_rate)} />
+                              {isLane1 && validationErrors.lane1.us_rate && (
+                                <div className="text-xs text-red-500 mt-0.5">{validationErrors.lane1.us_rate}</div>
+                              )}
+                              {isLane2 && validationErrors.lane2.us_rate && (
+                                <div className="text-xs text-red-500 mt-0.5">{validationErrors.lane2.us_rate}</div>
+                              )}
+                            </>
+                          ) : (
+                            <div className="w-20 px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded text-right">
+                              {(currentData.us_miles && currentData.us_rate_per_mile) ? ((currentData.us_miles * currentData.us_rate_per_mile).toFixed(2)) : '—'}
+                            </div>
+                          );
+                        })()}
+                      </td>
+                      <td className="px-2 py-2">
+                        {(() => {
+                          const serviceType = isLane1 ? editData.service_type : editData2.service_type;
+                          const isDisabledField = isFieldDisabled('us_miles', serviceType);
+                          const hasError = isLane1 ? !!validationErrors.lane1.us_miles : !!validationErrors.lane2.us_miles;
+                          return (
+                            <input type="number" step="0.01" value={currentData.us_miles || 0} onChange={(e) => {
+                              if (!isDisabledField) {
+                                handleFieldChange('us_miles', parseFloat(e.target.value) || 0, isLane1);
+                                if (isLane1) setValidationErrors(prev => ({ ...prev, lane1: { ...prev.lane1, us_miles: '' } }));
+                                else setValidationErrors(prev => ({ ...prev, lane2: { ...prev.lane2, us_miles: '' } }));
+                              }
+                            }} disabled={isDisabledField} className={getFieldClassName(isDisabledField, hasError)} />
+                          );
+                        })()}
+
+                        {isLane1 && validationErrors.lane1.us_miles && (
+                          <div className="text-xs text-red-500 mt-0.5">{validationErrors.lane1.us_miles}</div>
+                        )}
+                        {isLane2 && validationErrors.lane2.us_miles && (
+                          <div className="text-xs text-red-500 mt-0.5">{validationErrors.lane2.us_miles}</div>
+                        )}
+                      </td>
+
+                      <td className="px-2 py-2">
+                        {(() => {
+                          const serviceType = isLane1 ? editData.service_type : editData2.service_type;
+                          const isDisabledField = isFieldDisabled('us_rate_per_mile', serviceType);
+                          return ['FLT', 'Flat Rate', '', null].includes(currentData.rate_type) ? (
+                            <div className="w-20 px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded text-right">
+                              {(currentData.us_miles && currentData.us_rate) ? ((currentData.us_rate / currentData.us_miles).toFixed(2)) : '—'}
+                            </div>
+                          ) : (
+                            <>
+                              <input type="number" step="0.01" value={currentData.us_rate_per_mile || 0} onChange={(e) => {
+                                if (!isDisabledField) {
+                                  handleFieldChange('us_rate_per_mile', parseFloat(e.target.value) || 0, isLane1);
+                                  if (isLane1) setValidationErrors(prev => ({ ...prev, lane1: { ...prev.lane1, us_rate_per_mile: '' } }));
+                                  else setValidationErrors(prev => ({ ...prev, lane2: { ...prev.lane2, us_rate_per_mile: '' } }));
+                                }
+                              }} disabled={isDisabledField} className={getFieldClassName(isDisabledField, isLane1 ? !!validationErrors.lane1.us_rate_per_mile : !!validationErrors.lane2.us_rate_per_mile)} />
+                              {isLane1 && validationErrors.lane1.us_rate_per_mile && (
+                                <div className="text-xs text-red-500 mt-0.5">{validationErrors.lane1.us_rate_per_mile}</div>
+                              )}
+                              {isLane2 && validationErrors.lane2.us_rate_per_mile && (
+                                <div className="text-xs text-red-500 mt-0.5">{validationErrors.lane2.us_rate_per_mile}</div>
+                              )}
+                            </>
+                          );
+                        })()}
+                      </td>
+                      <td className="px-2 py-2">
+                        {(() => {
+                          const serviceType = isLane1 ? editData.service_type : editData2.service_type;
+                          const isDisabledField = isFieldDisabled('us_fuel_rate', serviceType);
+                          return (
+                            <input type="number" step="0.01" value={currentData.us_fuel_rate || 0} onChange={(e) => {
+                              if (!isDisabledField) handleFieldChange('us_fuel_rate', parseFloat(e.target.value) || 0, isLane1);
+                            }} disabled={isDisabledField} className={getFieldClassName(isDisabledField, false)} />
+                          );
+                        })()}
+                      </td>
+                      <td className="px-2 py-2">
+                        {(() => {
+                          const serviceType = isLane1 ? editData.service_type : editData2.service_type;
+                          const isDisabledField = isFieldDisabled('mx_rate', serviceType);
+                          return ['FLT', 'Flat Rate', '', null].includes(currentData.rate_type) ? (
+                            <>
+                              <input type="number" step="0.01" value={currentData.mx_rate || 0} onChange={(e) => {
+                                if (!isDisabledField) {
+                                  handleFieldChange('mx_rate', parseFloat(e.target.value) || 0, isLane1);
+                                  if (isLane1) setValidationErrors(prev => ({ ...prev, lane1: { ...prev.lane1, mx_rate: '' } }));
+                                  else setValidationErrors(prev => ({ ...prev, lane2: { ...prev.lane2, mx_rate: '' } }));
+                                }
+                              }} disabled={isDisabledField} className={getFieldClassName(isDisabledField, isLane1 ? !!validationErrors.lane1.mx_rate : !!validationErrors.lane2.mx_rate)} />
+                              {isLane1 && validationErrors.lane1.mx_rate && (
+                                <div className="text-xs text-red-500 mt-0.5">{validationErrors.lane1.mx_rate}</div>
+                              )}
+                              {isLane2 && validationErrors.lane2.mx_rate && (
+                                <div className="text-xs text-red-500 mt-0.5">{validationErrors.lane2.mx_rate}</div>
+                              )}
+                            </>
+                          ) : (
+                            <div className="w-20 px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded text-right">
+                              {(currentData.mx_miles && currentData.mx_rate_per_mile) ? ((currentData.mx_miles * currentData.mx_rate_per_mile).toFixed(2)) : '—'}
+                            </div>
+                          );
+                        })()}
+                      </td>
+                      <td className="px-2 py-2">
+                        {(() => {
+                          const serviceType = isLane1 ? editData.service_type : editData2.service_type;
+                          const isDisabledField = isFieldDisabled('mx_miles', serviceType);
+                          return (
+                            <input type="number" step="0.01" value={currentData.mx_miles || 0} onChange={(e) => {
+                              if (!isDisabledField) {
+                                handleFieldChange('mx_miles', parseFloat(e.target.value) || 0, isLane1);
+                                if (isLane1) setValidationErrors(prev => ({ ...prev, lane1: { ...prev.lane1, mx_miles: '' } }));
+                                else setValidationErrors(prev => ({ ...prev, lane2: { ...prev.lane2, mx_miles: '' } }));
+                              }
+                            }} disabled={isDisabledField} className={getFieldClassName(isDisabledField, isLane1 ? !!validationErrors.lane1.mx_miles : !!validationErrors.lane2.mx_miles)} />
+                          );
+                        })()}
+
+                        {isLane1 && validationErrors.lane1.mx_miles && (
+                          <div className="text-xs text-red-500 mt-0.5">{validationErrors.lane1.mx_miles}</div>
+                        )}
+                        {isLane2 && validationErrors.lane2.mx_miles && (
+                          <div className="text-xs text-red-500 mt-0.5">{validationErrors.lane2.mx_miles}</div>
+                        )}
+                      </td>
+
+                      <td className="px-2 py-2">
+                        {(() => {
+                          const serviceType = isLane1 ? editData.service_type : editData2.service_type;
+                          const isDisabledField = isFieldDisabled('mx_rate_per_mile', serviceType);
+                          return ['FLT', 'Flat Rate', '', null].includes(currentData.rate_type) ? (
+                            <div className="w-20 px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded text-right">
+                              {(currentData.mx_miles && currentData.mx_rate) ? ((currentData.mx_rate / currentData.mx_miles).toFixed(2)) : '—'}
+                            </div>
+                          ) : (
+                            <>
+                              <input type="number" step="0.01" value={currentData.mx_rate_per_mile || 0} onChange={(e) => {
+                                if (!isDisabledField) {
+                                  handleFieldChange('mx_rate_per_mile', parseFloat(e.target.value) || 0, isLane1);
+                                  if (isLane1) setValidationErrors(prev => ({ ...prev, lane1: { ...prev.lane1, mx_rate_per_mile: '' } }));
+                                  else setValidationErrors(prev => ({ ...prev, lane2: { ...prev.lane2, mx_rate_per_mile: '' } }));
+                                }
+                              }} disabled={isDisabledField} className={getFieldClassName(isDisabledField, isLane1 ? !!validationErrors.lane1.mx_rate_per_mile : !!validationErrors.lane2.mx_rate_per_mile)} />
+                              {isLane1 && validationErrors.lane1.mx_rate_per_mile && (
+                                <div className="text-xs text-red-500 mt-0.5">{validationErrors.lane1.mx_rate_per_mile}</div>
+                              )}
+                              {isLane2 && validationErrors.lane2.mx_rate_per_mile && (
+                                <div className="text-xs text-red-500 mt-0.5">{validationErrors.lane2.mx_rate_per_mile}</div>
+                              )}
+                            </>
+                          );
+                        })()}
+                      </td>
+                      <td className="px-2 py-2">
+                        {(() => {
+                          const serviceType = isLane1 ? editData.service_type : editData2.service_type;
+                          const isDisabledField = isFieldDisabled('mx_fuel_rate', serviceType);
+                          return (
+                            <input type="number" step="0.01" value={currentData.mx_fuel_rate || 0} onChange={(e) => {
+                              if (!isDisabledField) handleFieldChange('mx_fuel_rate', parseFloat(e.target.value) || 0, isLane1);
+                            }} disabled={isDisabledField} className={getFieldClassName(isDisabledField, false)} />
+                          );
+                        })()}
+                      </td>
+                      <td className="px-2 py-2"><select value={currentData.lane_type || ''} onChange={(e) => { if (isLane1) setEditData({ ...editData, lane_type: e.target.value }); else setEditData2({ ...editData2, lane_type: e.target.value }); }} className="w-24 px-2 py-1 text-xs border rounded"><option value="">Select</option>{LANE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></td>
+                      <td className="px-2 py-2"><select value={currentData.trip_type || 'One Way'} onChange={(e) => { if (isLane1) setEditData({ ...editData, trip_type: e.target.value }); else setEditData2({ ...editData2, trip_type: e.target.value }); }} className="w-24 px-2 py-1 text-xs border rounded">{TRIP_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></td>
+                      <td className="px-2 py-2"><select value={currentData.equipment_type || 'Dry Van'} onChange={(e) => { if (isLane1) setEditData({ ...editData, equipment_type: e.target.value }); else setEditData2({ ...editData2, equipment_type: e.target.value }); }} className="w-24 px-2 py-1 text-xs border rounded">{EQUIPMENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></td>
+                      <td className="px-2 py-2"><input type="number" value={currentData.load_volume || ''} onChange={(e) => { if (isLane1) setEditData({ ...editData, load_volume: e.target.value }); else setEditData2({ ...editData2, load_volume: e.target.value }); }} className="w-20 px-2 py-1 text-xs border rounded text-right" /></td>
+                      <td className="px-2 py-2"><select value={currentData.load_frequency || ''} onChange={(e) => { if (isLane1) setEditData({ ...editData, load_frequency: e.target.value }); else setEditData2({ ...editData2, load_frequency: e.target.value }); }} className="w-24 px-2 py-1 text-xs border rounded"><option value="">Select</option>{LOAD_FREQUENCIES.map(f => <option key={f} value={f}>{f}</option>)}</select></td>
+                      <td className="px-2 py-2"><input type="date" value={currentData.effective_from_date || '2026-02-01'} onChange={(e) => { if (isLane1) setEditData({ ...editData, effective_from_date: e.target.value }); else setEditData2({ ...editData2, effective_from_date: e.target.value }); }} className="w-28 px-2 py-1 text-xs border rounded" /></td>
+                      <td className="px-2 py-2"><input type="date" value={currentData.effective_to_date || '2026-12-31'} onChange={(e) => { if (isLane1) setEditData({ ...editData, effective_to_date: e.target.value }); else setEditData2({ ...editData2, effective_to_date: e.target.value }); }} className="w-28 px-2 py-1 text-xs border rounded" /></td>
+                      <td className="px-3 py-3">{isLane1 && <div className="flex gap-1"><button onClick={handleSaveEdit} className="p-1 text-green-600 hover:bg-green-50 rounded"><Check className="w-3 h-3" /></button><button onClick={handleCancelEdit} className="p-1 text-gray-600 hover:bg-gray-100 rounded"><X className="w-3 h-3" /></button></div>}</td>
+                    </tr>
+                  ) : renderDetailViewRow(lane, index);
+                })}
+{isAdding && (
+                  <>
+                  <tr className="bg-blue-50">
+                    <td className="px-3 py-3 text-sm text-gray-500">
+                      <div className="flex items-center gap-2">
+                        <span>{lanes.length + 1}</span>
+                        <LaneBadge serviceType={selectedServiceType || 'Door to Door'} tripType={selectedTripType || 'One Way'} />
+                      </div>
+                    </td>
+                    <td className="px-2 py-2"><CityAutocompleteInput value={editData.origin_city || ''} onChange={(value) => setEditData({ ...editData, origin_city: value })} className="w-32 px-2 py-1 text-xs border rounded" placeholder="Origin" /></td>
+                    <td className="px-2 py-2"><CityAutocompleteInput value={editData.destination_city || ''} onChange={(value) => setEditData({ ...editData, destination_city: value })} className="w-32 px-2 py-1 text-xs border rounded" placeholder="Destination" /></td>
+                    <td className="px-2 py-2"><select value={editData.border_crossing || ''} onChange={(e) => setEditData({ ...editData, border_crossing: e.target.value })} className="w-24 px-2 py-1 text-xs border rounded">{BORDER_CROSSINGS.map(b => <option key={b} value={b}>{b}</option>)}</select></td>
+                    <td className="px-2 py-2">
+                      {(() => {
+                        const fieldVis = getFieldVisibility(editData.service_type);
+                        const isDisabled = fieldVis.borderCrossingDisabled;
+                        return (
+                          <input type="number" step="0.01" value={isDisabled ? 0 : (editData.border_crossing_fee || 0)} onChange={(e) => {
+                            if (!isDisabled) {
+                              setEditData({ ...editData, border_crossing_fee: parseFloat(e.target.value) || 0 });
+                              setValidationErrors(prev => ({ ...prev, lane1: { ...prev.lane1, border_crossing_fee: '' } }));
+                            }
+                          }} disabled={isDisabled} className={getFieldClassName(isDisabled, !!validationErrors.lane1.border_crossing_fee)} />
+                        );
+                      })()}
+
+                      {validationErrors.lane1.border_crossing_fee && (
+                        <div className="text-xs text-red-500 mt-0.5">{validationErrors.lane1.border_crossing_fee}</div>
+                      )}
+                    </td>
+                    <td className="px-3 py-3 text-xs font-bold">${calculateTotalRate(editData).toFixed(2)}</td>
+                    <td className="px-2 py-2"><select value={editData.rate_type || 'FLT'} onChange={(e) => setEditData({ ...editData, rate_type: e.target.value })} className="w-16 px-2 py-1 text-xs border rounded">{RATE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></td>
+                    <td className="px-2 py-2">
+                        {(() => {
+                          const fieldVis = getFieldVisibility(editData.service_type);
+                          return ['FLT', 'Flat Rate', '', null].includes(editData.rate_type) ? (
+                            <>
+                              <input type="number" step="0.01" value={fieldVis.usFieldsDisabled ? 0 : (editData.us_rate || 0)} onChange={(e) => {
+                                if (!fieldVis.usFieldsDisabled) {
+                                  setEditData({ ...editData, us_rate: parseFloat(e.target.value) || 0 });
+                                  setValidationErrors(prev => ({ ...prev, lane1: { ...prev.lane1, us_rate: '' } }));
+                                }
+                              }} disabled={fieldVis.usFieldsDisabled} className={getFieldClassName(fieldVis.usFieldsDisabled, !!validationErrors.lane1.us_rate)} />
+                              {validationErrors.lane1.us_rate && (
+                                <div className="text-xs text-red-500 mt-0.5">{validationErrors.lane1.us_rate}</div>
+                              )}
+                            </>
+                          ) : (
+                            <div className="w-20 px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded text-right">
+                              {(editData.us_miles && editData.us_rate_per_mile) ? ((editData.us_miles * editData.us_rate_per_mile).toFixed(2)) : '—'}
+                            </div>
+                          );
+                        })()}
+                    </td>
+                    <td className="px-2 py-2">
+                      {(() => {
+                        const fieldVis = getFieldVisibility(editData.service_type);
+                        return (
+                          <input type="number" step="0.01" value={fieldVis.usFieldsDisabled ? 0 : (editData.us_miles || 0)} onChange={(e) => {
+                            if (!fieldVis.usFieldsDisabled) {
+                              setEditData({ ...editData, us_miles: parseFloat(e.target.value) || 0 });
+                              setValidationErrors(prev => ({ ...prev, lane1: { ...prev.lane1, us_miles: '' } }));
+                            }
+                          }} disabled={fieldVis.usFieldsDisabled} className={getFieldClassName(fieldVis.usFieldsDisabled, !!validationErrors.lane1.us_miles)} />
+                        );
+                      })()}
+
+                      {validationErrors.lane1.us_miles && (
+                        <div className="text-xs text-red-500 mt-0.5">{validationErrors.lane1.us_miles}</div>
+                      )}
+                    </td>
+
+                    <td className="px-2 py-2">
+                        {(() => {
+                          const fieldVis = getFieldVisibility(editData.service_type);
+                          return ['FLT', 'Flat Rate', '', null].includes(editData.rate_type) ? (
+                            <div className="w-20 px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded text-right">
+                              {(editData.us_miles && editData.us_rate) ? ((editData.us_rate / editData.us_miles).toFixed(2)) : '—'}
+                            </div>
+                          ) : (
+                            <>
+                              <input type="number" step="0.01" value={fieldVis.usFieldsDisabled ? 0 : (editData.us_rate_per_mile || 0)} onChange={(e) => {
+                                if (!fieldVis.usFieldsDisabled) {
+                                  setEditData({ ...editData, us_rate_per_mile: parseFloat(e.target.value) || 0 });
+                                  setValidationErrors(prev => ({ ...prev, lane1: { ...prev.lane1, us_rate_per_mile: '' } }));
+                                }
+                              }} disabled={fieldVis.usFieldsDisabled} className={getFieldClassName(fieldVis.usFieldsDisabled, !!validationErrors.lane1.us_rate_per_mile)} />
+                              {validationErrors.lane1.us_rate_per_mile && (
+                                <div className="text-xs text-red-500 mt-0.5">{validationErrors.lane1.us_rate_per_mile}</div>
+                              )}
+                            </>
+                          );
+                        })()}
+                    </td>
+                    <td className="px-2 py-2">
+                      {(() => {
+                        const fieldVis = getFieldVisibility(editData.service_type);
+                        return (
+                          <input type="number" step="0.01" value={fieldVis.usFieldsDisabled ? 0 : (editData.us_fuel_rate || 0)} onChange={(e) => {
+                            if (!fieldVis.usFieldsDisabled) setEditData({ ...editData, us_fuel_rate: parseFloat(e.target.value) || 0 });
+                          }} disabled={fieldVis.usFieldsDisabled} className={getFieldClassName(fieldVis.usFieldsDisabled, false)} />
+                        );
+                      })()}
+                    </td>
+                    <td className="px-2 py-2">
+                        {(() => {
+                          const fieldVis = getFieldVisibility(editData.service_type);
+                          return ['FLT', 'Flat Rate', '', null].includes(editData.rate_type) ? (
+                            <>
+                              <input type="number" step="0.01" value={fieldVis.mxFieldsDisabled ? 0 : (editData.mx_rate || 0)} onChange={(e) => {
+                                if (!fieldVis.mxFieldsDisabled) {
+                                  setEditData({ ...editData, mx_rate: parseFloat(e.target.value) || 0 });
+                                  setValidationErrors(prev => ({ ...prev, lane1: { ...prev.lane1, mx_rate: '' } }));
+                                }
+                              }} disabled={fieldVis.mxFieldsDisabled} className={getFieldClassName(fieldVis.mxFieldsDisabled, !!validationErrors.lane1.mx_rate)} />
+                              {validationErrors.lane1.mx_rate && (
+                                <div className="text-xs text-red-500 mt-0.5">{validationErrors.lane1.mx_rate}</div>
+                              )}
+                            </>
+                          ) : (
+                            <div className="w-20 px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded text-right">
+                              {(editData.mx_miles && editData.mx_rate_per_mile) ? ((editData.mx_miles * editData.mx_rate_per_mile).toFixed(2)) : '—'}
+                            </div>
+                          );
+                        })()}
+                    </td>
+                    <td className="px-2 py-2">
+                      {(() => {
+                        const fieldVis = getFieldVisibility(editData.service_type);
+                        return (
+                          <input type="number" step="0.01" value={fieldVis.mxFieldsDisabled ? 0 : (editData.mx_miles || 0)} onChange={(e) => {
+                            if (!fieldVis.mxFieldsDisabled) {
+                              setEditData({ ...editData, mx_miles: parseFloat(e.target.value) || 0 });
+                              setValidationErrors(prev => ({ ...prev, lane1: { ...prev.lane1, mx_miles: '' } }));
+                            }
+                          }} disabled={fieldVis.mxFieldsDisabled} className={getFieldClassName(fieldVis.mxFieldsDisabled, !!validationErrors.lane1.mx_miles)} />
+                        );
+                      })()}
+
+                      {validationErrors.lane1.mx_miles && (
+                        <div className="text-xs text-red-500 mt-0.5">{validationErrors.lane1.mx_miles}</div>
+                      )}
+                    </td>
+
+                    <td className="px-2 py-2">
+                        {(() => {
+                          const fieldVis = getFieldVisibility(editData.service_type);
+                          return ['FLT', 'Flat Rate', '', null].includes(editData.rate_type) ? (
+                            <div className="w-20 px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded text-right">
+                              {(editData.mx_miles && editData.mx_rate) ? ((editData.mx_rate / editData.mx_miles).toFixed(2)) : '—'}
+                            </div>
+                          ) : (
+                            <>
+                              <input type="number" step="0.01" value={fieldVis.mxFieldsDisabled ? 0 : (editData.mx_rate_per_mile || 0)} onChange={(e) => {
+                                if (!fieldVis.mxFieldsDisabled) {
+                                  setEditData({ ...editData, mx_rate_per_mile: parseFloat(e.target.value) || 0 });
+                                  setValidationErrors(prev => ({ ...prev, lane1: { ...prev.lane1, mx_rate_per_mile: '' } }));
+                                }
+                              }} disabled={fieldVis.mxFieldsDisabled} className={getFieldClassName(fieldVis.mxFieldsDisabled, !!validationErrors.lane1.mx_rate_per_mile)} />
+                              {validationErrors.lane1.mx_rate_per_mile && (
+                                <div className="text-xs text-red-500 mt-0.5">{validationErrors.lane1.mx_rate_per_mile}</div>
+                              )}
+                            </>
+                          );
+                        })()}
+                    </td>
+                    <td className="px-2 py-2">
+                      {(() => {
+                        const fieldVis = getFieldVisibility(editData.service_type);
+                        return (
+                          <input type="number" step="0.01" value={fieldVis.mxFieldsDisabled ? 0 : (editData.mx_fuel_rate || 0)} onChange={(e) => {
+                            if (!fieldVis.mxFieldsDisabled) setEditData({ ...editData, mx_fuel_rate: parseFloat(e.target.value) || 0 });
+                          }} disabled={fieldVis.mxFieldsDisabled} className={getFieldClassName(fieldVis.mxFieldsDisabled, false)} />
+                        );
+                      })()}
+                    </td>
+                    <td className="px-2 py-2"><select value={editData.lane_type || ''} onChange={(e) => setEditData({ ...editData, lane_type: e.target.value })} className="w-24 px-2 py-1 text-xs border rounded"><option value="">Select</option>{LANE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></td>
+                    <td className="px-2 py-2"><select value={editData.trip_type || 'One Way'} onChange={(e) => setEditData({ ...editData, trip_type: e.target.value })} className="w-24 px-2 py-1 text-xs border rounded">{TRIP_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></td>
+                    <td className="px-2 py-2"><select value={editData.equipment_type || 'Dry Van'} onChange={(e) => setEditData({ ...editData, equipment_type: e.target.value })} className="w-24 px-2 py-1 text-xs border rounded">{EQUIPMENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></td>
+                    <td className="px-2 py-2"><input type="number" value={editData.load_volume || ''} onChange={(e) => setEditData({ ...editData, load_volume: e.target.value })} className="w-20 px-2 py-1 text-xs border rounded text-right" /></td>
+                    <td className="px-2 py-2"><select value={editData.load_frequency || ''} onChange={(e) => setEditData({ ...editData, load_frequency: e.target.value })} className="w-24 px-2 py-1 text-xs border rounded"><option value="">Select</option>{LOAD_FREQUENCIES.map(f => <option key={f} value={f}>{f}</option>)}</select></td>
+                    <td className="px-2 py-2"><input type="date" value={editData.effective_from_date || '2026-02-01'} onChange={(e) => setEditData({ ...editData, effective_from_date: e.target.value })} className="w-28 px-2 py-1 text-xs border rounded" /></td>
+                    <td className="px-2 py-2"><input type="date" value={editData.effective_to_date || '2026-12-31'} onChange={(e) => setEditData({ ...editData, effective_to_date: e.target.value })} className="w-28 px-2 py-1 text-xs border rounded" /></td>
+                    <td className="px-3 py-3">{selectedTripType === 'One Way' && <div className="flex gap-1"><button onClick={handleSaveAdd} className="p-1 text-green-600 hover:bg-green-50 rounded"><Check className="w-3 h-3" /></button><button onClick={handleCancelAdd} className="p-1 text-gray-600 hover:bg-gray-100 rounded"><X className="w-3 h-3" /></button></div>}</td>
+                  </tr>
+
+                  {(selectedTripType === 'Round Trip' || selectedTripType === 'Circuit') && (
+                    <tr className={`bg-green-50 ${selectedTripType === 'Round Trip' ? 'border-l-4 border-l-green-400' : 'border-l-4 border-l-orange-400'}`}>
+                      <td className="px-3 py-3 text-sm text-gray-500">
+                        <div className="flex items-center gap-2">
+                          <span>{lanes.length + 2}</span>
+                          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-semibold ${
+                            selectedTripType === 'Round Trip' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
+                          }`}>
+                            <Link2 className="w-3 h-3" />
+                            {selectedTripType === 'Round Trip' ? 'RT' : 'CIR'}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-2 py-2">
+                        {selectedTripType === 'Round Trip' ? (
+                          <div className="bg-gray-100 italic text-xs text-gray-700 px-2 py-1 rounded border">{editData2.origin_city || 'Auto'}</div>
+                        ) : (
+                          <CityAutocompleteInput value={editData2.origin_city || ''} onChange={(value) => setEditData2({ ...editData2, origin_city: value })} className="w-32 px-2 py-1 text-xs border rounded" placeholder="Origin" />
+                        )}
+                      </td>
+                      <td className="px-2 py-2">
+                        {selectedTripType === 'Round Trip' ? (
+                          <div className="bg-gray-100 italic text-xs text-gray-700 px-2 py-1 rounded border">{editData2.destination_city || 'Auto'}</div>
+                        ) : (
+                          <CityAutocompleteInput value={editData2.destination_city || ''} onChange={(value) => setEditData2({ ...editData2, destination_city: value })} className="w-32 px-2 py-1 text-xs border rounded" placeholder="Destination" />
+                        )}
+                      </td>
+                      <td className="px-2 py-2">
+                        <div className="bg-gray-100 italic text-xs text-gray-700 px-2 py-1 rounded border">{editData2.border_crossing || 'Auto'}</div>
+                      </td>
+                      <td className="px-2 py-2"><input type="number" step="0.01" value={editData2.border_crossing_fee || 0} onChange={(e) => setEditData2({ ...editData2, border_crossing_fee: parseFloat(e.target.value) || 0 })} className="w-20 px-2 py-1 text-xs border rounded text-right" /></td>
+                      <td className="px-3 py-3 text-xs font-bold">${calculateTotalRate(editData2).toFixed(2)}</td>
+                      <td className="px-2 py-2"><select value={editData2.rate_type || 'FLT'} onChange={(e) => setEditData2({ ...editData2, rate_type: e.target.value })} className="w-16 px-2 py-1 text-xs border rounded">{RATE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></td>
+                      <td className="px-2 py-2">
+                        {['FLT', 'Flat Rate', '', null].includes(editData2.rate_type) ? (
+                          <input type="number" step="0.01" value={editData2.us_rate || 0} onChange={(e) => setEditData2({ ...editData2, us_rate: parseFloat(e.target.value) || 0 })} className="w-20 px-2 py-1 text-xs border rounded text-right" />
+                        ) : (
+                          <div className="w-20 px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded text-right">
+                            {(editData2.us_miles && editData2.us_rate_per_mile) ? ((editData2.us_miles * editData2.us_rate_per_mile).toFixed(2)) : '—'}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-2 py-2"><input type="number" step="0.01" value={editData2.us_miles || 0} onChange={(e) => setEditData2({ ...editData2, us_miles: parseFloat(e.target.value) || 0 })} className="w-20 px-2 py-1 text-xs border rounded text-right" /></td>
+                      <td className="px-2 py-2">
+                        {['FLT', 'Flat Rate', '', null].includes(editData2.rate_type) ? (
+                          <div className="w-20 px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded text-right">
+                            {(editData2.us_miles && editData2.us_rate) ? ((editData2.us_rate / editData2.us_miles).toFixed(2)) : '—'}
+                          </div>
+                        ) : (
+                          <input type="number" step="0.01" value={editData2.us_rate_per_mile || 0} onChange={(e) => setEditData2({ ...editData2, us_rate_per_mile: parseFloat(e.target.value) || 0 })} className="w-20 px-2 py-1 text-xs border rounded text-right" />
+                        )}
+                      </td>
+                      <td className="px-2 py-2"><input type="number" step="0.01" value={editData2.us_fuel_rate || 0} onChange={(e) => setEditData2({ ...editData2, us_fuel_rate: parseFloat(e.target.value) || 0 })} className="w-20 px-2 py-1 text-xs border rounded text-right" /></td>
+                      <td className="px-2 py-2">
+                        {['FLT', 'Flat Rate', '', null].includes(editData2.rate_type) ? (
+                          <input type="number" step="0.01" value={editData2.mx_rate || 0} onChange={(e) => setEditData2({ ...editData2, mx_rate: parseFloat(e.target.value) || 0 })} className="w-20 px-2 py-1 text-xs border rounded text-right" />
+                        ) : (
+                          <div className="w-20 px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded text-right">
+                            {(editData2.mx_miles && editData2.mx_rate_per_mile) ? ((editData2.mx_miles * editData2.mx_rate_per_mile).toFixed(2)) : '—'}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-2 py-2"><input type="number" step="0.01" value={editData2.mx_miles || 0} onChange={(e) => setEditData2({ ...editData2, mx_miles: parseFloat(e.target.value) || 0 })} className="w-20 px-2 py-1 text-xs border rounded text-right" /></td>
+                      <td className="px-2 py-2">
+                        {['FLT', 'Flat Rate', '', null].includes(editData2.rate_type) ? (
+                          <div className="w-20 px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded text-right">
+                            {(editData2.mx_miles && editData2.mx_rate) ? ((editData2.mx_rate / editData2.mx_miles).toFixed(2)) : '—'}
+                          </div>
+                        ) : (
+                          <input type="number" step="0.01" value={editData2.mx_rate_per_mile || 0} onChange={(e) => setEditData2({ ...editData2, mx_rate_per_mile: parseFloat(e.target.value) || 0 })} className="w-20 px-2 py-1 text-xs border rounded text-right" />
+                        )}
+                      </td>
+                      <td className="px-2 py-2"><input type="number" step="0.01" value={editData2.mx_fuel_rate || 0} onChange={(e) => setEditData2({ ...editData2, mx_fuel_rate: parseFloat(e.target.value) || 0 })} className="w-20 px-2 py-1 text-xs border rounded text-right" /></td>
+                      <td className="px-2 py-2"><select value={editData2.lane_type || ''} onChange={(e) => setEditData2({ ...editData2, lane_type: e.target.value })} className="w-24 px-2 py-1 text-xs border rounded"><option value="">Select</option>{LANE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></td>
+                      <td className="px-2 py-2"><select value={editData2.trip_type || selectedTripType} onChange={(e) => setEditData2({ ...editData2, trip_type: e.target.value })} className="w-24 px-2 py-1 text-xs border rounded">{TRIP_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></td>
+                      <td className="px-2 py-2"><select value={editData2.equipment_type || 'Dry Van'} onChange={(e) => setEditData2({ ...editData2, equipment_type: e.target.value })} className="w-24 px-2 py-1 text-xs border rounded">{EQUIPMENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></td>
+                      <td className="px-2 py-2"><input type="number" value={editData2.load_volume || ''} onChange={(e) => setEditData2({ ...editData2, load_volume: e.target.value })} className="w-20 px-2 py-1 text-xs border rounded text-right" /></td>
+                      <td className="px-2 py-2"><select value={editData2.load_frequency || ''} onChange={(e) => setEditData2({ ...editData2, load_frequency: e.target.value })} className="w-24 px-2 py-1 text-xs border rounded"><option value="">Select</option>{LOAD_FREQUENCIES.map(f => <option key={f} value={f}>{f}</option>)}</select></td>
+                      <td className="px-2 py-2"><input type="date" value={editData2.effective_from_date || '2026-02-01'} onChange={(e) => setEditData2({ ...editData2, effective_from_date: e.target.value })} className="w-28 px-2 py-1 text-xs border rounded" /></td>
+                      <td className="px-2 py-2"><input type="date" value={editData2.effective_to_date || '2026-12-31'} onChange={(e) => setEditData2({ ...editData2, effective_to_date: e.target.value })} className="w-28 px-2 py-1 text-xs border rounded" /></td>
+                      <td className="px-3 py-3">
+                        <div className="flex gap-1">
+                          <button onClick={handleSaveAdd} className="p-1 text-green-600 hover:bg-green-50 rounded"><Check className="w-3 h-3" /></button>
+                          <button onClick={handleCancelAdd} className="p-1 text-gray-600 hover:bg-gray-100 rounded"><X className="w-3 h-3" /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {lanes.length === 0 && !isAdding && (
+        <div className="px-6 py-12 text-center">
+          <div className="text-gray-400 mb-2">
+            <FileText className="w-12 h-12 mx-auto" />
+          </div>
+          <p className="text-sm text-gray-500">No lanes added yet</p>
+          <p className="text-xs text-gray-400 mt-1">Click "New Lane" to add your first freight lane</p>
+        </div>
+      )}
+
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
+            {showDeleteConfirm.linkedLaneId === 'lane2-only' ? (
+              <>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Cannot Delete Lane 2</h3>
+                <p className="text-sm text-gray-600 mb-6">
+                  Lane 2 is part of a paired trip and cannot be deleted independently. Please delete Lane 1 to remove the entire pair.
+                </p>
+                <div className="flex justify-end">
+                  <button
+                    onClick={() => setShowDeleteConfirm(null)}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+                  >
+                    OK
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Paired Lanes</h3>
+                <p className="text-sm text-gray-600 mb-6">
+                  Deleting Lane 1 will also delete the paired Lane 2. Do you want to delete both lanes?
+                </p>
+                <div className="flex justify-end gap-3">
+                  <button
+                    onClick={() => setShowDeleteConfirm(null)}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleConfirmDelete}
+                    className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 transition-colors"
+                  >
+                    Delete Both
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {showDuplicateConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Duplicate Linked Lane</h3>
+            <p className="text-sm text-gray-600 mb-6">
+              This lane is part of a linked pair. Duplicating it will create a standalone copy without the {showDuplicateConfirm.trip_type} link. Do you want to proceed?
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowDuplicateConfirm(null)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDuplicate}
+                className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 transition-colors"
+              >
+                Duplicate as One Way
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showServiceTypeModal && (
+        <ServiceTypeModal
+          onSelect={handleServiceTypeSelect}
+          onClose={() => setShowServiceTypeModal(false)}
+        />
+      )}
+
+      {showTripTypeModal && (
+        <TripTypeModal
+          onSelect={handleTripTypeSelect}
+          onClose={() => setShowTripTypeModal(false)}
+          onBack={() => {
+            setShowTripTypeModal(false);
+            setShowServiceTypeModal(true);
+          }}
+          serviceType={selectedServiceType}
+        />
+      )}
+
+    </div>
+  );
+}

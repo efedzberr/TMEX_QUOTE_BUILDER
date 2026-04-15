@@ -1,0 +1,557 @@
+import { useEffect, useState } from 'react';
+import { QuoteHeader } from './components/QuoteHeader';
+import { QuoteHistory } from './components/QuoteHistory';
+import { QuoteTabs } from './components/QuoteTabs';
+import { LaneDetailsPanel } from './components/LaneDetailsPanel';
+import { ConfirmModal } from './components/ConfirmModal';
+import { Toast } from './components/Toast';
+import { supabase, Quote, QuoteHistory as QuoteHistoryType, QuoteLane } from './lib/supabase';
+
+function App() {
+  const [quote, setQuote] = useState<Quote | null>(null);
+  const [history, setHistory] = useState<QuoteHistoryType[]>([]);
+  const [lanes, setLanes] = useState<QuoteLane[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    initializeData();
+  }, []);
+
+  async function initializeData() {
+    try {
+      const { data: existingQuotes } = await supabase
+        .from('quotes')
+        .select('*')
+        .limit(1)
+        .maybeSingle();
+
+      if (existingQuotes) {
+        setQuote(existingQuotes);
+        await loadQuoteData(existingQuotes.id);
+      } else {
+        await createSampleData();
+      }
+    } catch (error) {
+      console.error('Error initializing data:', error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function createSampleData() {
+    const { data: newQuote, error: quoteError } = await supabase
+      .from('quotes')
+      .insert({
+        quote_number: 'TMQ-00000001',
+        owner_name: 'Ernesto Fernandez',
+        status: 'New',
+        total_amount: 17614.52,
+        us_portion: 8602.75,
+        mx_rate: 6986.77,
+        border_crossing_fee: 2025.00,
+        units: 'Miles',
+        type_of_service: 'Dry Van',
+        partner_account: 'Kimberly Clark',
+        us_sales_rep: 'John Smith',
+        mx_sales_rep: 'Maria Garcia',
+        currency: 'USD',
+        bill_to_customer: 'Kimberly Clark',
+        shipper: 'Kimberly Clark Shipper',
+        bco_partner: 'Cerealto',
+        opportunity: 'Ramos Arizpe - De Pere, WI',
+      })
+      .select()
+      .single();
+
+    if (quoteError) {
+      console.error('Error creating quote:', quoteError);
+      return;
+    }
+
+    setQuote(newQuote);
+
+    const historyEntries = [
+      {
+        quote_id: newQuote.id,
+        date: '2026-02-20T10:00:00Z',
+        user_name: 'Ernesto Fernandez',
+        action: 'Quote Created',
+        notes: 'Initial version',
+      },
+      {
+        quote_id: newQuote.id,
+        date: '2026-02-21T14:30:00Z',
+        user_name: 'Ernesto Fernandez',
+        action: 'Rate Updated',
+        notes: 'US Rate adjusted for lane 2',
+      },
+      {
+        quote_id: newQuote.id,
+        date: '2026-02-22T09:15:00Z',
+        user_name: 'Maria Lopez',
+        action: 'Sent for Approval',
+        notes: 'Pending Branch Manager',
+      },
+    ];
+
+    const { data: newHistory } = await supabase
+      .from('quote_history')
+      .insert(historyEntries)
+      .select();
+
+    if (newHistory) {
+      setHistory(newHistory);
+    }
+
+    const laneEntries = [
+      {
+        quote_id: newQuote.id,
+        origin_city: 'San Antonio, TX',
+        destination_city: 'Monterrey, NL',
+        border_crossing: 'Nuevo Laredo',
+        border_crossing_fee: 350.00,
+        us_rate: 1225.25,
+        mx_rate: 950.00,
+        equipment_type: 'Dry Van',
+        sort_order: 1,
+        effective_from_date: '2026-02-01',
+        effective_to_date: '2026-12-31',
+        units_type: 'Miles',
+        currency_type: 'USD',
+        us_miles: 450,
+        mx_miles: 125,
+      },
+      {
+        quote_id: newQuote.id,
+        origin_city: 'Denver, CO',
+        destination_city: 'Toluca, MEX',
+        border_crossing: 'Nuevo Laredo',
+        border_crossing_fee: 350.00,
+        us_rate: 2850.50,
+        mx_rate: 1875.00,
+        equipment_type: 'Reefer',
+        sort_order: 2,
+        effective_from_date: '2026-02-01',
+        effective_to_date: '2026-12-31',
+        units_type: 'Miles',
+        currency_type: 'USD',
+        us_miles: 950,
+        mx_miles: 875,
+        temperature: '-20',
+        temperature_unit: 'F',
+      },
+      {
+        quote_id: newQuote.id,
+        origin_city: 'Dallas, TX',
+        destination_city: 'Mexico City, CDMX',
+        border_crossing: 'Reynosa',
+        border_crossing_fee: 375.00,
+        us_rate: 985.75,
+        mx_rate: 1250.00,
+        equipment_type: 'Dry Van',
+        sort_order: 3,
+        effective_from_date: '2026-02-01',
+        effective_to_date: '2026-12-31',
+        units_type: 'Miles',
+        currency_type: 'USD',
+        us_miles: 375,
+        mx_miles: 625,
+      },
+      {
+        quote_id: newQuote.id,
+        origin_city: 'Houston, TX',
+        destination_city: 'Guadalajara, JAL',
+        border_crossing: 'Nuevo Laredo',
+        border_crossing_fee: 350.00,
+        us_rate: 1450.00,
+        mx_rate: 1680.50,
+        equipment_type: 'Flatbed',
+        sort_order: 4,
+        effective_from_date: '2026-02-01',
+        effective_to_date: '2026-12-31',
+        units_type: 'Miles',
+        currency_type: 'USD',
+        us_miles: 525,
+        mx_miles: 750,
+      },
+      {
+        quote_id: newQuote.id,
+        origin_city: 'Phoenix, AZ',
+        destination_city: 'Hermosillo, SON',
+        border_crossing: 'Nogales',
+        border_crossing_fee: 300.00,
+        us_rate: 875.25,
+        mx_rate: 525.00,
+        equipment_type: 'Dry Van',
+        sort_order: 5,
+        effective_from_date: '2026-02-01',
+        effective_to_date: '2026-12-31',
+        units_type: 'Miles',
+        currency_type: 'USD',
+        us_miles: 325,
+        mx_miles: 175,
+      },
+      {
+        quote_id: newQuote.id,
+        origin_city: 'El Paso, TX',
+        destination_city: 'Chihuahua, CHI',
+        border_crossing: 'Ciudad Juarez',
+        border_crossing_fee: 300.00,
+        us_rate: 425.00,
+        mx_rate: 706.27,
+        equipment_type: 'Reefer',
+        sort_order: 6,
+        effective_from_date: '2026-02-01',
+        effective_to_date: '2026-12-31',
+        units_type: 'Miles',
+        currency_type: 'USD',
+        us_miles: 125,
+        mx_miles: 225,
+        temperature: '35',
+        temperature_unit: 'F',
+      },
+    ];
+
+    const { data: newLanes } = await supabase
+      .from('quote_lanes')
+      .insert(laneEntries)
+      .select();
+
+    if (newLanes) {
+      setLanes(newLanes);
+    }
+  }
+
+  async function loadQuoteData(quoteId: string) {
+    const { data: historyData } = await supabase
+      .from('quote_history')
+      .select('*')
+      .eq('quote_id', quoteId)
+      .order('date', { ascending: true });
+
+    const { data: lanesData } = await supabase
+      .from('quote_lanes')
+      .select('*')
+      .eq('quote_id', quoteId)
+      .order('sort_order', { ascending: true });
+
+    if (historyData) setHistory(historyData);
+    if (lanesData) setLanes(lanesData);
+  }
+
+  const [showDetails, setShowDetails] = useState<QuoteLane | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const handleUpdateLane = async (id: string, updates: Partial<QuoteLane>) => {
+    const { error } = await supabase
+      .from('quote_lanes')
+      .update(updates)
+      .eq('id', id);
+
+    if (!error) {
+      setLanes(lanes.map(lane => lane.id === id ? { ...lane, ...updates } : lane));
+      setToastMessage('Lane updated successfully');
+    }
+  };
+
+  const handleAddLane = async (newLane: Partial<QuoteLane>) => {
+    if (!quote) return;
+
+    const { data, error } = await supabase
+      .from('quote_lanes')
+      .insert({
+        ...newLane,
+        quote_id: quote.id,
+        sort_order: lanes.length + 1,
+      })
+      .select()
+      .single();
+
+    if (!error && data) {
+      setLanes([...lanes, data]);
+      setToastMessage('Lane added successfully');
+    }
+  };
+
+  const handleDeleteLane = async (id: string) => {
+    const { error } = await supabase
+      .from('quote_lanes')
+      .delete()
+      .eq('id', id);
+
+    if (!error) {
+      setLanes(lanes.filter(lane => lane.id !== id));
+      setShowDeleteConfirm(null);
+      setToastMessage('Lane deleted successfully');
+    }
+  };
+
+  const handleShowDetails = (lane: QuoteLane) => {
+    setShowDetails(lane);
+  };
+
+  const handleSaveDetails = async (updatedLane: Partial<QuoteLane>) => {
+    if (!showDetails) return;
+
+    const { error } = await supabase
+      .from('quote_lanes')
+      .update(updatedLane)
+      .eq('id', showDetails.id);
+
+    if (!error) {
+      setLanes(lanes.map(lane => lane.id === showDetails.id ? { ...lane, ...updatedLane } : lane));
+      setToastMessage('Lane details updated successfully');
+    }
+  };
+
+  const handleGlobalToggleUnits = async () => {
+    if (!quote || lanes.length === 0) return;
+
+    const currentUnit = quote.units;
+    const isKilometers = currentUnit === 'Kilometers' || currentUnit === 'KM';
+    const conversionFactor = isKilometers ? 1 / 1.60934 : 1.60934;
+    const newUnits = isKilometers ? 'Miles' : 'Kilometers';
+
+    const laneUpdates = lanes.map(lane => ({
+      id: lane.id,
+      units_type: newUnits,
+      us_miles: lane.us_miles * conversionFactor,
+      mx_miles: lane.mx_miles * conversionFactor,
+    }));
+
+    for (const update of laneUpdates) {
+      await supabase
+        .from('quote_lanes')
+        .update({
+          units_type: update.units_type,
+          us_miles: update.us_miles,
+          mx_miles: update.mx_miles,
+        })
+        .eq('id', update.id);
+    }
+
+    await supabase
+      .from('quotes')
+      .update({ units: newUnits })
+      .eq('id', quote.id);
+
+    setLanes(lanes.map(lane => {
+      const update = laneUpdates.find(u => u.id === lane.id);
+      return update ? { ...lane, ...update } : lane;
+    }));
+
+    setQuote({ ...quote, units: newUnits });
+    setToastMessage(`All lanes converted to ${newUnits}`);
+  };
+
+  const handleGlobalToggleLanguage = () => {
+    setToastMessage('Language changed to Spanish');
+  };
+
+  const handleUpdateQuote = async (updates: Partial<Quote>) => {
+    if (!quote) return;
+
+    const { error } = await supabase
+      .from('quotes')
+      .update(updates)
+      .eq('id', quote.id);
+
+    if (!error) {
+      setQuote({ ...quote, ...updates });
+      setToastMessage('Quote updated successfully');
+    }
+  };
+
+  const handleGlobalToggleCurrency = async () => {
+    if (!quote || lanes.length === 0) return;
+
+    const currentCurrency = quote.currency;
+    const isMXN = currentCurrency === 'MXN';
+    const conversionRate = isMXN ? 1 / 17.15 : 17.15;
+    const newCurrency = isMXN ? 'USD' : 'MXN';
+
+    const laneUpdates = lanes.map(lane => ({
+      id: lane.id,
+      currency_type: newCurrency,
+      us_rate: lane.us_rate * conversionRate,
+      mx_rate: lane.mx_rate * conversionRate,
+      border_crossing_fee: lane.border_crossing_fee * conversionRate,
+      us_fuel_rate: lane.us_fuel_rate * conversionRate,
+      mx_fuel_rate: lane.mx_fuel_rate * conversionRate,
+      requested_price: lane.requested_price * conversionRate,
+      invoice_value: lane.invoice_value * conversionRate,
+    }));
+
+    for (const update of laneUpdates) {
+      await supabase
+        .from('quote_lanes')
+        .update({
+          currency_type: update.currency_type,
+          us_rate: update.us_rate,
+          mx_rate: update.mx_rate,
+          border_crossing_fee: update.border_crossing_fee,
+          us_fuel_rate: update.us_fuel_rate,
+          mx_fuel_rate: update.mx_fuel_rate,
+          requested_price: update.requested_price,
+          invoice_value: update.invoice_value,
+        })
+        .eq('id', update.id);
+    }
+
+    const newTotalAmount = quote.total_amount * conversionRate;
+    const newUSPortion = quote.us_portion * conversionRate;
+    const newMXRate = quote.mx_rate * conversionRate;
+    const newBorderFee = quote.border_crossing_fee * conversionRate;
+
+    await supabase
+      .from('quotes')
+      .update({
+        currency: newCurrency,
+        total_amount: newTotalAmount,
+        us_portion: newUSPortion,
+        mx_rate: newMXRate,
+        border_crossing_fee: newBorderFee,
+      })
+      .eq('id', quote.id);
+
+    setLanes(lanes.map(lane => {
+      const update = laneUpdates.find(u => u.id === lane.id);
+      return update ? { ...lane, ...update } : lane;
+    }));
+
+    setQuote({
+      ...quote,
+      currency: newCurrency,
+      total_amount: newTotalAmount,
+      us_portion: newUSPortion,
+      mx_rate: newMXRate,
+      border_crossing_fee: newBorderFee,
+    });
+
+    setToastMessage(`All rates converted to ${newCurrency}`);
+  };
+
+  const handleGlobalEquipmentTypeChange = async (equipmentType: string) => {
+    if (!quote || lanes.length === 0) return;
+
+    for (const lane of lanes) {
+      await supabase
+        .from('quote_lanes')
+        .update({ equipment_type: equipmentType })
+        .eq('id', lane.id);
+    }
+
+    await supabase
+      .from('quotes')
+      .update({ type_of_service: equipmentType })
+      .eq('id', quote.id);
+
+    setLanes(lanes.map(lane => ({ ...lane, equipment_type: equipmentType })));
+    setQuote({ ...quote, type_of_service: equipmentType });
+    setToastMessage(`Equipment Type set to ${equipmentType} for all lanes`);
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!quote) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-gray-600">No quote data available</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-100">
+      <header className="bg-white border-b border-gray-200 shadow-sm">
+        <div className="max-w-[1280px] mx-auto px-6 py-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <img
+                src="/Transmex_Logo_II.jpeg"
+                alt="Transmex Logo"
+                className="h-10 object-contain"
+              />
+              <div className="text-sm text-gray-500">Smart Pricing Hub</div>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="text-sm text-gray-600">
+                <span className="font-medium">User:</span> {quote.owner_name}
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-[1280px] mx-auto px-6 py-6">
+        <div className="space-y-6">
+          <QuoteHeader
+            quote={quote}
+            onToggleUnits={handleGlobalToggleUnits}
+            onToggleCurrency={handleGlobalToggleCurrency}
+            onToggleLanguage={handleGlobalToggleLanguage}
+            onUpdateQuote={handleUpdateQuote}
+          />
+
+          <QuoteHistory history={history} />
+
+          <QuoteTabs
+            lanes={lanes}
+            quote={quote}
+            onUpdateLane={handleUpdateLane}
+            onAddLane={handleAddLane}
+            onDeleteLane={(id) => setShowDeleteConfirm(id)}
+            onShowDetails={handleShowDetails}
+            onGlobalEquipmentTypeChange={handleGlobalEquipmentTypeChange}
+          />
+        </div>
+      </main>
+
+      <footer className="bg-white border-t border-gray-200 mt-12">
+        <div className="max-w-[1280px] mx-auto px-6 py-4">
+          <p className="text-sm text-gray-500 text-center">
+            Smart Pricing Hub - Cross-Border Freight Quote System
+          </p>
+        </div>
+      </footer>
+
+      {showDetails && (
+        <LaneDetailsPanel
+          lane={showDetails}
+          onClose={() => setShowDetails(null)}
+          onSave={handleSaveDetails}
+        />
+      )}
+
+      {showDeleteConfirm && (
+        <ConfirmModal
+          title="Delete Lane"
+          message="Are you sure you want to delete this lane? This action cannot be undone."
+          onConfirm={() => handleDeleteLane(showDeleteConfirm)}
+          onCancel={() => setShowDeleteConfirm(null)}
+        />
+      )}
+
+      {toastMessage && (
+        <Toast
+          message={toastMessage}
+          onClose={() => setToastMessage(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+export default App;

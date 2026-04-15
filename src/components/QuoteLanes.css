@@ -1,0 +1,159 @@
+/* ═══════════════════════════════════════════════════════
+   Quote Lanes Grid — Frozen Headers & Frozen Columns
+   ═══════════════════════════════════════════════════════
+
+   Column structure (no stops):
+     Col 1  — Index/Badge          minWidth: 48px   left: 0
+     Col 2  — Origin City          minWidth: 128px  left: 48px
+     Col 3  — Destination City     minWidth: 128px  left: 176px
+     Col 4  — Border Crossing City minWidth: 128px  left: 304px
+     Col 5  — Border Crossing Fee  minWidth: 100px  left: 432px
+     Col 6  — Lane Total (1st)     minWidth: 120px  left: 532px  LAST FROZEN
+   ═══════════════════════════════════════════════════════ */
+
+/* GRID CONTAINER */
+.lanes-grid-container {
+  overflow-x: auto;
+  overflow-y: auto;
+  max-height: 600px;
+  width: 100%;
+  position: relative;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
+}
+
+/* TABLE — collapse borders so there are zero gaps */
+.lanes-grid {
+  border-collapse: collapse;
+  border-spacing: 0;
+  width: max-content;
+  min-width: 100%;
+}
+
+/* ALL CELLS — box-sizing so minWidth = rendered width */
+.lanes-grid td,
+.lanes-grid th {
+  box-sizing: border-box;
+  margin: 0;
+}
+
+/* ── FROZEN HEADER ROW (vertical scroll) ─────────────── */
+.lanes-grid thead tr th {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  border-bottom: 2px solid #E5E7EB;
+  white-space: nowrap;
+}
+
+/* ── FROZEN COLUMNS 1-6 (horizontal scroll) ──────────── */
+
+/* shared sticky base for all frozen cells */
+.lanes-grid th:nth-child(1),
+.lanes-grid th:nth-child(2),
+.lanes-grid th:nth-child(3),
+.lanes-grid th:nth-child(4),
+.lanes-grid th:nth-child(5),
+.lanes-grid th:nth-child(6),
+.lanes-grid td:nth-child(1),
+.lanes-grid td:nth-child(2),
+.lanes-grid td:nth-child(3),
+.lanes-grid td:nth-child(4),
+.lanes-grid td:nth-child(5),
+.lanes-grid td:nth-child(6) {
+  position: sticky;
+  z-index: 20;
+}
+
+/* Column 1 — Index / Badge  (minWidth 48px) */
+.lanes-grid th:nth-child(1),
+.lanes-grid td:nth-child(1) {
+  left: 0;
+  min-width: 48px;
+}
+
+/* Column 2 — Origin City  (minWidth 128px, left = 48) */
+.lanes-grid th:nth-child(2),
+.lanes-grid td:nth-child(2) {
+  left: 48px;
+  min-width: 128px;
+}
+
+/* Column 3 — Destination City  (minWidth 128px, left = 48+128 = 176) */
+.lanes-grid th:nth-child(3),
+.lanes-grid td:nth-child(3) {
+  left: 176px;
+  min-width: 128px;
+}
+
+/* Column 4 — Border Crossing City  (minWidth 128px, left = 176+128 = 304) */
+.lanes-grid th:nth-child(4),
+.lanes-grid td:nth-child(4) {
+  left: 304px;
+  min-width: 128px;
+}
+
+/* Column 5 — Border Crossing Fee  (minWidth 100px, left = 304+128 = 432) */
+.lanes-grid th:nth-child(5),
+.lanes-grid td:nth-child(5) {
+  left: 432px;
+  min-width: 100px;
+}
+
+/* Column 6 — Lane Total 1st  (minWidth 120px, left = 432+100 = 532) — LAST FROZEN */
+.lanes-grid th:nth-child(6),
+.lanes-grid td:nth-child(6) {
+  left: 532px;
+  min-width: 120px;
+  border-right: 2px solid #D1D5DB;
+  box-shadow: 4px 0 6px -2px rgba(0, 0, 0, 0.10);
+}
+
+/* ── FROZEN CORNER — header cells in frozen columns sit above everything */
+.lanes-grid thead th:nth-child(1),
+.lanes-grid thead th:nth-child(2),
+.lanes-grid thead th:nth-child(3),
+.lanes-grid thead th:nth-child(4),
+.lanes-grid thead th:nth-child(5),
+.lanes-grid thead th:nth-child(6) {
+  z-index: 40;
+}
+
+/* ── FROZEN COLUMN BG — ensure frozen cells have a solid bg to cover scrolled content */
+.lanes-grid tbody td:nth-child(1),
+.lanes-grid tbody td:nth-child(2),
+.lanes-grid tbody td:nth-child(3),
+.lanes-grid tbody td:nth-child(4),
+.lanes-grid tbody td:nth-child(5),
+.lanes-grid tbody td:nth-child(6) {
+  background-color: #ffffff;
+}
+
+.lanes-grid tbody tr:nth-child(even) td:nth-child(1),
+.lanes-grid tbody tr:nth-child(even) td:nth-child(2),
+.lanes-grid tbody tr:nth-child(even) td:nth-child(3),
+.lanes-grid tbody tr:nth-child(even) td:nth-child(4),
+.lanes-grid tbody tr:nth-child(even) td:nth-child(5),
+.lanes-grid tbody tr:nth-child(even) td:nth-child(6) {
+  background-color: #F9FAFB;
+}
+
+/* ── SCROLL BAR STYLING */
+.lanes-grid-container::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+
+.lanes-grid-container::-webkit-scrollbar-track {
+  background: #F3F4F6;
+  border-radius: 4px;
+}
+
+.lanes-grid-container::-webkit-scrollbar-thumb {
+  background: #9CA3AF;
+  border-radius: 4px;
+}
+
+.lanes-grid-container::-webkit-scrollbar-thumb:hover {
+  background: #6B7280;
+}
