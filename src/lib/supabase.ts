@@ -55,6 +55,8 @@ export interface Quote {
   customer_signature_data?: string;
   lane_acceptance?: Record<string, LaneGroupAcceptance>;
   negotiation_quote_id?: string;
+  is_mass_update?: boolean;
+  mass_update_log_id?: string;
   created_at: string;
   updated_at: string;
 }
@@ -170,6 +172,8 @@ export interface QuoteLane {
   estimated_total_mx_section?: number;
   us_fuel_difference?: number;
   mx_fuel_difference?: number;
+  lane_status?: string;
+  lane_origin?: string;
   created_at: string;
   updated_at: string;
 }

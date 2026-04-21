@@ -10,6 +10,7 @@ interface QuoteListViewProps {
   onDeleteQuote: (quoteId: string) => void;
   onCloneQuote: (quote: Quote) => void;
   onAdministration: () => void;
+  onMassUpdate: () => void;
 }
 
 const STAGE_COLORS: Record<string, string> = {
@@ -21,7 +22,7 @@ const STAGE_COLORS: Record<string, string> = {
   'Published': 'bg-gray-100 text-gray-800',
 };
 
-export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onCloneQuote, onAdministration }: QuoteListViewProps) {
+export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onCloneQuote, onAdministration, onMassUpdate }: QuoteListViewProps) {
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [quoteLanes, setQuoteLanes] = useState<Record<string, QuoteLane[]>>({});
   const [loading, setLoading] = useState(true);
@@ -195,6 +196,13 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
             </div>
             <div className="flex items-center gap-3">
               <button
+                onClick={onMassUpdate}
+                className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-white bg-amber-500 border border-amber-600 rounded-lg hover:bg-amber-600 transition-colors"
+              >
+                <Zap className="w-4 h-4" />
+                Mass Price Update
+              </button>
+              <button
                 onClick={onAdministration}
                 className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 hover:text-gray-800 transition-colors"
               >
@@ -241,6 +249,9 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Stage
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Origin
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Owner
@@ -322,6 +333,13 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
                           );
                         })()}
                       </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {quote.is_mass_update && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">
+                          <Zap className="w-3 h-3" /> MASS UPDATE
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">{quote.owner_name}</div>

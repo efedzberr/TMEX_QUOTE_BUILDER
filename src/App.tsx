@@ -9,6 +9,8 @@ import { ConfirmModal } from './components/ConfirmModal';
 import { NewQuoteModal } from './components/NewQuoteModal';
 import { Toast } from './components/Toast';
 import { AdministrationView } from './components/AdministrationView';
+import { MassUpdateView } from './components/MassUpdateView';
+import { MassUpdateLogView } from './components/MassUpdateLogView';
 import { CompletedValidationModal } from './components/CompletedValidationModal';
 import { BenchmarkDashboard } from './components/benchmark/BenchmarkDashboard';
 import { SendToCustomerModal } from './components/SendToCustomerModal';
@@ -21,7 +23,7 @@ import { CurrencyCode, convertLaneValues, buildQuoteName, isQuoteLocked } from '
 import { validateCompletedStage, CompletedStageValidationResult } from './lib/completedStageValidation';
 import { getPortalUrl, getPreviewUrl } from './lib/customerPortalHelpers';
 
-type ViewMode = 'list' | 'builder' | 'admin';
+type ViewMode = 'list' | 'builder' | 'admin' | 'mass-update' | 'mass-update-log';
 
 function App() {
   const [viewMode, setViewMode] = useState<ViewMode>('list');
@@ -1418,6 +1420,14 @@ function App() {
     return <AdministrationView onBack={() => setViewMode('list')} />;
   }
 
+  if (viewMode === 'mass-update') {
+    return <MassUpdateView onBack={() => setViewMode('list')} onViewLog={() => setViewMode('mass-update-log')} />;
+  }
+
+  if (viewMode === 'mass-update-log') {
+    return <MassUpdateLogView onBack={() => setViewMode('list')} />;
+  }
+
   if (viewMode === 'list') {
     return (
       <>
@@ -1427,6 +1437,7 @@ function App() {
           onDeleteQuote={handleDeleteQuoteFromList}
           onCloneQuote={handleCloneQuoteFromList}
           onAdministration={() => setViewMode('admin')}
+          onMassUpdate={() => setViewMode('mass-update')}
         />
         <NewQuoteModal
           isOpen={showNewQuoteForm}

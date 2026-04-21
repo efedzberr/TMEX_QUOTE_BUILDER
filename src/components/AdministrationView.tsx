@@ -18,6 +18,7 @@ interface Account {
   account_code: string;
   type: string;
   status: string;
+  customer_email?: string;
   customer_fuel_program?: boolean;
   fuel_program_type?: string;
   fuel_rate_per_mile?: number;
@@ -148,7 +149,7 @@ function ManageAccounts() {
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<Account | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [form, setForm] = useState({ account_name: '', account_code: '', type: 'Direct Customer', status: 'Active', customer_fuel_program: false, fuel_program_type: 'FRPM', fuel_rate_per_mile: 0, fuel_program_method: 'per_mile' });
+  const [form, setForm] = useState({ account_name: '', account_code: '', type: 'Direct Customer', status: 'Active', customer_email: '', customer_fuel_program: false, fuel_program_type: 'FRPM', fuel_rate_per_mile: 0, fuel_program_method: 'per_mile' });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
 
@@ -172,14 +173,14 @@ function ManageAccounts() {
 
   function openAdd() {
     setEditing(null);
-    setForm({ account_name: '', account_code: '', type: 'Direct Customer', status: 'Active', customer_fuel_program: false, fuel_program_type: 'FRPM', fuel_rate_per_mile: 0, fuel_program_method: 'per_mile' });
+    setForm({ account_name: '', account_code: '', type: 'Direct Customer', status: 'Active', customer_email: '', customer_fuel_program: false, fuel_program_type: 'FRPM', fuel_rate_per_mile: 0, fuel_program_method: 'per_mile' });
     setErrors({});
     setShowModal(true);
   }
 
   function openEdit(a: Account) {
     setEditing(a);
-    setForm({ account_name: a.account_name, account_code: a.account_code, type: a.type, status: a.status, customer_fuel_program: a.customer_fuel_program || false, fuel_program_type: a.fuel_program_type || 'FRPM', fuel_rate_per_mile: a.fuel_rate_per_mile || 0, fuel_program_method: a.fuel_program_method || 'per_mile' });
+    setForm({ account_name: a.account_name, account_code: a.account_code, type: a.type, status: a.status, customer_email: a.customer_email || '', customer_fuel_program: a.customer_fuel_program || false, fuel_program_type: a.fuel_program_type || 'FRPM', fuel_rate_per_mile: a.fuel_rate_per_mile || 0, fuel_program_method: a.fuel_program_method || 'per_mile' });
     setErrors({});
     setShowModal(true);
   }
@@ -253,14 +254,15 @@ function ManageAccounts() {
               <SortTh<Account> label="Account Code" col="account_code" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} />
               <SortTh<Account> label="Type" col="type" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} />
               <SortTh<Account> label="Status" col="status" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} />
+              <SortTh<Account> label="Email" col="customer_email" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} />
               <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {loading ? (
-              <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-500">Loading...</td></tr>
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-500">Loading...</td></tr>
             ) : sorted.length === 0 ? (
-              <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-500">No accounts found</td></tr>
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-500">No accounts found</td></tr>
             ) : sorted.map(a => (
               <tr key={a.id} className="hover:bg-gray-50 transition-colors">
                 <td className="px-4 py-3 text-sm font-medium text-gray-900">{a.account_name}</td>
@@ -271,6 +273,7 @@ function ManageAccounts() {
                     {a.status}
                   </span>
                 </td>
+                <td className="px-4 py-3 text-sm text-gray-500 max-w-[200px] truncate">{a.customer_email || '\u2014'}</td>
                 <td className="px-4 py-3 text-right">
                   <div className="flex items-center justify-end gap-2">
                     <button onClick={() => openEdit(a)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"><Pencil className="w-4 h-4" /></button>
@@ -316,6 +319,12 @@ function ManageAccounts() {
                   className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
                   {ACCOUNT_STATUS.map(s => <option key={s}>{s}</option>)}
                 </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Customer Email</label>
+                <input type="email" value={form.customer_email} onChange={e => setForm(f => ({ ...f, customer_email: e.target.value }))}
+                  placeholder="customer@company.com"
+                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
               </div>
               <div className="flex items-center justify-between pt-2 border-t border-gray-200">
                 <label className="text-sm font-medium text-gray-700">Customer Fuel Program</label>
