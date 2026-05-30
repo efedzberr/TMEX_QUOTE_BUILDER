@@ -1,4 +1,4 @@
-import { X, AlertCircle, Plus, Lock, BarChart2 } from 'lucide-react';
+import { X, AlertCircle, Plus, Lock, BarChart2, ChevronDown } from 'lucide-react';
 import { supabase, Quote, QuoteLane } from '../lib/supabase';
 import { useState, useEffect, useRef } from 'react';
 import { CityLookupField } from './CityLookupField';
@@ -145,6 +145,12 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
   const { cities: borderCrossingCities } = useBorderCrossingCities();
   const [isDirty, setIsDirty] = useState(false);
   const [unsavedDialog, setUnsavedDialog] = useState<{ action: 'next' | 'previous' | 'close' } | null>(null);
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
+    actions: true,
+    us: false,
+    mx: false,
+    additional: true,
+  });
 
   const [accountFuelData, setAccountFuelData] = useState<{ customer_fuel_program: boolean; fuel_program_type: string; fuel_rate_per_mile: number; fuel_program_method: string }>({ customer_fuel_program: false, fuel_program_type: 'FRPM', fuel_rate_per_mile: 0, fuel_program_method: 'per_mile' });
 
@@ -1121,7 +1127,7 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black bg-opacity-50" onClick={() => handleNavigateWithCheck('close')} />
-      <div className="relative bg-white w-full max-w-[900px] max-h-[90vh] rounded-lg shadow-2xl flex flex-col overflow-hidden">
+      <div className="relative bg-white w-full max-w-[900px] max-h-[90vh] rounded-xl shadow-2xl flex flex-col overflow-hidden border border-gray-200">
         {(() => {
           const serviceType = lane.service_type || 'Door to Door';
           const tripType = lane.trip_type || 'One Way';
@@ -1131,43 +1137,73 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
           const isCircuitType = tripType === 'Circuit';
           const isPaired = !!(lane.paired_lane_id || pairedLane);
           let bannerText = `${serviceType} — ${tripType}`;
+          let laneInfo = '';
           if (isSB) {
             const totalLanes = (isRT || isCircuitType) ? 4 : 2;
             const laneIdx = lane.split_billing_index || 1;
-            bannerText += ` | Split Billing | Lane ${laneIdx} of ${totalLanes}`;
+            bannerText += ` | Split Billing`;
+            laneInfo = `Lane ${laneIdx} of ${totalLanes}`;
           } else if ((isRT || isCircuitType) && isPaired) {
             const laneIdx = lane.is_primary_lane === false ? 2 : 1;
-            bannerText += ` | Lane ${laneIdx} of 2`;
+            laneInfo = `Lane ${laneIdx} of 2`;
           }
           return (
             <div
-              className="flex-shrink-0 w-full font-bold text-white"
-              style={{ backgroundColor: '#0D6E7A', fontSize: '14px', padding: '12px 16px', borderRadius: '4px 4px 0 0' }}
+              className="flex-shrink-0 w-full font-semibold text-white flex items-center gap-2.5"
+              style={{ background: 'linear-gradient(90deg, #0a5f5e, #0e7c7b)', fontSize: '13.5px', padding: '11px 22px', letterSpacing: '0.3px' }}
             >
-              {bannerText}
+              <span>{bannerText}</span>
+              {tripType && (
+                <span className="px-2 py-0.5 rounded-full text-[11px] font-medium" style={{ background: 'rgba(255,255,255,0.18)' }}>
+                  {tripType}
+                </span>
+              )}
+              {laneInfo && (
+                <span className="px-2 py-0.5 rounded-full text-[11px] font-medium" style={{ background: 'rgba(255,255,255,0.18)' }}>
+                  {laneInfo}
+                </span>
+              )}
             </div>
           );
         })()}
-        <div className="flex-shrink-0 px-6 pt-6 pb-4 border-b border-gray-200">
+        <div className="flex-shrink-0 px-6 pt-5 pb-4 border-b border-gray-200">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold text-gray-900">
-              {locked ? '🔒 View' : 'Edit'} QL-{lane.sort_order.toString().padStart(8, '0')}{locked ? ' (Read Only)' : ''}
-            </h2>
-            <button
-              onClick={() => handleNavigateWithCheck('close')}
-              className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md transition-colors"
-              title="Close"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-          <div className="text-xs text-gray-500 mt-1">
-            <span className="text-red-500">*</span> = Required Information
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">
+                {locked ? 'View' : 'Edit'} QL-{lane.sort_order.toString().padStart(8, '0')}{locked ? ' (Read Only)' : ''}
+              </h2>
+              <div className="text-xs text-gray-500 mt-1">
+                <span className="text-red-500 font-semibold">*</span> = Required Information
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCollapsedSections({ actions: false, us: false, mx: false, additional: false })}
+                className="text-[11.5px] font-semibold px-2.5 py-1 rounded-md border transition-colors"
+                style={{ color: '#0a5f5e', background: '#e8f3f3', borderColor: '#b8dcdb' }}
+              >
+                Expand all
+              </button>
+              <button
+                onClick={() => setCollapsedSections({ actions: true, us: true, mx: true, additional: true })}
+                className="text-[11.5px] font-semibold px-2.5 py-1 rounded-md border transition-colors"
+                style={{ color: '#0a5f5e', background: '#e8f3f3', borderColor: '#b8dcdb' }}
+              >
+                Collapse all
+              </button>
+              <button
+                onClick={() => handleNavigateWithCheck('close')}
+                className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md transition-colors ml-1"
+                title="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6 py-6">
-          <div className="space-y-6">
+        <div className="flex-1 overflow-y-auto px-6 py-5" style={{ background: '#f6f8fa' }}>
+          <div className="space-y-4">
             {locked && (
               <div className="bg-[#FEF3C7] border border-amber-300 rounded-lg px-4 py-3 flex items-center gap-2 text-sm text-amber-900">
                 <span>🔒</span>
@@ -1175,8 +1211,24 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
               </div>
             )}
             <div className={locked ? 'pointer-events-none opacity-75' : ''}>
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-5">
-              <h3 className="text-sm font-semibold text-blue-800 mb-4">ACTIONS</h3>
+            <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden" style={{ borderLeftWidth: '6px', borderLeftColor: '#0e7c7b' }}>
+              <button
+                type="button"
+                onClick={() => setCollapsedSections(s => ({ ...s, actions: !s.actions }))}
+                className="w-full flex items-center gap-3 px-5 py-3 text-left transition-colors"
+                style={{ background: '#e8f3f3' }}
+              >
+                <span className="text-xs font-bold tracking-wider uppercase" style={{ color: '#0a5f5e' }}>Actions</span>
+                <span className="text-[10.5px] font-semibold px-2 py-0.5 rounded" style={{ background: '#0e7c7b', color: '#fff', letterSpacing: '0.4px' }}>LANE SETUP</span>
+                {collapsedSections.actions && (
+                  <span className="ml-auto text-xs text-gray-500 font-mono font-medium">{formData.currency_code} / {formData.units_code} / BCO {formData.border_crossing_only ? 'Yes' : 'No'} / {formData.rate_type}</span>
+                )}
+                <span className={`${collapsedSections.actions ? '' : 'ml-auto'} text-gray-400 transition-transform ${collapsedSections.actions ? '' : 'rotate-180'}`}>
+                  <ChevronDown className="w-4 h-4" />
+                </span>
+              </button>
+              {!collapsedSections.actions && (
+              <div className="p-5 border-t border-gray-100">
               <div className="grid grid-cols-4 gap-x-6">
                 <div>
                   <label className="block text-sm text-gray-700 mb-1">Currency</label>
@@ -1299,6 +1351,8 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
                   <span>Border Crossing Only has been applied to both lanes in this {isRoundTrip ? 'Round Trip' : 'Circuit'} pair.</span>
                 </div>
               )}
+              </div>
+              )}
             </div>
 
             {isD2DSplitBilling && (
@@ -1390,8 +1444,12 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
               </div>
             )}
 
-            <div className="bg-gray-100 rounded-lg p-5">
-              <h3 className="text-sm font-semibold text-gray-700 mb-4">GENERAL SECTION</h3>
+            <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden" style={{ borderLeftWidth: '6px', borderLeftColor: '#475569' }}>
+              <div className="flex items-center gap-3 px-5 py-3 border-b-2 border-gray-400" style={{ background: '#f1f5f9' }}>
+                <span className="text-xs font-bold tracking-wider uppercase text-gray-600">General Section</span>
+                <span className="text-[10.5px] font-semibold px-2 py-0.5 rounded text-white" style={{ background: '#475569', letterSpacing: '0.4px' }}>ROUTING</span>
+              </div>
+              <div className="p-5">
               <div className="grid grid-cols-2 gap-x-6 gap-y-4">
                 <div>
                   <label className="block text-sm text-gray-700 mb-1">
@@ -1886,6 +1944,7 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
                   </div>
                 </div>
               </div>
+              </div>
             </div>
 
 
@@ -1926,16 +1985,32 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
               const totalUSPortion = totalUSFixedCosts + totalUSVariableCosts;
 
               return (
-                <div className={`rounded-lg p-5 ${isUSDisabled ? 'bg-gray-200' : 'bg-gray-100'}`}>
+                <div className={`bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden ${isUSDisabled ? 'opacity-50' : ''}`} style={{ borderLeftWidth: '6px', borderLeftColor: '#2563eb' }}>
+                  <button
+                    type="button"
+                    onClick={() => setCollapsedSections(s => ({ ...s, us: !s.us }))}
+                    className="w-full flex items-center gap-3 px-5 py-3 text-left transition-colors"
+                    style={{ background: '#eff5ff' }}
+                  >
+                    <span className="text-xs font-bold tracking-wider uppercase" style={{ color: '#2563eb' }}>US Section</span>
+                    <span className="text-[10.5px] font-semibold px-2 py-0.5 rounded text-white" style={{ background: '#2563eb', letterSpacing: '0.4px' }}>{formData.us_rate_type === 'RPM' ? 'RPM' : 'FLAT'}</span>
+                    {isUSDisabled && isLoop && !isD2DSplitBilling && (
+                      <span className="text-xs text-gray-500 italic">Not applicable for Loop service</span>
+                    )}
+                    {isUSDisabled && isD2DSplitBilling && (
+                      <span className="text-xs text-gray-500 italic">Not applicable for this portion</span>
+                    )}
+                    {collapsedSections.us && !isUSDisabled && (
+                      <span className="ml-auto text-xs text-gray-500 font-mono">Total US <span className="font-semibold text-gray-900">{formatCurrencyOrDash(totalUSPortion, currencyCode)}</span></span>
+                    )}
+                    <span className={`${collapsedSections.us ? '' : 'ml-auto'} text-gray-400 transition-transform ${collapsedSections.us ? '' : 'rotate-180'}`}>
+                      <ChevronDown className="w-4 h-4" />
+                    </span>
+                  </button>
+                  {!collapsedSections.us && (
+                  <div className="p-5 border-t border-gray-100">
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3">
-                      <h3 className="text-sm font-semibold text-gray-700">US SECTION</h3>
-                      {isUSDisabled && isLoop && !isD2DSplitBilling && (
-                        <span className="text-xs text-gray-500 italic">Not applicable for Loop service</span>
-                      )}
-                      {isUSDisabled && isD2DSplitBilling && (
-                        <span className="text-xs text-gray-500 italic">Not applicable for this portion</span>
-                      )}
                     </div>
                     {!isUSDisabled && (
                       <div className="flex items-center gap-2">
@@ -2247,6 +2322,8 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
                     onChange={setUsAccessorialsDirty}
                     currencyCode={currencyCode}
                   />
+                  </div>
+                  )}
                 </div>
               );
             })()}
@@ -2288,16 +2365,32 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
               const totalMXPortion = totalMXFixedCosts + totalMXVariableCosts;
 
               return (
-                <div className={`rounded-lg p-5 ${isMXDisabled ? 'bg-gray-200' : 'bg-gray-100'}`}>
+                <div className={`bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden ${isMXDisabled ? 'opacity-50' : ''}`} style={{ borderLeftWidth: '6px', borderLeftColor: '#15803d' }}>
+                  <button
+                    type="button"
+                    onClick={() => setCollapsedSections(s => ({ ...s, mx: !s.mx }))}
+                    className="w-full flex items-center gap-3 px-5 py-3 text-left transition-colors"
+                    style={{ background: '#effaf1' }}
+                  >
+                    <span className="text-xs font-bold tracking-wider uppercase" style={{ color: '#15803d' }}>MX Section</span>
+                    <span className="text-[10.5px] font-semibold px-2 py-0.5 rounded text-white" style={{ background: '#15803d', letterSpacing: '0.4px' }}>{formData.mx_rate_type === 'RPM' ? 'RPM' : 'FLAT'}</span>
+                    {isMXDisabled && isDomestic && !isD2DSplitBilling && (
+                      <span className="text-xs text-gray-500 italic">Not applicable for Domestic service</span>
+                    )}
+                    {isMXDisabled && isD2DSplitBilling && (
+                      <span className="text-xs text-gray-500 italic">Not applicable for this portion</span>
+                    )}
+                    {collapsedSections.mx && !isMXDisabled && (
+                      <span className="ml-auto text-xs text-gray-500 font-mono">Total MX <span className="font-semibold text-gray-900">{formatCurrencyOrDash(totalMXPortion, currencyCode)}</span></span>
+                    )}
+                    <span className={`${collapsedSections.mx ? '' : 'ml-auto'} text-gray-400 transition-transform ${collapsedSections.mx ? '' : 'rotate-180'}`}>
+                      <ChevronDown className="w-4 h-4" />
+                    </span>
+                  </button>
+                  {!collapsedSections.mx && (
+                  <div className="p-5 border-t border-gray-100">
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3">
-                      <h3 className="text-sm font-semibold text-gray-700">MX SECTION</h3>
-                      {isMXDisabled && isDomestic && !isD2DSplitBilling && (
-                        <span className="text-xs text-gray-500 italic">Not applicable for Domestic service</span>
-                      )}
-                      {isMXDisabled && isD2DSplitBilling && (
-                        <span className="text-xs text-gray-500 italic">Not applicable for this portion</span>
-                      )}
                     </div>
                     {!isMXDisabled && (
                       <div className="flex items-center gap-2">
@@ -2609,12 +2702,29 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
                     onChange={setMxAccessorialsDirty}
                     currencyCode={currencyCode}
                   />
+                  </div>
+                  )}
                 </div>
               );
             })()}
 
-            <div className="bg-gray-100 rounded-lg p-5">
-              <h3 className="text-sm font-semibold text-gray-700 mb-4">Additional Information</h3>
+            <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden" style={{ borderLeftWidth: '6px', borderLeftColor: '#94a3b8' }}>
+              <button
+                type="button"
+                onClick={() => setCollapsedSections(s => ({ ...s, additional: !s.additional }))}
+                className="w-full flex items-center gap-3 px-5 py-3 text-left transition-colors"
+                style={{ background: '#f8fafc' }}
+              >
+                <span className="text-xs font-bold tracking-wider uppercase text-gray-500">Additional Information</span>
+                {collapsedSections.additional && (
+                  <span className="ml-auto text-xs text-gray-500 font-mono">{formData.type_of_service || 'optional'}</span>
+                )}
+                <span className={`${collapsedSections.additional ? '' : 'ml-auto'} text-gray-400 transition-transform ${collapsedSections.additional ? '' : 'rotate-180'}`}>
+                  <ChevronDown className="w-4 h-4" />
+                </span>
+              </button>
+              {!collapsedSections.additional && (
+              <div className="p-5 border-t border-gray-100">
               <div className="grid grid-cols-2 gap-x-6 gap-y-4">
                 <div>
                   <label className="block text-sm text-gray-700 mb-1">
@@ -2726,7 +2836,6 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
                 </div>
                 {getEquipmentSpecificFields()}
               </div>
-            </div>
 
             <div className="mt-4">
               <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -2740,77 +2849,78 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
                 className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
+              </div>
+              )}
+            </div>
             </div>
           </div>
         </div>
 
-        <div className="flex-shrink-0 px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-between gap-3">
-          <div className="flex gap-3">
+        <div className="flex-shrink-0 px-6 py-3.5 bg-white border-t border-gray-200 flex items-center gap-3 flex-wrap">
+          <button
+            onClick={() => onBenchmark?.(lane)}
+            className="flex items-center gap-2 h-9 px-4 text-[13px] font-semibold rounded-lg border transition-colors"
+            style={{ color: '#0a5f5e', borderColor: '#cbd5e1', background: '#fff' }}
+          >
+            <BarChart2 className="w-4 h-4" />
+            Benchmark
+          </button>
+          <button
+            onClick={() => handleNavigateWithCheck('close')}
+            className="h-9 px-4 text-[13px] font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            {locked ? 'Close' : 'Cancel'}
+          </button>
+          <div className="flex-1" />
+          <button
+            onClick={() => handleNavigateWithCheck('previous')}
+            disabled={!hasPreviousLane}
+            title={!hasPreviousLane ? 'This is the first lane' : ''}
+            className={`h-9 px-4 text-[13px] font-semibold rounded-lg border transition-colors ${
+              hasPreviousLane
+                ? 'text-gray-600 bg-gray-50 border-gray-300 hover:bg-gray-100'
+                : 'text-gray-300 bg-gray-50 border-gray-200 cursor-not-allowed'
+            }`}
+          >
+            Previous Lane
+          </button>
+          <button
+            onClick={() => handleNavigateWithCheck('next')}
+            disabled={!hasNextLane}
+            title={!hasNextLane ? 'This is the last lane' : ''}
+            className={`h-9 px-4 text-[13px] font-semibold rounded-lg border transition-colors ${
+              hasNextLane
+                ? 'text-gray-600 bg-gray-50 border-gray-300 hover:bg-gray-100'
+                : 'text-gray-300 bg-gray-50 border-gray-200 cursor-not-allowed'
+            }`}
+          >
+            Next Lane
+          </button>
+          {!locked && (
             <button
-              onClick={() => onBenchmark?.(lane)}
-              className="flex items-center gap-2 px-5 py-2 text-sm font-medium text-blue-600 bg-white border border-blue-600 rounded hover:bg-blue-50 transition-colors"
+              onClick={() => handleSubmit()}
+              className="h-9 px-5 text-[13px] font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 border border-blue-600 transition-colors"
             >
-              <BarChart2 className="w-4 h-4" />
-              Benchmark
+              Save
             </button>
+          )}
+          {!locked && (
             <button
-              onClick={() => handleNavigateWithCheck('close')}
-              className="px-6 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 transition-colors"
-            >
-              {locked ? 'Close' : 'Cancel'}
-            </button>
-          </div>
-          <div className="flex gap-3">
-            <button
-              onClick={() => handleNavigateWithCheck('previous')}
-              disabled={!hasPreviousLane}
-              title={!hasPreviousLane ? 'This is the first lane' : ''}
-              className={`px-6 py-2 text-sm font-medium rounded transition-colors ${
-                hasPreviousLane
-                  ? 'text-blue-600 bg-white border border-blue-600 hover:bg-blue-50'
-                  : 'text-gray-400 bg-white border border-gray-300 cursor-not-allowed'
-              }`}
-            >
-              Previous Lane
-            </button>
-            <button
-              onClick={() => handleNavigateWithCheck('next')}
-              disabled={!hasNextLane}
-              title={!hasNextLane ? 'This is the last lane' : ''}
-              className={`px-6 py-2 text-sm font-medium rounded transition-colors ${
-                hasNextLane
-                  ? 'text-blue-600 bg-white border border-blue-600 hover:bg-blue-50'
-                  : 'text-gray-400 bg-white border border-gray-300 cursor-not-allowed'
-              }`}
-            >
-              Next Lane
-            </button>
-            {!locked && (
-              <button
-                onClick={() => handleSubmit()}
-                className="px-6 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700 transition-colors"
-              >
-                Save
-              </button>
-            )}
-            {!locked && (
-              <button
-                onClick={async () => {
-                  if (hasNextLane) {
-                    const saved = await handleSubmit(true);
-                    if (saved) {
-                      onNextLane?.();
-                    }
-                  } else {
-                    handleSubmit();
+              onClick={async () => {
+                if (hasNextLane) {
+                  const saved = await handleSubmit(true);
+                  if (saved) {
+                    onNextLane?.();
                   }
-                }}
-                className="px-6 py-2 text-sm font-medium text-white bg-green-600 rounded hover:bg-green-700 transition-colors"
-              >
+                } else {
+                  handleSubmit();
+                }
+              }}
+              className="h-9 px-5 text-[13px] font-semibold text-white bg-green-600 rounded-lg hover:bg-green-700 border border-green-600 transition-colors"
+            >
               Save and Next Lane
-              </button>
-            )}
-          </div>
+            </button>
+          )}
         </div>
 
         {unsavedDialog && (
