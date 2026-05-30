@@ -147,6 +147,7 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
   const [unsavedDialog, setUnsavedDialog] = useState<{ action: 'next' | 'previous' | 'close' } | null>(null);
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
     actions: true,
+    general: false,
     us: false,
     mx: false,
     additional: true,
@@ -1178,14 +1179,14 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
             </div>
             <div className="flex items-center gap-2">
               <button
-                onClick={() => setCollapsedSections({ actions: false, us: false, mx: false, additional: false })}
+                onClick={() => setCollapsedSections({ actions: false, general: false, us: false, mx: false, additional: false })}
                 className="text-[11.5px] font-semibold px-2.5 py-1 rounded-md border transition-colors"
                 style={{ color: '#0a5f5e', background: '#e8f3f3', borderColor: '#b8dcdb' }}
               >
                 Expand all
               </button>
               <button
-                onClick={() => setCollapsedSections({ actions: true, us: true, mx: true, additional: true })}
+                onClick={() => setCollapsedSections({ actions: true, general: true, us: true, mx: true, additional: true })}
                 className="text-[11.5px] font-semibold px-2.5 py-1 rounded-md border transition-colors"
                 style={{ color: '#0a5f5e', background: '#e8f3f3', borderColor: '#b8dcdb' }}
               >
@@ -1199,6 +1200,73 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
                 <X className="w-5 h-5" />
               </button>
             </div>
+          </div>
+        </div>
+
+        {/* Sticky Summary Tile Strip */}
+        <div className="flex-shrink-0 px-6 py-2.5 bg-white border-b border-gray-200 shadow-sm">
+          <div className="flex items-center gap-3">
+            {(() => {
+              const fv = getFieldVisibility(lane.service_type);
+              const usAccTotal = calcSectionAccessorialsTotal(usAccessorials);
+              const mxAccTotal = calcSectionAccessorialsTotal(mxAccessorials);
+              const fp = accountFuelData.customer_fuel_program;
+              const tfr = quote?.today_fuel_rate || 0;
+              const isPercentFuel = accountFuelData.fuel_program_method === 'percentage' || accountFuelData.fuel_program_type === 'PERCENT';
+              const calcEffFR = (fuelRate: number, miles: number, estTotal: number) => {
+                if (!fp) return fuelRate;
+                if (!isPercentFuel) return accountFuelData.fuel_rate_per_mile;
+                return miles > 0 ? (estTotal * (accountFuelData.fuel_rate_per_mile / 100)) / miles : 0;
+              };
+              const calcDiff = (effFR: number) => fp && effFR < tfr ? tfr - effFR : 0;
+              const usFuelIncluded = formData.us_fuel_included_in_line_haul;
+              const mxFuelIncluded = formData.mx_fuel_included_in_line_haul;
+              const usEffFR = calcEffFR(formData.us_fuel_rate || 0, formData.us_miles || 0, formData.estimated_total_us_section || 0);
+              const usDiff = calcDiff(usEffFR);
+              const usAdjRPM = (formData.us_rate_per_mile || 0) + usDiff;
+              const usLH = fp && !fv.usFieldsDisabled ? (formData.us_miles || 0) * usAdjRPM : (formData.us_rate_type === 'RPM' ? (formData.us_miles || 0) * (formData.us_rate_per_mile || 0) : (formData.us_rate || 0));
+              const totalUSFuelCalc = (usFuelIncluded && !fp) ? 0 : (formData.us_miles || 0) * usEffFR;
+              const totalUSFixedCosts = fv.usFieldsDisabled ? 0 : (usLH + usAccTotal);
+              const totalUSVariableCosts = fv.usFieldsDisabled ? 0 : ((usFuelIncluded && !fp) ? 0 : totalUSFuelCalc);
+              const totalUSPortion = fv.usFieldsDisabled ? 0 : totalUSFixedCosts + totalUSVariableCosts;
+              const borderFee = isDomestic ? 0 : (formData.border_crossing_fee || 0);
+              const mxEffFR = calcEffFR(formData.mx_fuel_rate || 0, formData.mx_miles || 0, formData.estimated_total_mx_section || 0);
+              const mxDiff = calcDiff(mxEffFR);
+              const mxAdjRPM = (formData.mx_rate_per_mile || 0) + mxDiff;
+              const effectiveMxDisabled = fv.mxFieldsDisabled || !!formData.border_crossing_only;
+              const mxLH = fp && !effectiveMxDisabled ? (formData.mx_miles || 0) * mxAdjRPM : (formData.mx_rate_type === 'RPM' ? (formData.mx_miles || 0) * (formData.mx_rate_per_mile || 0) : (formData.mx_rate || 0));
+              const totalMXFuelCalc = (mxFuelIncluded && !fp) ? 0 : (formData.mx_miles || 0) * mxEffFR;
+              const totalMXFixedCosts = effectiveMxDisabled ? 0 : (mxLH + mxAccTotal);
+              const totalMXVariableCosts = effectiveMxDisabled ? 0 : ((mxFuelIncluded && !fp) ? 0 : totalMXFuelCalc);
+              const totalMXPortion = effectiveMxDisabled ? 0 : totalMXFixedCosts + totalMXVariableCosts;
+              let laneTotal = totalUSPortion + totalMXPortion + borderFee;
+              if (isLoop) laneTotal = totalMXPortion + borderFee;
+              else if (isDomestic) laneTotal = totalUSPortion;
+              else if (isDoorToDoor && isRoundTrip && lane.is_primary_lane === false && !isD2DSplitBilling) {
+                laneTotal = formData.border_crossing_only ? totalUSPortion + borderFee : totalMXPortion + borderFee;
+              } else if (isD2DSplitBilling) {
+                if (fv.usFieldsDisabled && !effectiveMxDisabled) laneTotal = totalMXPortion + borderFee;
+                else if (!fv.usFieldsDisabled && effectiveMxDisabled) laneTotal = totalUSPortion;
+              }
+              const tiles: { label: string; value: string; color: string; bg: string }[] = [
+                { label: 'Lane Total', value: formatCurrencyOrDash(laneTotal, currencyCode), color: '#0a5f5e', bg: '#e8f3f3' },
+              ];
+              if (!fv.usFieldsDisabled) {
+                tiles.push({ label: 'US Portion', value: formatCurrencyOrDash(totalUSPortion, currencyCode), color: '#2563eb', bg: '#eff5ff' });
+              }
+              if (!effectiveMxDisabled) {
+                tiles.push({ label: 'MX Portion', value: formatCurrencyOrDash(totalMXPortion, currencyCode), color: '#15803d', bg: '#ecfdf5' });
+              }
+              if (!isDomestic && borderFee > 0) {
+                tiles.push({ label: 'Border Fee', value: formatCurrencyOrDash(borderFee, currencyCode), color: '#b45309', bg: '#fffbeb' });
+              }
+              return tiles.map((tile, i) => (
+                <div key={i} className="flex-1 min-w-0 rounded-lg px-3 py-2 border" style={{ background: tile.bg, borderColor: `${tile.color}30` }}>
+                  <div className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: tile.color }}>{tile.label}</div>
+                  <div className="text-sm font-bold mt-0.5 truncate" style={{ color: tile.color }}>{tile.value}</div>
+                </div>
+              ));
+            })()}
           </div>
         </div>
 
@@ -1445,11 +1513,23 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
             )}
 
             <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden" style={{ borderLeftWidth: '6px', borderLeftColor: '#475569' }}>
-              <div className="flex items-center gap-3 px-5 py-3 border-b-2 border-gray-400" style={{ background: '#f1f5f9' }}>
+              <button
+                type="button"
+                onClick={() => setCollapsedSections(s => ({ ...s, general: !s.general }))}
+                className="w-full flex items-center gap-3 px-5 py-3 text-left transition-colors"
+                style={{ background: '#f1f5f9' }}
+              >
                 <span className="text-xs font-bold tracking-wider uppercase text-gray-600">General Section</span>
                 <span className="text-[10.5px] font-semibold px-2 py-0.5 rounded text-white" style={{ background: '#475569', letterSpacing: '0.4px' }}>ROUTING</span>
-              </div>
-              <div className="p-5">
+                {collapsedSections.general && (
+                  <span className="ml-auto text-xs text-gray-500 font-mono font-medium truncate max-w-[300px]">{formData.origin_city || '—'} → {formData.destination_city || '—'}</span>
+                )}
+                <span className={`${collapsedSections.general ? '' : 'ml-auto'} text-gray-400 transition-transform ${collapsedSections.general ? '' : 'rotate-180'}`}>
+                  <ChevronDown className="w-4 h-4" />
+                </span>
+              </button>
+              {!collapsedSections.general && (
+              <div className="p-5 border-t border-gray-100">
               <div className="grid grid-cols-2 gap-x-6 gap-y-4">
                 <div>
                   <label className="block text-sm text-gray-700 mb-1">
@@ -1945,6 +2025,7 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
                 </div>
               </div>
               </div>
+              )}
             </div>
 
 
