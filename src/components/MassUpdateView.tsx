@@ -23,6 +23,7 @@ interface FilterState {
   partnerAccount: string;
   shipper: string;
   bcoPartner: string;
+  quoteStage: string;
   effectiveDateFrom: string;
   effectiveDateTo: string;
   expirationDateFrom: string;
@@ -36,9 +37,9 @@ interface FilterState {
 const EMPTY_FILTERS: FilterState = {
   originCity: '', destinationCity: '', borderCrossingCity: '', market: '',
   serviceType: '', tripType: '', equipmentType: '', partnerAccount: '',
-  shipper: '', bcoPartner: '', effectiveDateFrom: '', effectiveDateTo: '',
-  expirationDateFrom: '', expirationDateTo: '', createdDateFrom: '',
-  createdDateTo: '', modifiedDateFrom: '', modifiedDateTo: '',
+  shipper: '', bcoPartner: '', quoteStage: 'Published', effectiveDateFrom: '',
+  effectiveDateTo: '', expirationDateFrom: '', expirationDateTo: '',
+  createdDateFrom: '', createdDateTo: '', modifiedDateFrom: '', modifiedDateTo: '',
 };
 
 interface FieldConfig {
@@ -308,6 +309,7 @@ function FilterStep({ filters, setFilters, markets, lanes, selectedIds, loading,
         <div>
           <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Quote Filters</div>
           <div className="space-y-2">
+            <FilterSelect label="Quote Stage" value={filters.quoteStage} onChange={v => upd('quoteStage', v)} options={[{ value: '', label: 'All Stages' }, { value: 'Published', label: 'Published' }, { value: 'Sent to Customer', label: 'Sent to Customer' }, { value: 'Completed', label: 'Completed' }, { value: 'In Progress', label: 'In Progress' }, { value: 'New', label: 'New' }, { value: 'Branch Manager Approval', label: 'Branch Manager Approval' }]} />
             <FilterInput label="Partner Account" value={filters.partnerAccount} onChange={v => upd('partnerAccount', v)} placeholder="e.g. PACCAR" />
             <FilterInput label="Shipper" value={filters.shipper} onChange={v => upd('shipper', v)} />
             <FilterInput label="BCO / Partner" value={filters.bcoPartner} onChange={v => upd('bcoPartner', v)} />
@@ -355,7 +357,7 @@ function FilterStep({ filters, setFilters, markets, lanes, selectedIds, loading,
             </div>
           ) : !searched ? (
             <div className="flex-1 flex items-center justify-center py-20 text-gray-400 text-sm">
-              Apply filters above to find lanes from Published quotes
+              Apply filters to find lanes
             </div>
           ) : lanes.length === 0 ? (
             <div className="flex-1 flex items-center justify-center py-20 text-gray-400 text-sm">
@@ -375,6 +377,7 @@ function FilterStep({ filters, setFilters, markets, lanes, selectedIds, loading,
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Service</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Trip</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Partner Account</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Stage</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Quote #</th>
                     <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">US LH</th>
                     <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">MX LH</th>
@@ -397,6 +400,7 @@ function FilterStep({ filters, setFilters, markets, lanes, selectedIds, loading,
                         <td className="px-3 py-2 text-gray-600">{lane.service_type || '\u2014'}</td>
                         <td className="px-3 py-2 text-gray-600">{lane.trip_type || '\u2014'}</td>
                         <td className="px-3 py-2 text-gray-900 font-medium max-w-[130px] truncate">{lane.quotes?.partner_account || '\u2014'}</td>
+                        <td className="px-3 py-2 text-[11px] text-gray-500">{(lane.quotes as Record<string, unknown>)?.stage as string || '\u2014'}</td>
                         <td className="px-3 py-2 text-blue-600 text-[11px]">{lane.quotes?.quote_number || lane.quotes?.generated_quote_name || '\u2014'}</td>
                         <td className="px-3 py-2 text-right text-gray-800">{formatCurrencyOrDash(lane.us_rate, curr)}</td>
                         <td className="px-3 py-2 text-right text-gray-800">{formatCurrencyOrDash(lane.mx_rate, curr)}</td>
@@ -830,8 +834,9 @@ function buildAccountGroups(lanes: LaneWithQuote[], emails: Record<string, strin
 async function fetchFilteredLanes(filters: FilterState): Promise<LaneWithQuote[]> {
   let query = supabase
     .from('quote_lanes')
-    .select(`*, quotes!inner(id, quote_number, generated_quote_name, partner_account, bill_to_customer, shipper, bco_partner, stage, owner_name, mx_sales_rep, us_sales_rep, currency, type_of_service, exchange_rate, cad_exchange_rate, today_fuel_rate, created_at)`)
-    .eq('quotes.stage', 'Published');
+    .select(`*, quotes!inner(id, quote_number, generated_quote_name, partner_account, bill_to_customer, shipper, bco_partner, stage, owner_name, mx_sales_rep, us_sales_rep, currency, type_of_service, exchange_rate, cad_exchange_rate, today_fuel_rate, created_at)`);
+
+  if (filters.quoteStage) query = query.eq('quotes.stage', filters.quoteStage);
 
   if (filters.originCity) query = query.ilike('origin_city', `%${filters.originCity}%`);
   if (filters.destinationCity) query = query.ilike('destination_city', `%${filters.destinationCity}%`);
