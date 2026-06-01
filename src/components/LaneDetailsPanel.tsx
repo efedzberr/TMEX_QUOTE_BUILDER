@@ -7,6 +7,7 @@ import { LaneSectionAccessorials, SectionAccessorial, calcSectionAccessorialsTot
 import { LANE_TYPES, LOAD_FREQUENCIES, COMMITMENT_TYPES, PRIORITIES, EQUIPMENT_TYPES, LIVE_LOAD_OPTIONS, formatCurrencyOrDash, CurrencyCode, CURRENCIES, normalizeCountryCode } from '../lib/constants';
 import { BorderCrossingLookup, useBorderCrossingCities, validateBorderCrossing } from './BorderCrossingLookup';
 import { MarketFilteredCityLookup } from './MarketFilteredCityLookup';
+import { fillLaneMiles } from '../lib/laneDistance';
 
 const UNITS_OPTIONS = ['Mi', 'Km'] as const;
 type UnitsCode = typeof UNITS_OPTIONS[number];
@@ -145,6 +146,7 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
   const { cities: borderCrossingCities } = useBorderCrossingCities();
   const [isDirty, setIsDirty] = useState(false);
   const [unsavedDialog, setUnsavedDialog] = useState<{ action: 'next' | 'previous' | 'close' } | null>(null);
+  const [distanceNotes, setDistanceNotes] = useState<string[]>([]);
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
     actions: true,
     general: false,
@@ -425,6 +427,21 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
     estimated_total_mx_section: '',
   });
 
+  useEffect(() => {
+    const origin = formData.origin_city;
+    const dest = formData.destination_city;
+    const crossing = formData.border_crossing;
+    if (!origin || !dest || !crossing) { setDistanceNotes([]); return; }
+    let cancelled = false;
+    fillLaneMiles(origin, dest, crossing).then(res => {
+      if (cancelled) return;
+      if (res.us_miles != null) setFormData(prev => ({ ...prev, us_miles: res.us_miles! }));
+      if (res.mx_miles != null) setFormData(prev => ({ ...prev, mx_miles: res.mx_miles! }));
+      if (res.us_miles != null || res.mx_miles != null) setIsDirty(true);
+      setDistanceNotes(res.notes);
+    });
+    return () => { cancelled = true; };
+  }, [formData.origin_city, formData.destination_city, formData.border_crossing]);
 
 
   const getFieldVisibility = (serviceType: string | null | undefined, _countryOverride?: string) => {
@@ -1530,6 +1547,11 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
               </button>
               {!collapsedSections.general && (
               <div className="p-5 border-t border-gray-100">
+              {distanceNotes.length > 0 && (
+                <div className="mb-3 px-3 py-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-700">
+                  {distanceNotes.map((n, i) => <div key={i}>{n}</div>)}
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-x-6 gap-y-4">
                 <div>
                   <label className="block text-sm text-gray-700 mb-1">
