@@ -604,6 +604,24 @@ export function QuoteHeader({
               />
             )}
           </div>
+          <div>
+            <div className="text-[10px] text-gray-500 uppercase tracking-wide mb-0.5">Equipment Type</div>
+            {!isEditing ? (
+              <div className="text-sm text-gray-900">{quote.type_of_service}</div>
+            ) : (
+              <select
+                value={editedData.type_of_service}
+                onChange={(e) => handleChange('type_of_service', e.target.value)}
+                className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+              >
+                {EQUIPMENT_TYPES.map((type) => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
         </div>
 
         <div className="space-y-3">
@@ -654,24 +672,6 @@ export function QuoteHeader({
         <div className="space-y-3">
           <div className="text-[11px] text-gray-500 uppercase tracking-wider font-semibold">Rates & Fuel</div>
           <div>
-            <div className="text-[10px] text-gray-500 uppercase tracking-wide mb-0.5">Equipment Type</div>
-            {!isEditing ? (
-              <div className="text-sm text-gray-900">{quote.type_of_service}</div>
-            ) : (
-              <select
-                value={editedData.type_of_service}
-                onChange={(e) => handleChange('type_of_service', e.target.value)}
-                className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-              >
-                {EQUIPMENT_TYPES.map((type) => (
-                  <option key={type} value={type}>
-                    {type}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
-          <div>
             <div className="text-[10px] text-gray-500 uppercase tracking-wide mb-0.5">USD → MXN Rate</div>
             {!isEditing ? (
               <div className="text-sm font-medium text-gray-900">
@@ -711,6 +711,13 @@ export function QuoteHeader({
             <div className="text-[10px] text-gray-500 uppercase tracking-wide mb-0.5">Today's Fuel (RPM)</div>
             {(quote.today_fuel_rate && quote.today_fuel_rate > 0)
               ? <div className="text-sm font-medium text-gray-900">{formatCurrency(quote.today_fuel_rate, quote.currency as CurrencyCode)}</div>
+              : <div className="text-sm text-amber-600 italic text-[11px]">Set in Administration → Global Variables</div>
+            }
+          </div>
+          <div>
+            <div className="text-[10px] text-gray-500 uppercase tracking-wide mb-0.5">Rate Per Mile</div>
+            {(quote.rate_per_mile && quote.rate_per_mile > 0)
+              ? <div className="text-sm font-medium text-gray-900">{formatCurrency(quote.rate_per_mile, quote.currency as CurrencyCode)}</div>
               : <div className="text-sm text-amber-600 italic text-[11px]">Set in Administration → Global Variables</div>
             }
           </div>

@@ -35,6 +35,7 @@ export interface Quote {
   cad_exchange_rate?: number;
   us_fuel_difference?: number;
   today_fuel_rate?: number;
+  rate_per_mile?: number;
   generated_quote_name?: string;
   accessorials_amount?: number;
   accessorials_list?: any;

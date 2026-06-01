@@ -435,8 +435,19 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
     let cancelled = false;
     fillLaneMiles(origin, dest, crossing).then(res => {
       if (cancelled) return;
-      if (res.us_miles != null) setFormData(prev => ({ ...prev, us_miles: res.us_miles! }));
-      if (res.mx_miles != null) setFormData(prev => ({ ...prev, mx_miles: res.mx_miles! }));
+      setFormData(prev => {
+        const updates: Partial<typeof prev> = {};
+        if (res.us_miles != null) updates.us_miles = res.us_miles;
+        if (res.mx_miles != null) updates.mx_miles = res.mx_miles;
+        const quoteRPM = quote?.rate_per_mile || 0;
+        const quoteFuel = quote?.today_fuel_rate || 0;
+        if (quoteRPM > 0 && !prev.us_rate_per_mile) updates.us_rate_per_mile = quoteRPM;
+        if (quoteRPM > 0 && !prev.mx_rate_per_mile) updates.mx_rate_per_mile = quoteRPM;
+        if (quoteFuel > 0 && !prev.us_fuel_rate) updates.us_fuel_rate = quoteFuel;
+        if (quoteFuel > 0 && !prev.mx_fuel_rate) updates.mx_fuel_rate = quoteFuel;
+        if (Object.keys(updates).length === 0) return prev;
+        return { ...prev, ...updates };
+      });
       if (res.us_miles != null || res.mx_miles != null) setIsDirty(true);
       setDistanceNotes(res.notes);
     });

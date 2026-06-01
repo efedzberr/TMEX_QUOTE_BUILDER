@@ -152,7 +152,7 @@ function App() {
       const [globalVarsResult, accountCodeResult] = await Promise.all([
         supabase
           .from('global_variables')
-          .select('mxn_exchange_rate, cad_exchange_rate, fuel_rate_usd, us_fuel_difference')
+          .select('mxn_exchange_rate, cad_exchange_rate, fuel_rate_usd, us_fuel_difference, rate_per_mile')
           .limit(1)
           .maybeSingle(),
         supabase
@@ -168,6 +168,7 @@ function App() {
       const defaultCadRate = globalVarsData?.cad_exchange_rate || 0;
       const defaultFuelRate = globalVarsData?.fuel_rate_usd || 0;
       const defaultUsFuelDiff = globalVarsData?.us_fuel_difference || 0;
+      const defaultRatePerMile = globalVarsData?.rate_per_mile || 0;
 
       const accountCode = accountCodeResult.data?.account_code || 'XXXXXX';
       const defaultOwner = 'Susana Guajardo';
@@ -209,6 +210,7 @@ function App() {
           exchange_rate: defaultExchangeRate,
           cad_exchange_rate: defaultCadRate,
           today_fuel_rate: defaultFuelRate,
+          rate_per_mile: defaultRatePerMile,
           us_fuel_difference: defaultUsFuelDiff,
           generated_quote_name: generatedQuoteName,
         })

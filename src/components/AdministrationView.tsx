@@ -54,6 +54,7 @@ interface City {
 interface GlobalVariables {
   id: string;
   fuel_rate_usd: number;
+  rate_per_mile: number;
   mxn_exchange_rate: number;
   cad_exchange_rate: number;
   quote_link_expiration_days: number;
@@ -1191,7 +1192,7 @@ function ManageCities() {
 
 function ManageGlobalVariables() {
   const [vars, setVars] = useState<GlobalVariables | null>(null);
-  const [form, setForm] = useState({ fuel_rate_usd: 0, mxn_exchange_rate: 0, cad_exchange_rate: 0, quote_link_expiration_days: 30 });
+  const [form, setForm] = useState({ fuel_rate_usd: 0, rate_per_mile: 0, mxn_exchange_rate: 0, cad_exchange_rate: 0, quote_link_expiration_days: 30 });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -1205,6 +1206,7 @@ function ManageGlobalVariables() {
       setVars(data);
       setForm({
         fuel_rate_usd: data.fuel_rate_usd,
+        rate_per_mile: data.rate_per_mile ?? 0,
         mxn_exchange_rate: data.mxn_exchange_rate,
         cad_exchange_rate: data.cad_exchange_rate,
         quote_link_expiration_days: data.quote_link_expiration_days ?? 30,
@@ -1237,6 +1239,12 @@ function ManageGlobalVariables() {
           <label className="block text-sm font-medium text-gray-700 mb-1">Fuel Rate (Rate per Mile)</label>
           <input type="number" step="0.01" value={form.fuel_rate_usd}
             onChange={e => setForm(f => ({ ...f, fuel_rate_usd: parseFloat(e.target.value) || 0 }))}
+            className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Rate Per Mile</label>
+          <input type="number" step="0.01" value={form.rate_per_mile}
+            onChange={e => setForm(f => ({ ...f, rate_per_mile: parseFloat(e.target.value) || 0 }))}
             className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
         </div>
         <div>
