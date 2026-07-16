@@ -1457,7 +1457,7 @@ function App() {
       <div className="flex min-h-screen">
         <Sidebar current={viewMode} onNavigate={handleNavigate} />
         <div className="flex-1 min-w-0">
-          <DashboardView onNavigate={handleNavigate} />
+          <DashboardView onNavigate={handleNavigate} onCreateQuote={() => setShowNewQuoteForm(true)} onOpenQuote={handleSelectQuote} />
           <NewQuoteModal
             isOpen={showNewQuoteForm}
             onClose={() => setShowNewQuoteForm(false)}

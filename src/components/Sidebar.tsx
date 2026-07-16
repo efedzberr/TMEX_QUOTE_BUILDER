@@ -13,9 +13,9 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { id: 'home', label: 'Home', icon: LayoutDashboard, viewMode: 'home' },
   { id: 'quotes', label: 'Quotes', icon: FileText, viewMode: 'list' },
-  { id: 'mass-update', label: 'Mass Price Update', icon: Layers, viewMode: 'mass-update' },
+  { id: 'mass-update', label: 'Mass Update', icon: Layers, viewMode: 'mass-update' },
   { id: 'customers', label: 'Customers', icon: Users, viewMode: 'customers' },
-  { id: 'admin', label: 'Administration', icon: Settings, viewMode: 'admin' },
+  { id: 'admin', label: 'Admin', icon: Settings, viewMode: 'admin' },
   { id: 'import', label: 'Import', icon: Upload, viewMode: 'import', pinBottom: true },
 ];
 
@@ -35,69 +35,71 @@ export function Sidebar({ current, onNavigate }: SidebarProps) {
   const bottomItems = NAV_ITEMS.filter(i => i.pinBottom);
 
   return (
-    <aside className="w-60 bg-white border-r border-gray-200 flex flex-col h-screen sticky top-0 shrink-0">
-      <div className="px-5 py-5 border-b border-gray-100">
-        <div className="flex items-center gap-3">
+    <aside
+      className="w-[96px] shrink-0 h-screen sticky top-0 flex flex-col items-center py-4 gap-2"
+      style={{ backgroundColor: '#0F2A5C' }}
+    >
+      {/* Brand tile */}
+      <div className="mb-4">
+        <div className="w-12 h-12 rounded-xl overflow-hidden bg-white/10 flex items-center justify-center">
           <img
             src="/Transmex_Logo_II.jpeg"
-            alt="Transmex Logo"
-            className="h-9 w-9 rounded object-cover"
+            alt="Transmex"
+            className="w-10 h-10 rounded-lg object-cover"
           />
-          <span className="text-sm font-semibold text-gray-800 leading-tight">
-            Smart Pricing Hub
-          </span>
         </div>
       </div>
 
-      <nav className="flex-1 flex flex-col px-3 py-4 overflow-y-auto">
-        <ul className="space-y-1">
-          {topItems.map(item => {
-            const active = isActive(current, item.viewMode);
-            return (
-              <li key={item.id}>
-                <button
-                  onClick={() => onNavigate(item.viewMode)}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors relative ${
-                    active
-                      ? 'bg-blue-50 text-blue-700'
-                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                  }`}
-                >
-                  {active && (
-                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 bg-blue-600 rounded-r" />
-                  )}
-                  <item.icon className={`w-[18px] h-[18px] ${active ? 'text-blue-600' : 'text-gray-400'}`} />
-                  {item.label}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+      {/* Main nav items */}
+      <nav className="flex-1 flex flex-col items-center gap-1 w-full px-2">
+        {topItems.map(item => {
+          const active = isActive(current, item.viewMode);
+          return (
+            <button
+              key={item.id}
+              onClick={() => onNavigate(item.viewMode)}
+              className={`w-full flex flex-col items-center gap-1 py-2.5 px-1 rounded-xl transition-all duration-150 ${
+                active
+                  ? 'text-white shadow-lg'
+                  : 'text-slate-300 hover:bg-white/10'
+              }`}
+              style={active ? { backgroundColor: '#1D4ED8' } : undefined}
+            >
+              <item.icon className="w-5 h-5" />
+              <span className="text-[10px] font-medium leading-tight text-center">{item.label}</span>
+            </button>
+          );
+        })}
 
-        <ul className="mt-auto space-y-1 pt-4 border-t border-gray-100">
+        {/* Bottom-pinned items */}
+        <div className="mt-auto w-full flex flex-col items-center gap-1">
           {bottomItems.map(item => {
             const active = isActive(current, item.viewMode);
             return (
-              <li key={item.id}>
-                <button
-                  onClick={() => onNavigate(item.viewMode)}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors relative ${
-                    active
-                      ? 'bg-blue-50 text-blue-700'
-                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                  }`}
-                >
-                  {active && (
-                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 bg-blue-600 rounded-r" />
-                  )}
-                  <item.icon className={`w-[18px] h-[18px] ${active ? 'text-blue-600' : 'text-gray-400'}`} />
-                  {item.label}
-                </button>
-              </li>
+              <button
+                key={item.id}
+                onClick={() => onNavigate(item.viewMode)}
+                className={`w-full flex flex-col items-center gap-1 py-2.5 px-1 rounded-xl transition-all duration-150 ${
+                  active
+                    ? 'text-white shadow-lg'
+                    : 'text-slate-300 hover:bg-white/10'
+                }`}
+                style={active ? { backgroundColor: '#1D4ED8' } : undefined}
+              >
+                <item.icon className="w-5 h-5" />
+                <span className="text-[10px] font-medium leading-tight text-center">{item.label}</span>
+              </button>
             );
           })}
-        </ul>
+        </div>
       </nav>
+
+      {/* User avatar */}
+      <div className="mt-2">
+        <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center">
+          <span className="text-[11px] font-bold text-white">SG</span>
+        </div>
+      </div>
     </aside>
   );
 }
