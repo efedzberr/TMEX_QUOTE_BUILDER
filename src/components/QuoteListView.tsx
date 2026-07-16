@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Trash2, Pencil, Copy, Settings, Lock, CheckCircle, XCircle, RotateCcw, Zap, GitBranch } from 'lucide-react';
+import { Plus, Trash2, Pencil, Copy, Lock, CheckCircle, XCircle, RotateCcw, GitBranch, Zap } from 'lucide-react';
 import { supabase, Quote, QuoteLane } from '../lib/supabase';
 import { isQuoteLocked } from '../lib/constants';
 import { calculateQuoteReviewStatus } from '../lib/customerPortalHelpers';
@@ -9,8 +9,6 @@ interface QuoteListViewProps {
   onSelectQuote: (quoteId: string) => void;
   onDeleteQuote: (quoteId: string) => void;
   onCloneQuote: (quote: Quote) => void;
-  onAdministration: () => void;
-  onMassUpdate: () => void;
 }
 
 const STAGE_COLORS: Record<string, string> = {
@@ -22,7 +20,7 @@ const STAGE_COLORS: Record<string, string> = {
   'Published': 'bg-gray-100 text-gray-800',
 };
 
-export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onCloneQuote, onAdministration, onMassUpdate }: QuoteListViewProps) {
+export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onCloneQuote }: QuoteListViewProps) {
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [quoteLanes, setQuoteLanes] = useState<Record<string, QuoteLane[]>>({});
   const [loading, setLoading] = useState(true);
@@ -182,51 +180,23 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
   }
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <header className="bg-white border-b border-gray-200 shadow-sm">
-        <div className="max-w-[1400px] mx-auto px-6 py-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <img
-                src="/Transmex_Logo_II.jpeg"
-                alt="Transmex Logo"
-                className="h-10 object-contain"
-              />
-              <div className="text-sm text-gray-500">Smart Pricing Hub</div>
-            </div>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={onMassUpdate}
-                className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-white bg-amber-500 border border-amber-600 rounded-lg hover:bg-amber-600 transition-colors"
-              >
-                <Zap className="w-4 h-4" />
-                Mass Price Update
-              </button>
-              <button
-                onClick={onAdministration}
-                className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 hover:text-gray-800 transition-colors"
-              >
-                <Settings className="w-4 h-4" />
-                Administration
-              </button>
-              <button
-                onClick={onCreateNew}
-                className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                <Plus className="w-4 h-4" />
-                Create New Quote
-              </button>
-            </div>
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-[1400px] mx-auto px-8 py-10">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Quotes</h1>
+            <p className="mt-1 text-sm text-gray-500">{quotes.length} {quotes.length === 1 ? 'quote' : 'quotes'} total</p>
           </div>
+          <button
+            onClick={onCreateNew}
+            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+          >
+            <Plus className="w-4 h-4" />
+            Create New Quote
+          </button>
         </div>
-      </header>
 
-      <main className="max-w-[1400px] mx-auto px-6 py-6">
         <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-          <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-            <h1 className="text-xl font-semibold text-gray-900">All Quotes</h1>
-            <span className="text-sm text-gray-500">{quotes.length} {quotes.length === 1 ? 'quote' : 'quotes'}</span>
-          </div>
 
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -382,7 +352,7 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
             </table>
           </div>
         </div>
-      </main>
+      </div>
 
       {deleteConfirmId && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">

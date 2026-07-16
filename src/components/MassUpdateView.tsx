@@ -6,7 +6,6 @@ import { generateReviewToken } from '../lib/customerPortalHelpers';
 import { LaneBadge } from './LaneBadge';
 
 interface MassUpdateViewProps {
-  onBack: () => void;
   onViewLog: () => void;
 }
 
@@ -112,7 +111,7 @@ const STEPS: { key: MassUpdateStep; label: string }[] = [
   { key: 'processing', label: 'Processing' },
 ];
 
-export function MassUpdateView({ onBack, onViewLog }: MassUpdateViewProps) {
+export function MassUpdateView({ onViewLog }: MassUpdateViewProps) {
   const [step, setStep] = useState<MassUpdateStep>('filter');
   const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
   const [lanes, setLanes] = useState<LaneWithQuote[]>([]);
@@ -196,18 +195,16 @@ export function MassUpdateView({ onBack, onViewLog }: MassUpdateViewProps) {
   const hasIncludedFields = fieldConfigs.some(f => f.included && f.value > 0);
 
   return (
-    <div className="min-h-screen bg-gray-100 flex flex-col">
-      <header className="bg-white border-b border-gray-200 shadow-sm">
-        <div className="max-w-[1440px] mx-auto px-6 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Zap className="w-5 h-5 text-amber-500" />
-            <h1 className="text-lg font-bold text-gray-900">Mass Lane Price Update</h1>
-          </div>
-          <button onClick={onViewLog} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700">
-            <History className="w-4 h-4" /> View History
-          </button>
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      <div className="max-w-[1440px] mx-auto px-8 pt-10 pb-2 w-full flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Mass Lane Price Update</h1>
+          <p className="mt-1 text-sm text-gray-500">Bulk update rates across multiple lanes.</p>
         </div>
-      </header>
+        <button onClick={onViewLog} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700">
+          <History className="w-4 h-4" /> View History
+        </button>
+      </div>
 
       <StepIndicator steps={STEPS} currentIndex={stepIndex} />
 
@@ -218,7 +215,7 @@ export function MassUpdateView({ onBack, onViewLog }: MassUpdateViewProps) {
             lanes={lanes} selectedIds={selectedIds} loading={loading} searched={searched}
             onApply={handleApplyFilters} onClear={handleClearFilters}
             onToggle={toggleSelect} onSelectAll={selectAll} onDeselectAll={deselectAll}
-            onBack={onBack} onNext={goToConfig}
+            onNext={goToConfig}
           />
         )}
         {step === 'configure' && (
@@ -240,7 +237,7 @@ export function MassUpdateView({ onBack, onViewLog }: MassUpdateViewProps) {
           <ProcessingStep
             accountGroups={accountGroups} results={results}
             currentProcessing={currentProcessing} done={processingDone}
-            onBack={onBack} onViewLog={onViewLog}
+            onBack={() => {}} onViewLog={onViewLog}
             onRunAnother={() => { setStep('filter'); setLanes([]); setSelectedIds(new Set()); setSearched(false); setResults([]); setProcessingDone(false); }}
           />
         )}
@@ -279,11 +276,11 @@ function StepIndicator({ steps, currentIndex }: { steps: typeof STEPS; currentIn
 
 /* ====================== STEP 1 — FILTER ====================== */
 
-function FilterStep({ filters, setFilters, markets, lanes, selectedIds, loading, searched, onApply, onClear, onToggle, onSelectAll, onDeselectAll, onBack, onNext }: {
+function FilterStep({ filters, setFilters, markets, lanes, selectedIds, loading, searched, onApply, onClear, onToggle, onSelectAll, onDeselectAll, onNext }: {
   filters: FilterState; setFilters: (f: FilterState) => void; markets: string[];
   lanes: LaneWithQuote[]; selectedIds: Set<string>; loading: boolean; searched: boolean;
   onApply: () => void; onClear: () => void; onToggle: (id: string) => void;
-  onSelectAll: () => void; onDeselectAll: () => void; onBack: () => void; onNext: () => void;
+  onSelectAll: () => void; onDeselectAll: () => void; onNext: () => void;
 }) {
   const upd = (key: keyof FilterState, val: string) => setFilters({ ...filters, [key]: val });
   const curr = 'USD' as CurrencyCode;
@@ -416,9 +413,7 @@ function FilterStep({ filters, setFilters, markets, lanes, selectedIds, loading,
         </div>
 
         <div className="flex items-center justify-between mt-4">
-          <button onClick={onBack} className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
-            <ArrowLeft className="w-4 h-4" /> Back to Quotes
-          </button>
+          <div />
           <button onClick={onNext} disabled={selectedIds.size === 0} className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-40 transition-colors">
             Next: Configure Updates <ArrowRight className="w-4 h-4" />
           </button>
