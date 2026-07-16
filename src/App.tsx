@@ -19,6 +19,7 @@ import { ViewResponseModal } from './components/ViewResponseModal';
 import { ViewSignatureModal } from './components/ViewSignatureModal';
 import { Sidebar, ViewMode } from './components/Sidebar';
 import { DashboardView } from './components/home/DashboardView';
+import { DashboardsView } from './components/home/DashboardsView';
 import { CustomersView } from './components/customers/CustomersView';
 import { ImportView } from './components/import/ImportView';
 import { supabase, Quote, QuoteHistory as QuoteHistoryType, QuoteLane } from './lib/supabase';
@@ -1465,6 +1466,15 @@ function App() {
             isLoading={loading}
           />
         </div>
+      </div>
+    );
+  }
+
+  if (viewMode === 'dashboards') {
+    return (
+      <div className="flex min-h-screen">
+        <Sidebar current={viewMode} onNavigate={handleNavigate} />
+        <div className="flex-1 min-w-0"><DashboardsView /></div>
       </div>
     );
   }

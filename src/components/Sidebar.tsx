@@ -1,6 +1,6 @@
-import { LayoutDashboard, FileText, Layers, Users, Settings, Upload } from 'lucide-react';
+import { LayoutDashboard, BarChart3, FileText, Layers, Users, Settings, Upload } from 'lucide-react';
 
-export type ViewMode = 'home' | 'list' | 'builder' | 'admin' | 'mass-update' | 'mass-update-log' | 'customers' | 'import';
+export type ViewMode = 'home' | 'dashboards' | 'list' | 'builder' | 'admin' | 'mass-update' | 'mass-update-log' | 'customers' | 'import';
 
 interface NavItem {
   id: string;
@@ -12,6 +12,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { id: 'home', label: 'Home', icon: LayoutDashboard, viewMode: 'home' },
+  { id: 'dashboards', label: 'Dashboards', icon: BarChart3, viewMode: 'dashboards' },
   { id: 'quotes', label: 'Quotes', icon: FileText, viewMode: 'list' },
   { id: 'mass-update', label: 'Mass Update', icon: Layers, viewMode: 'mass-update' },
   { id: 'customers', label: 'Customers', icon: Users, viewMode: 'customers' },
