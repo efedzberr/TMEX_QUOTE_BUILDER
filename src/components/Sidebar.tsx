@@ -1,4 +1,4 @@
-import { LayoutDashboard, BarChart3, FileText, Layers, Users, Settings, Upload } from 'lucide-react';
+import { LayoutDashboard, BarChart3, FileText, Layers, Users, Settings, Upload, Truck } from 'lucide-react';
 
 export type ViewMode = 'home' | 'dashboards' | 'list' | 'builder' | 'admin' | 'mass-update' | 'mass-update-log' | 'customers' | 'import';
 
@@ -42,12 +42,8 @@ export function Sidebar({ current, onNavigate }: SidebarProps) {
     >
       {/* Brand tile */}
       <div className="mb-4">
-        <div className="w-12 h-12 rounded-xl overflow-hidden bg-white/10 flex items-center justify-center">
-          <img
-            src="/Transmex_Logo_II.jpeg"
-            alt="Transmex"
-            className="w-10 h-10 rounded-lg object-cover"
-          />
+        <div className="w-12 h-12 rounded-xl bg-white flex items-center justify-center" title="Transmex">
+          <Truck className="w-6 h-6" style={{ color: '#0F2A5C' }} />
         </div>
       </div>
 
