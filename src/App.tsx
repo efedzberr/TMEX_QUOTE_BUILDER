@@ -18,6 +18,7 @@ import { CustomerReviewBanner } from './components/CustomerReviewBanner';
 import { ViewResponseModal } from './components/ViewResponseModal';
 import { ViewSignatureModal } from './components/ViewSignatureModal';
 import { Sidebar, ViewMode } from './components/Sidebar';
+import { TopBar } from './components/TopBar';
 import { DashboardView } from './components/home/DashboardView';
 import { DashboardsView } from './components/home/DashboardsView';
 import { CustomersView } from './components/customers/CustomersView';
@@ -1430,7 +1431,7 @@ function App() {
     return (
       <div className="flex min-h-screen">
         <Sidebar current={viewMode} onNavigate={handleNavigate} />
-        <div className="flex-1 min-w-0"><AdministrationView /></div>
+        <div className="flex-1 min-w-0"><TopBar /><AdministrationView /></div>
       </div>
     );
   }
@@ -1439,7 +1440,7 @@ function App() {
     return (
       <div className="flex min-h-screen">
         <Sidebar current={viewMode} onNavigate={handleNavigate} />
-        <div className="flex-1 min-w-0"><MassUpdateView onViewLog={() => setViewMode('mass-update-log')} /></div>
+        <div className="flex-1 min-w-0"><TopBar /><MassUpdateView onViewLog={() => setViewMode('mass-update-log')} /></div>
       </div>
     );
   }
@@ -1448,7 +1449,7 @@ function App() {
     return (
       <div className="flex min-h-screen">
         <Sidebar current={viewMode} onNavigate={handleNavigate} />
-        <div className="flex-1 min-w-0"><MassUpdateLogView /></div>
+        <div className="flex-1 min-w-0"><TopBar /><MassUpdateLogView /></div>
       </div>
     );
   }
@@ -1457,7 +1458,7 @@ function App() {
     return (
       <div className="flex min-h-screen">
         <Sidebar current={viewMode} onNavigate={handleNavigate} />
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0"><TopBar />
           <DashboardView onNavigate={handleNavigate} onCreateQuote={() => setShowNewQuoteForm(true)} onOpenQuote={handleSelectQuote} />
           <NewQuoteModal
             isOpen={showNewQuoteForm}
@@ -1474,7 +1475,7 @@ function App() {
     return (
       <div className="flex min-h-screen">
         <Sidebar current={viewMode} onNavigate={handleNavigate} />
-        <div className="flex-1 min-w-0"><DashboardsView /></div>
+        <div className="flex-1 min-w-0"><TopBar /><DashboardsView /></div>
       </div>
     );
   }
@@ -1483,7 +1484,7 @@ function App() {
     return (
       <div className="flex min-h-screen">
         <Sidebar current={viewMode} onNavigate={handleNavigate} />
-        <div className="flex-1 min-w-0"><CustomersView /></div>
+        <div className="flex-1 min-w-0"><TopBar /><CustomersView /></div>
       </div>
     );
   }
@@ -1492,7 +1493,7 @@ function App() {
     return (
       <div className="flex min-h-screen">
         <Sidebar current={viewMode} onNavigate={handleNavigate} />
-        <div className="flex-1 min-w-0"><ImportView /></div>
+        <div className="flex-1 min-w-0"><TopBar /><ImportView /></div>
       </div>
     );
   }
@@ -1501,7 +1502,7 @@ function App() {
     return (
       <div className="flex min-h-screen">
         <Sidebar current={viewMode} onNavigate={handleNavigate} />
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0"><TopBar />
           <QuoteListView
             onCreateNew={() => setShowNewQuoteForm(true)}
             onSelectQuote={handleSelectQuote}
@@ -1540,7 +1541,7 @@ function App() {
     return (
       <div className="flex min-h-screen">
         <Sidebar current={viewMode} onNavigate={handleNavigate} />
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0"><TopBar />
           <BenchmarkDashboard
             lane={benchmarkLane}
             laneIndex={bmIndex !== -1 ? bmIndex + 1 : 1}
@@ -1564,7 +1565,7 @@ function App() {
   return (
     <div className="flex min-h-screen">
       <Sidebar current={viewMode} onNavigate={handleNavigate} />
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0"><TopBar />
         <div className="min-h-screen bg-gray-50">
 
       <StageProgressBar
