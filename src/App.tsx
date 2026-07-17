@@ -1493,7 +1493,13 @@ function App() {
     return (
       <div className="flex min-h-screen">
         <Sidebar current={viewMode} onNavigate={handleNavigate} />
-        <div className="flex-1 min-w-0"><TopBar /><ImportView /></div>
+        <div className="flex-1 min-w-0"><TopBar /><ImportView onCreateQuote={() => setShowNewQuoteForm(true)} />
+          <NewQuoteModal
+            isOpen={showNewQuoteForm}
+            onClose={() => setShowNewQuoteForm(false)}
+            onSubmit={handleCreateNewQuote}
+            isLoading={loading}
+          /></div>
       </div>
     );
   }
