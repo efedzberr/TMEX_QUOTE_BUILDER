@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect, useMemo } from 'react';
-import { Upload, FileSpreadsheet, X, AlertCircle, CheckCircle2, ArrowRight } from 'lucide-react';
+import { Upload, FileSpreadsheet, X, AlertCircle, AlertTriangle, CheckCircle2, ArrowRight, Plus, ChevronDown } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../../lib/supabase';
 
@@ -17,14 +17,17 @@ interface MapField {
   aliases: string[];
 }
 
-const MAP_FIELDS: MapField[] = [
+const INITIAL_FIELDS: MapField[] = [
   { key: 'origin_city', label: 'Origin City', type: 'text', required: true, aliases: ['origin', 'origen', 'ciudad origen', 'from', 'pickup'] },
   { key: 'destination_city', label: 'Destination City', type: 'text', required: true, aliases: ['destination', 'destino', 'ciudad destino', 'to', 'delivery'] },
-  { key: 'border_crossing', label: 'Border Crossing', type: 'text', required: true, aliases: ['border', 'cruce', 'crossing', 'border crossing', 'cruce fronterizo', 'frontera'] },
+  { key: 'border_crossing', label: 'Border Crossing', type: 'text', required: true, aliases: ['border', 'cruce', 'crossing', 'border crossing', 'cruce fronterizo', 'frontera', 'border crossing point'] },
   { key: 'frequency', label: 'Frequency (# of trips)', type: 'text', aliases: ['number of trips', 'trips', 'viajes', 'frecuencia', 'num trips', 'no of trips'] },
   { key: 'equipment_type', label: 'Equipment Type', type: 'text', aliases: ['equipment', 'equipo', 'trailer'] },
   { key: 'service_type', label: 'Service Type', type: 'text', aliases: ['service', 'servicio', 'tipo servicio'] },
   { key: 'trip_type', label: 'Trip Type', type: 'text', aliases: ['trip type', 'tipo viaje'] },
+];
+
+const COMPLETE_FIELDS: MapField[] = [
   { key: 'border_crossing_fee', label: 'Border Crossing Fee', type: 'numeric', aliases: ['border fee', 'cuota cruce', 'fee'] },
   { key: 'us_rate', label: 'US Rate', type: 'numeric', aliases: ['us rate', 'tarifa us', 'usa rate'] },
   { key: 'mx_rate', label: 'MX Rate', type: 'numeric', aliases: ['mx rate', 'tarifa mx', 'mexico rate'] },
@@ -42,14 +45,15 @@ const MAP_FIELDS: MapField[] = [
   { key: 'weight', label: 'Weight', type: 'text', aliases: ['weight', 'peso'] },
   { key: 'dimensions', label: 'Dimensions', type: 'text', aliases: ['dimensions', 'dimensiones'] },
   { key: 'temperature', label: 'Temperature', type: 'text', aliases: ['temperature', 'temperatura', 'temp'] },
-  { key: 'volume', label: 'Volume', type: 'text', aliases: ['volume', 'volumen'] },
+  { key: 'volume', label: 'Volume', type: 'text', aliases: ['volume', 'volumen', 'vol', 'vol - lpm'] },
   { key: 'priority', label: 'Priority', type: 'text', aliases: ['priority', 'prioridad'] },
   { key: 'comments', label: 'Comments', type: 'text', aliases: ['comments', 'comentarios', 'notes', 'notas'] },
   { key: 'effective_from_date', label: 'Effective From', type: 'date', aliases: ['effective from', 'vigencia desde', 'from date', 'start date', 'fecha inicio'] },
   { key: 'effective_to_date', label: 'Effective To', type: 'date', aliases: ['effective to', 'vigencia hasta', 'to date', 'end date', 'fecha fin'] },
 ];
 
-const REQUIRED_KEYS = MAP_FIELDS.filter(f => f.required).map(f => f.key);
+const ALL_FIELDS: MapField[] = [...INITIAL_FIELDS, ...COMPLETE_FIELDS];
+const REQUIRED_KEYS = ALL_FIELDS.filter(f => f.required).map(f => f.key);
 
 interface QuoteOption {
   id: string;
@@ -69,6 +73,10 @@ interface ImportResult {
   imported: number;
   skipped: number;
   status: string;
+}
+
+interface ImportViewProps {
+  onCreateQuote?: () => void;
 }
 
 function normalize(s: string): string {
@@ -108,7 +116,61 @@ function coerce(raw: string, type: FieldType): { value: unknown; ok: boolean; om
   return { value: v, ok: true, omit: false };
 }
 
-export function ImportView() {
+function MappingField({ field, value, headers, onChange }: { field: MapField; value: string; headers: string[]; onChange: (v: string) => void }) {
+  const missingReq = field.required && !value;
+  return (
+    <div>
+      <label className="block text-xs font-medium text-gray-600 mb-1">
+        {field.label}{field.required && <span className="text-red-500"> *</span>}
+      </label>
+      <select
+        value={value || NONE}
+        onChange={e => onChange(e.target.value)}
+        className={`w-full border rounded-lg px-2.5 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 ${missingReq ? 'border-red-300' : 'border-gray-200'}`}
+      >
+        <option value={NONE}>— unmapped —</option>
+        {headers.map((h, i) => (<option key={i} value={h}>{h || `(column ${i + 1})`}</option>))}
+      </select>
+    </div>
+  );
+}
+
+function MappingSection({ title, fields, mapping, headers, collapsed, onToggle, onChange, hasIssue }: {
+  title: string;
+  fields: MapField[];
+  mapping: Record<string, string>;
+  headers: string[];
+  collapsed: boolean;
+  onToggle: () => void;
+  onChange: (key: string, val: string) => void;
+  hasIssue: boolean;
+}) {
+  return (
+    <div className="border border-gray-200 rounded-lg overflow-hidden">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold text-gray-900">{title}</span>
+          <span className="text-xs text-gray-400">({fields.length})</span>
+          {hasIssue && <span className="w-2 h-2 rounded-full bg-red-500 inline-block" title="Needs review" />}
+        </div>
+        <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${collapsed ? '-rotate-90' : ''}`} />
+      </button>
+      {!collapsed && (
+        <div className="px-4 py-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-5 gap-y-3">
+          {fields.map(field => (
+            <MappingField key={field.key} field={field} value={mapping[field.key] || ''} headers={headers} onChange={v => onChange(field.key, v)} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function ImportView({ onCreateQuote }: ImportViewProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [quotes, setQuotes] = useState<QuoteOption[]>([]);
   const [selectedQuoteId, setSelectedQuoteId] = useState('');
@@ -117,20 +179,26 @@ export function ImportView() {
   const [error, setError] = useState<string | null>(null);
   const [parsed, setParsed] = useState<ParsedFile | null>(null);
   const [mapping, setMapping] = useState<Record<string, string>>({});
+  const [initialCollapsed, setInitialCollapsed] = useState(true);
+  const [completeCollapsed, setCompleteCollapsed] = useState(true);
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
 
-  useEffect(() => {
+  function loadQuotes() {
     supabase
       .from('quotes')
       .select('id, quote_number, partner_account')
       .order('created_at', { ascending: false })
       .then(({ data }) => setQuotes((data as QuoteOption[]) || []));
-  }, []);
+  }
+
+  useEffect(() => { loadQuotes(); }, []);
 
   function resetFile() {
     setParsed(null);
     setMapping({});
+    setInitialCollapsed(true);
+    setCompleteCollapsed(true);
     setError(null);
     setParsing(false);
     setResult(null);
@@ -148,7 +216,7 @@ export function ImportView() {
     setResult(null);
 
     if (!hasAcceptedExtension(file.name)) {
-      setError('Formato no soportado. Sube un archivo .xlsx, .xls o .csv.');
+      setError('Unsupported format. Upload a .xlsx, .xls or .csv file.');
       return;
     }
 
@@ -158,7 +226,7 @@ export function ImportView() {
       const workbook = XLSX.read(buffer);
       const sheetName = workbook.SheetNames[0];
       if (!sheetName) {
-        setError('El archivo no contiene hojas.');
+        setError('The file contains no sheets.');
         setParsing(false);
         return;
       }
@@ -166,7 +234,7 @@ export function ImportView() {
       const worksheet = workbook.Sheets[sheetName];
       const aoa = XLSX.utils.sheet_to_json<unknown[]>(worksheet, { header: 1, defval: '' });
       if (aoa.length === 0) {
-        setError('La primera hoja est\u00e1 vac\u00eda.');
+        setError('The first sheet is empty.');
         setParsing(false);
         return;
       }
@@ -175,13 +243,15 @@ export function ImportView() {
       const bodyRows = aoa.slice(1).map(row => headers.map((_, i) => String((row as unknown[])[i] ?? '')));
 
       const initialMapping: Record<string, string> = {};
-      MAP_FIELDS.forEach(f => { initialMapping[f.key] = autoMatch(headers, f); });
+      ALL_FIELDS.forEach(f => { initialMapping[f.key] = autoMatch(headers, f); });
 
       setMapping(initialMapping);
+      setInitialCollapsed(true);
+      setCompleteCollapsed(true);
       setParsed({ fileName: file.name, sheetName, headers, rows: bodyRows, totalRows: bodyRows.length });
     } catch (err) {
       console.error('Error parsing file:', err);
-      setError('No se pudo leer el archivo. Verifica que no est\u00e9 da\u00f1ado.');
+      setError('Could not read the file. Make sure it is not corrupted.');
     } finally {
       setParsing(false);
     }
@@ -206,6 +276,8 @@ export function ImportView() {
   }, [parsed]);
 
   const requiredMapped = REQUIRED_KEYS.every(k => mapping[k]);
+  const needsReview = !requiredMapped;
+  const initialHasIssue = INITIAL_FIELDS.some(f => f.required && !mapping[f.key]);
 
   const rowStats = useMemo(() => {
     if (!parsed) return { valid: 0, skipped: 0 };
@@ -224,6 +296,14 @@ export function ImportView() {
   }, [parsed, mapping, headerIndex]);
 
   const canImport = !!selectedQuoteId && requiredMapped && rowStats.valid > 0 && !importing;
+
+  function setField(key: string, val: string) {
+    setMapping(m => ({ ...m, [key]: val }));
+  }
+
+  function openMappingForReview() {
+    setInitialCollapsed(false);
+  }
 
   async function runImport() {
     if (!parsed || !selectedQuoteId) return;
@@ -249,7 +329,7 @@ export function ImportView() {
           return !(row[headerIndex[header]] ?? '').trim();
         });
         if (missing.length > 0) {
-          errorDetail.push({ row: idx + 2, reason: `Faltan campos requeridos: ${missing.join(', ')}` });
+          errorDetail.push({ row: idx + 2, reason: `Missing required fields: ${missing.join(', ')}` });
           return;
         }
 
@@ -259,7 +339,7 @@ export function ImportView() {
           lane_origin: 'Import',
         };
 
-        for (const field of MAP_FIELDS) {
+        for (const field of ALL_FIELDS) {
           const header = mapping[field.key];
           if (!header) continue;
           const raw = row[headerIndex[header]] ?? '';
@@ -278,7 +358,7 @@ export function ImportView() {
         const { error: insertError } = await supabase.from('quote_lanes').insert(laneObjects);
         if (insertError) {
           console.error('Lane insert error:', insertError);
-          setError('No se pudieron guardar las lanes. Revisa la cotizaci\u00f3n destino e intenta de nuevo.');
+          setError('Could not save the lanes. Check the target quote and try again.');
           setImporting(false);
           return;
         }
@@ -299,7 +379,7 @@ export function ImportView() {
       setResult({ imported: laneObjects.length, skipped: errorDetail.length, status });
     } catch (err) {
       console.error('Import failed:', err);
-      setError('Ocurri\u00f3 un error durante la importaci\u00f3n.');
+      setError('An error occurred during import.');
     } finally {
       setImporting(false);
     }
@@ -318,23 +398,36 @@ export function ImportView() {
 
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5 mb-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Tipo de importaci&oacute;n</label>
+            <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Import Type</label>
             <select value="quote_lanes" disabled className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-700">
               <option value="quote_lanes">Quote Lanes</option>
             </select>
           </div>
           <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Cotizaci&oacute;n destino *</label>
-            <select
-              value={selectedQuoteId}
-              onChange={e => setSelectedQuoteId(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">Selecciona una cotizaci&oacute;n...</option>
-              {quotes.map(q => (
-                <option key={q.id} value={q.id}>{q.quote_number} — {q.partner_account || 'Sin cliente'}</option>
-              ))}
-            </select>
+            <label className="block text-xs font-semibold text-gray-500 uppercase mb-1.5">Target Quote *</label>
+            <div className="flex items-center gap-2">
+              <select
+                value={selectedQuoteId}
+                onChange={e => setSelectedQuoteId(e.target.value)}
+                className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Select a quote...</option>
+                {quotes.map(q => (
+                  <option key={q.id} value={q.id}>{q.quote_number} — {q.partner_account || 'No customer'}</option>
+                ))}
+              </select>
+              {onCreateQuote && (
+                <button
+                  type="button"
+                  onClick={onCreateQuote}
+                  title="New quote"
+                  aria-label="New quote"
+                  className="shrink-0 w-9 h-9 flex items-center justify-center rounded-lg border border-blue-200 text-blue-600 hover:bg-blue-50 transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -359,12 +452,12 @@ export function ImportView() {
             {parsing ? (
               <>
                 <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mb-3" />
-                <p className="text-sm text-gray-500">Leyendo archivo...</p>
+                <p className="text-sm text-gray-500">Reading file...</p>
               </>
             ) : (
               <>
-                <h2 className="text-base font-semibold text-gray-700 mb-1">Arrastra un archivo aqu&iacute; o haz clic para seleccionar</h2>
-                <p className="text-sm text-gray-500 max-w-sm">Formatos aceptados: Excel (.xlsx, .xls) y CSV. Se mostrar&aacute; una vista previa antes de importar.</p>
+                <h2 className="text-base font-semibold text-gray-700 mb-1">Drag a file here or click to select</h2>
+                <p className="text-sm text-gray-500 max-w-sm">Accepted formats: Excel (.xlsx, .xls) and CSV. A preview will be shown before importing.</p>
               </>
             )}
           </div>
@@ -382,10 +475,10 @@ export function ImportView() {
             <div className="w-14 h-14 rounded-full bg-emerald-50 flex items-center justify-center mb-4">
               <CheckCircle2 className="w-7 h-7 text-emerald-600" />
             </div>
-            <h2 className="text-lg font-semibold text-gray-900 mb-1">Importaci&oacute;n completada</h2>
-            <p className="text-sm text-gray-500 mb-1">{result.imported} lane(s) agregadas a {selectedQuote?.quote_number || 'la cotizaci\u00f3n'}.</p>
-            {result.skipped > 0 && (<p className="text-sm text-amber-600 mb-1">{result.skipped} fila(s) omitidas por campos requeridos faltantes.</p>)}
-            <button onClick={resetFile} className="mt-5 inline-flex items-center gap-2 bg-blue-600 text-white font-semibold text-sm px-5 py-2.5 rounded-lg hover:bg-blue-700 transition-colors">Importar otro archivo</button>
+            <h2 className="text-lg font-semibold text-gray-900 mb-1">Import complete</h2>
+            <p className="text-sm text-gray-500 mb-1">{result.imported} lane(s) added to {selectedQuote?.quote_number || 'the quote'}.</p>
+            {result.skipped > 0 && (<p className="text-sm text-amber-600 mb-1">{result.skipped} row(s) skipped due to missing required fields.</p>)}
+            <button onClick={resetFile} className="mt-5 inline-flex items-center gap-2 bg-blue-600 text-white font-semibold text-sm px-5 py-2.5 rounded-lg hover:bg-blue-700 transition-colors">Import another file</button>
           </div>
         )}
 
@@ -399,71 +492,23 @@ export function ImportView() {
                   </div>
                   <div className="min-w-0">
                     <div className="text-sm font-semibold text-gray-900 truncate">{parsed.fileName}</div>
-                    <div className="text-xs text-gray-500">Hoja: {parsed.sheetName} &middot; {parsed.totalRows} filas &middot; {parsed.headers.length} columnas</div>
+                    <div className="text-xs text-gray-500">Sheet: {parsed.sheetName} &middot; {parsed.totalRows} rows &middot; {parsed.headers.length} columns</div>
                   </div>
                 </div>
                 <button onClick={resetFile} className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-gray-900 px-3 py-1.5 rounded-lg hover:bg-gray-100 transition-colors shrink-0">
                   <X className="w-4 h-4" />
-                  Quitar
+                  Remove
                 </button>
               </div>
-
-              <div className="px-6 py-5">
-                <h3 className="text-sm font-semibold text-gray-900 mb-1">Mapeo de columnas</h3>
-                <p className="text-xs text-gray-500 mb-4">Asocia cada campo de la lane con una columna del archivo. Los campos con * son obligatorios; el resto usar&aacute; el valor por defecto si se deja vac&iacute;o.</p>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-5 gap-y-3">
-                  {MAP_FIELDS.map(field => {
-                    const missingReq = field.required && !mapping[field.key];
-                    return (
-                      <div key={field.key}>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">
-                          {field.label}{field.required && <span className="text-red-500"> *</span>}
-                        </label>
-                        <select
-                          value={mapping[field.key] || NONE}
-                          onChange={e => setMapping(m => ({ ...m, [field.key]: e.target.value }))}
-                          className={`w-full border rounded-lg px-2.5 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 ${missingReq ? 'border-red-300' : 'border-gray-200'}`}
-                        >
-                          <option value={NONE}>— sin asignar —</option>
-                          {parsed.headers.map((h, i) => (<option key={i} value={h}>{h || `(columna ${i + 1})`}</option>))}
-                        </select>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div className="text-xs text-gray-600">
-                  {!requiredMapped && <span className="text-red-600">Asigna los campos obligatorios (Origin, Destination, Border Crossing). </span>}
-                  {requiredMapped && (
-                    <>
-                      <span className="font-medium text-gray-900">{rowStats.valid}</span> fila(s) listas para importar
-                      {rowStats.skipped > 0 && <span className="text-amber-600"> &middot; {rowStats.skipped} se omitir&aacute;n</span>}
-                      {!selectedQuoteId && <span className="text-red-600"> &middot; selecciona una cotizaci&oacute;n destino</span>}
-                    </>
-                  )}
-                </div>
-                <button
-                  onClick={runImport}
-                  disabled={!canImport}
-                  className={`inline-flex items-center gap-2 font-semibold text-sm px-5 py-2.5 rounded-lg transition-colors ${canImport ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}
-                >
-                  {importing ? 'Importando...' : <>Importar {rowStats.valid > 0 ? `${rowStats.valid} lane(s)` : ''}<ArrowRight className="w-4 h-4" /></>}
-                </button>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
               <div className="px-6 py-3 bg-gray-50 border-b border-gray-100">
-                <p className="text-xs text-gray-500">Vista previa de las primeras {Math.min(PREVIEW_ROW_LIMIT, parsed.totalRows)} filas del archivo.</p>
+                <p className="text-xs text-gray-500">Preview of the first {Math.min(PREVIEW_ROW_LIMIT, parsed.totalRows)} rows of the file.</p>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 border-b border-gray-200">
                     <tr>
                       <th className="px-3 py-2 text-left text-xs font-semibold text-gray-400 w-12">#</th>
-                      {parsed.headers.map((h, i) => (<th key={i} className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase whitespace-nowrap">{h || <span className="text-gray-300">(sin t&iacute;tulo)</span>}</th>))}
+                      {parsed.headers.map((h, i) => (<th key={i} className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase whitespace-nowrap">{h || <span className="text-gray-300">(untitled)</span>}</th>))}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -473,9 +518,75 @@ export function ImportView() {
                         {parsed.headers.map((_, ci) => (<td key={ci} className="px-3 py-2 text-gray-700 whitespace-nowrap">{row[ci]}</td>))}
                       </tr>
                     ))}
-                    {previewRows.length === 0 && (<tr><td colSpan={parsed.headers.length + 1} className="px-3 py-8 text-center text-gray-500">El archivo no tiene filas de datos (solo encabezados).</td></tr>)}
+                    {previewRows.length === 0 && (<tr><td colSpan={parsed.headers.length + 1} className="px-3 py-8 text-center text-gray-500">The file has no data rows (headers only).</td></tr>)}
                   </tbody>
                 </table>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-100">
+                <h3 className="text-sm font-semibold text-gray-900">Field mapping</h3>
+                <p className="text-xs text-gray-500 mt-1">Columns were matched automatically. Fields marked * are required; the rest use their default value if left unmapped. Expand a section to review.</p>
+              </div>
+
+              {needsReview ? (
+                <button
+                  type="button"
+                  onClick={openMappingForReview}
+                  className="w-full flex items-center gap-2 px-6 py-3 bg-red-50 border-b border-red-100 text-left hover:bg-red-100 transition-colors"
+                >
+                  <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
+                  <span className="text-sm font-medium text-red-700">Review mapping — required fields need a column</span>
+                </button>
+              ) : (
+                <div className="flex items-center gap-2 px-6 py-3 bg-emerald-50 border-b border-emerald-100">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span className="text-sm font-medium text-emerald-700">Auto-mapped. Review the fields before importing.</span>
+                </div>
+              )}
+
+              <div className="px-6 py-5 space-y-3">
+                <MappingSection
+                  title="Initial fields"
+                  fields={INITIAL_FIELDS}
+                  mapping={mapping}
+                  headers={parsed.headers}
+                  collapsed={initialCollapsed}
+                  onToggle={() => setInitialCollapsed(c => !c)}
+                  onChange={setField}
+                  hasIssue={initialHasIssue}
+                />
+                <MappingSection
+                  title="Complete fields"
+                  fields={COMPLETE_FIELDS}
+                  mapping={mapping}
+                  headers={parsed.headers}
+                  collapsed={completeCollapsed}
+                  onToggle={() => setCompleteCollapsed(c => !c)}
+                  onChange={setField}
+                  hasIssue={false}
+                />
+              </div>
+
+              <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="text-xs text-gray-600">
+                  {!requiredMapped && <span className="text-red-600">Map the required fields (Origin, Destination, Border Crossing). </span>}
+                  {requiredMapped && (
+                    <>
+                      <span className="font-medium text-gray-900">{rowStats.valid}</span> row(s) ready to import
+                      {rowStats.skipped > 0 && <span className="text-amber-600"> &middot; {rowStats.skipped} will be skipped</span>}
+                      {!selectedQuoteId && <span className="text-red-600"> &middot; select a target quote</span>}
+                    </>
+                  )}
+                </div>
+                <button
+                  onClick={runImport}
+                  disabled={!canImport}
+                  className={`inline-flex items-center gap-2 font-semibold text-sm px-5 py-2.5 rounded-lg transition-colors ${canImport ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}
+                >
+                  {importing ? 'Importing...' : <>Import {rowStats.valid > 0 ? `${rowStats.valid} lane(s)` : ''}<ArrowRight className="w-4 h-4" /></>}
+                </button>
               </div>
             </div>
           </div>
