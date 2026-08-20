@@ -39,6 +39,8 @@ interface QuotesHomeHeaderProps {
   itemCount: number;
   lastUpdated: Date | null;
   effectiveSorting?: ListViewSort[];
+  filterCount?: number;
+  hasSearch?: boolean;
 }
 
 function relativeTime(date: Date): string {
@@ -55,7 +57,7 @@ function relativeTime(date: Date): string {
 
 
 
-export function QuotesHomeHeader({ activeView, onViewChange, itemCount, lastUpdated, effectiveSorting }: QuotesHomeHeaderProps) {
+export function QuotesHomeHeader({ activeView, onViewChange, itemCount, lastUpdated, effectiveSorting, filterCount, hasSearch }: QuotesHomeHeaderProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [allViews, setAllViews] = useState<ListView[]>([]);
@@ -253,6 +255,10 @@ export function QuotesHomeHeader({ activeView, onViewChange, itemCount, lastUpda
         {(effectiveSorting || activeView?.sorting || []).length > 0 && (
           <> &bull; Sorted by {sortLabelFromCatalog(effectiveSorting || activeView?.sorting || [])}</>
         )}
+        {(filterCount ?? 0) > 0 && (
+          <> &bull; {filterCount} filter{filterCount !== 1 ? 's' : ''} applied</>
+        )}
+        {hasSearch && <> &bull; filtered by search</>}
         {lastUpdated && (
           <> &bull; Updated {relativeTime(lastUpdated)}</>
         )}

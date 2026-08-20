@@ -1,11 +1,13 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
-import { Plus, Trash2, Pencil, Copy, Lock, CheckCircle, XCircle, RotateCcw, GitBranch, Zap, Settings, ArrowUp, ArrowDown, Columns3, RotateCcw as ResetIcon } from 'lucide-react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { Plus, Trash2, Pencil, Copy, Lock, GitBranch, Settings, ArrowUp, ArrowDown, Columns3, RotateCcw as ResetIcon, Filter, Search, X } from 'lucide-react';
 import { supabase, Quote, QuoteLane } from '../lib/supabase';
 import { isQuoteLocked } from '../lib/constants';
 import { calculateQuoteReviewStatus } from '../lib/customerPortalHelpers';
 import { QuotesHomeHeader, ListView, ListViewFilter, ListViewColumn, ListViewSort } from './QuotesHomeHeader';
 import { SelectFieldsModal } from './SelectFieldsModal';
-import { FIELD_CATALOG_MAP, isLinkField, sortLabelFromCatalog } from '../lib/quoteFieldCatalog';
+import { FilterPanel } from './FilterPanel';
+import { FIELD_CATALOG_MAP, isLinkField } from '../lib/quoteFieldCatalog';
+import { FilterCriterion, OwnerScope, applyComposedFilters } from '../lib/quoteFilterEngine';
 
 interface QuoteListViewProps {
   onCreateNew: () => void;
@@ -27,7 +29,7 @@ const SYSTEM_VIEW_ALL = 'a0000000-0000-0000-0000-000000000001';
 const SYSTEM_VIEW_RECENT = 'a0000000-0000-0000-0000-000000000003';
 
 export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onCloneQuote }: QuoteListViewProps) {
-  const [quotes, setQuotes] = useState<Quote[]>([]);
+  const [allQuotes, setAllQuotes] = useState<Quote[]>([]);
   const [quoteLanes, setQuoteLanes] = useState<Record<string, QuoteLane[]>>({});
   const [loading, setLoading] = useState(true);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -55,6 +57,19 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
   const [colWidths, setColWidths] = useState<Record<string, number>>({});
   const resizingRef = useRef<{ field: string; startX: number; startW: number } | null>(null);
 
+  // --- Filter state ---
+  const [filterPanelOpen, setFilterPanelOpen] = useState(false);
+  const [activeCriteria, setActiveCriteria] = useState<FilterCriterion[]>([]);
+  const [activeFilterLogic, setActiveFilterLogic] = useState('');
+  const [activeOwnerScope, setActiveOwnerScope] = useState<OwnerScope>('all');
+  const [sessionFilters, setSessionFilters] = useState<{ criteria: FilterCriterion[]; filterLogic: string; ownerScope: OwnerScope } | null>(null);
+  const [ownerProfiles, setOwnerProfiles] = useState<{ id: string; display_name: string }[]>([]);
+
+  // --- Search state ---
+  const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout>>();
+
   useEffect(() => { initializeView(); }, []);
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 3000); return () => clearTimeout(t); } }, [toast]);
 
@@ -65,6 +80,13 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
     if (gearOpen) document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [gearOpen]);
+
+  // Debounced search
+  useEffect(() => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => setDebouncedSearch(searchTerm), 300);
+    return () => { if (searchTimerRef.current) clearTimeout(searchTimerRef.current); };
+  }, [searchTerm]);
 
   function canEditView(view: ListView | null): boolean {
     if (!view || view.is_system) return false;
@@ -79,12 +101,12 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
     setUserId(uid);
 
     if (uid) {
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('is_admin')
-        .eq('id', uid)
-        .maybeSingle();
-      if (profile?.is_admin) setIsAdmin(true);
+      const [profileRes, profsRes] = await Promise.all([
+        supabase.from('user_profiles').select('is_admin').eq('id', uid).maybeSingle(),
+        supabase.from('user_profiles').select('id, display_name').order('display_name'),
+      ]);
+      if (profileRes.data?.is_admin) setIsAdmin(true);
+      if (profsRes.data) setOwnerProfiles(profsRes.data.map(p => ({ id: p.id, display_name: p.display_name || '' })));
     }
 
     let pinnedViewId: string | null = null;
@@ -92,9 +114,7 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
       const { data: prefs } = await supabase
         .from('user_list_view_preferences')
         .select('pinned_list_view_id, display_prefs')
-        .eq('user_id', uid)
-        .eq('object', 'quote')
-        .maybeSingle();
+        .eq('user_id', uid).eq('object', 'quote').maybeSingle();
       if (prefs?.pinned_list_view_id) pinnedViewId = prefs.pinned_list_view_id;
       if (prefs?.display_prefs) {
         const dp = prefs.display_prefs as Record<string, Record<string, number>>;
@@ -108,13 +128,37 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
     const view = viewData as ListView | null;
     if (view) {
       setActiveView(view);
+      applyViewFilters(view);
       await loadQuotesForView(view, uid);
     } else {
       const { data: fallback } = await supabase.from('list_views').select('*').eq('id', SYSTEM_VIEW_ALL).maybeSingle();
       const fb = fallback as ListView | null;
       setActiveView(fb);
+      if (fb) applyViewFilters(fb);
       await loadQuotesForView(fb, uid);
     }
+  }
+
+  function applyViewFilters(view: ListView) {
+    const filters = view.filters || [];
+    const userCriteria: FilterCriterion[] = [];
+    let ownerScope: OwnerScope = 'all';
+
+    for (const f of filters) {
+      if (f.special === 'recently_viewed') continue;
+      if (f.field === 'owner_user_id' && f.operator === 'equals' && f.value === '$CURRENT_USER') {
+        ownerScope = 'mine';
+        continue;
+      }
+      if (f.field && f.operator) {
+        userCriteria.push({ id: crypto.randomUUID(), field: f.field, operator: f.operator, value: f.value || '' });
+      }
+    }
+
+    setActiveCriteria(userCriteria);
+    setActiveFilterLogic(view.filter_logic || '');
+    setActiveOwnerScope(ownerScope);
+    setSessionFilters(null);
   }
 
   const loadQuotesForView = useCallback(async (view: ListView | null, uid: string | null, sortOverride?: ListViewSort[]) => {
@@ -125,14 +169,12 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
 
       if (view && isRecentlyViewedFilter(view.filters)) {
         data = await fetchRecentlyViewed(uid);
-      } else if (view && isMyQuotesFilter(view.filters, uid)) {
-        data = await fetchMyQuotes(uid, sorting);
       } else {
         data = await fetchAllQuotes(sorting);
       }
 
       if (data) {
-        setQuotes(data);
+        setAllQuotes(data);
         await loadLanesForQuotes(data);
         setLastUpdated(new Date());
       }
@@ -147,38 +189,18 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
     return filters?.some(f => f.special === 'recently_viewed') || false;
   }
 
-  function isMyQuotesFilter(filters: ListViewFilter[], uid: string | null): boolean {
-    if (!uid) return false;
-    return filters?.some(f => f.field === 'owner_user_id' && f.operator === 'equals' && f.value === '$CURRENT_USER') || false;
-  }
-
   async function fetchRecentlyViewed(uid: string | null): Promise<Quote[]> {
     if (!uid) return [];
     const { data: recentData } = await supabase
-      .from('recent_record_views')
-      .select('record_id')
-      .eq('user_id', uid)
-      .eq('object', 'quote')
-      .order('viewed_at', { ascending: false })
-      .limit(50);
+      .from('recent_record_views').select('record_id')
+      .eq('user_id', uid).eq('object', 'quote')
+      .order('viewed_at', { ascending: false }).limit(50);
     if (!recentData || recentData.length === 0) return [];
     const ids = recentData.map(r => r.record_id);
     const { data } = await supabase.from('quotes').select('*').in('id', ids);
     if (!data) return [];
     const orderMap = new Map(ids.map((id, i) => [id, i]));
     return data.sort((a, b) => (orderMap.get(a.id) ?? 99) - (orderMap.get(b.id) ?? 99));
-  }
-
-  async function fetchMyQuotes(uid: string | null, sorting?: ListViewSort[]): Promise<Quote[]> {
-    if (!uid) return [];
-    let query = supabase.from('quotes').select('*').eq('owner_user_id', uid);
-    if (sorting && sorting.length > 0) {
-      query = query.order(sorting[0].field, { ascending: sorting[0].direction === 'asc' });
-    } else {
-      query = query.order('created_at', { ascending: false });
-    }
-    const { data } = await query;
-    return data || [];
   }
 
   async function fetchAllQuotes(sorting?: ListViewSort[]): Promise<Quote[]> {
@@ -193,14 +215,14 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
   }
 
   async function loadLanesForQuotes(quotes: Quote[]) {
-    if (quotes.length === 0) return;
+    if (quotes.length === 0) { setQuoteLanes({}); return; }
     try {
       const quoteIds = quotes.map(q => q.id);
       const { data, error } = await supabase.from('quote_lanes').select('*').in('quote_id', quoteIds);
       if (error) throw error;
       if (data) {
         const lanesByQuote: Record<string, QuoteLane[]> = {};
-        data.forEach((lane) => {
+        data.forEach(lane => {
           if (!lanesByQuote[lane.quote_id]) lanesByQuote[lane.quote_id] = [];
           lanesByQuote[lane.quote_id].push(lane);
         });
@@ -216,7 +238,24 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
     return lanes.reduce((sum, lane) => sum + (lane.us_rate + lane.mx_rate + lane.border_crossing_fee + (lane.toll_rate || 0)), 0);
   }
 
-  // --- Effective columns/sorting (session override or from view) ---
+  // --- Composable filtering (ONE place for all filtering) ---
+  const effectiveCriteria = sessionFilters?.criteria ?? activeCriteria;
+  const effectiveFilterLogic = sessionFilters?.filterLogic ?? activeFilterLogic;
+  const effectiveOwnerScope = sessionFilters?.ownerScope ?? activeOwnerScope;
+
+  const filteredQuotes = useMemo(() => {
+    return applyComposedFilters({
+      records: allQuotes as unknown[] as Record<string, unknown>[],
+      ownerScope: effectiveOwnerScope,
+      userId,
+      criteria: effectiveCriteria,
+      filterLogic: effectiveFilterLogic,
+      searchTerm: debouncedSearch,
+      computeTotalAmount: calculateTotalAmount,
+    }) as unknown[] as Quote[];
+  }, [allQuotes, effectiveOwnerScope, userId, effectiveCriteria, effectiveFilterLogic, debouncedSearch, quoteLanes]);
+
+  // --- Effective columns/sorting ---
   const effectiveColumns: ListViewColumn[] = sessionColumns || activeView?.columns || [];
   const effectiveSorting: ListViewSort[] = sessionSorting || activeView?.sorting || [];
 
@@ -239,7 +278,6 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
   async function handleSort(field: string) {
     const fieldDef = FIELD_CATALOG_MAP.get(field);
     if (!fieldDef?.sortable) return;
-
     let newSorting: ListViewSort[];
     const current = effectiveSorting[0];
     if (current?.field === field) {
@@ -247,7 +285,6 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
     } else {
       newSorting = [{ field, direction: 'asc' }];
     }
-
     if (canEditView(activeView)) {
       const updated = { ...activeView!, sorting: newSorting };
       setActiveView(updated);
@@ -270,12 +307,47 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
     await loadQuotesForView(activeView, userId, activeView.sorting);
   }
 
+  // --- Filter save ---
+  async function handleFilterSave(criteria: FilterCriterion[], filterLogic: string, ownerScope: OwnerScope) {
+    if (!activeView) return;
+
+    setActiveCriteria(criteria);
+    setActiveFilterLogic(filterLogic);
+    setActiveOwnerScope(ownerScope);
+
+    if (canEditView(activeView)) {
+      setSessionFilters(null);
+      setReadOnlyNotice(false);
+
+      const filters: ListViewFilter[] = [];
+      if (ownerScope === 'mine') {
+        filters.push({ field: 'owner_user_id', operator: 'equals', value: '$CURRENT_USER' });
+      }
+      for (const c of criteria) {
+        filters.push({ field: c.field, operator: c.operator, value: c.value });
+      }
+      const updated = { ...activeView, filters, filter_logic: filterLogic };
+      setActiveView(updated);
+      await supabase.from('list_views').update({
+        filters, filter_logic: filterLogic, updated_at: new Date().toISOString(),
+      }).eq('id', activeView.id);
+    } else {
+      setSessionFilters({ criteria, filterLogic, ownerScope });
+      setReadOnlyNotice(true);
+    }
+    setLastUpdated(new Date());
+  }
+
   // --- View change ---
   function handleViewChange(view: ListView) {
     setActiveView(view);
     setSessionColumns(null);
     setSessionSorting(null);
+    setSessionFilters(null);
     setReadOnlyNotice(false);
+    setSearchTerm('');
+    setDebouncedSearch('');
+    applyViewFilters(view);
     loadQuotesForView(view, userId);
     loadWidthsForView(view.id);
   }
@@ -283,11 +355,8 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
   async function loadWidthsForView(viewId: string) {
     if (!userId) return;
     const { data: prefs } = await supabase
-      .from('user_list_view_preferences')
-      .select('display_prefs')
-      .eq('user_id', userId)
-      .eq('object', 'quote')
-      .maybeSingle();
+      .from('user_list_view_preferences').select('display_prefs')
+      .eq('user_id', userId).eq('object', 'quote').maybeSingle();
     const dp = (prefs?.display_prefs as Record<string, Record<string, number>>) || {};
     setColWidths(dp[viewId] || {});
   }
@@ -299,7 +368,6 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
     if (!th) return;
     const startW = th.getBoundingClientRect().width;
     resizingRef.current = { field, startX: e.clientX, startW };
-
     function onMove(ev: MouseEvent) {
       if (!resizingRef.current) return;
       const diff = ev.clientX - resizingRef.current.startX;
@@ -321,14 +389,11 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
     const { data: prefs } = await supabase
       .from('user_list_view_preferences')
       .select('display_prefs, pinned_list_view_id, recent_list_view_ids')
-      .eq('user_id', userId)
-      .eq('object', 'quote')
-      .maybeSingle();
+      .eq('user_id', userId).eq('object', 'quote').maybeSingle();
     const existing = (prefs?.display_prefs as Record<string, unknown>) || {};
     const updated = { ...existing, [activeView.id]: colWidths };
     await supabase.from('user_list_view_preferences').upsert({
-      user_id: userId,
-      object: 'quote',
+      user_id: userId, object: 'quote',
       pinned_list_view_id: prefs?.pinned_list_view_id || null,
       recent_list_view_ids: prefs?.recent_list_view_ids || [],
       display_prefs: updated,
@@ -372,7 +437,7 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
       );
     }
 
-    const raw = (quote as Record<string, unknown>)[field];
+    const raw = (quote as unknown as Record<string, unknown>)[field];
     if (raw == null || raw === '') return '-';
 
     if (fieldDef.dataType === 'currency') {
@@ -385,21 +450,13 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
     if (fieldDef.dataType === 'datetime') {
       const d = new Date(String(raw));
       if (isNaN(d.getTime())) return String(raw);
-      const dd = String(d.getDate()).padStart(2, '0');
-      const mm = String(d.getMonth() + 1).padStart(2, '0');
-      const yyyy = d.getFullYear();
-      const hh = String(d.getHours()).padStart(2, '0');
-      const mi = String(d.getMinutes()).padStart(2, '0');
-      return `${dd}/${mm}/${yyyy} ${hh}:${mi}`;
+      return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
     }
 
     if (fieldDef.dataType === 'date') {
       const d = new Date(String(raw));
       if (isNaN(d.getTime())) return String(raw);
-      const dd = String(d.getDate()).padStart(2, '0');
-      const mm = String(d.getMonth() + 1).padStart(2, '0');
-      const yyyy = d.getFullYear();
-      return `${dd}/${mm}/${yyyy}`;
+      return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
     }
 
     return String(raw);
@@ -411,7 +468,7 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
     setDeletingId(deleteConfirmId);
     setDeleteConfirmId(null);
     await onDeleteQuote(deleteConfirmId);
-    setQuotes(prev => prev.filter(q => q.id !== deleteConfirmId));
+    setAllQuotes(prev => prev.filter(q => q.id !== deleteConfirmId));
     setDeletingId(null);
     setToast('Quote deleted successfully');
   }
@@ -424,6 +481,8 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
 
   // --- Determine link column ---
   const linkField = effectiveColumns.find(c => isLinkField(c.field))?.field || null;
+
+  const hasActiveFilters = effectiveCriteria.length > 0 || effectiveOwnerScope === 'mine';
 
   if (loading && !activeView) {
     return (
@@ -443,11 +502,49 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
           <QuotesHomeHeader
             activeView={activeView}
             onViewChange={handleViewChange}
-            itemCount={quotes.length}
+            itemCount={filteredQuotes.length}
             lastUpdated={lastUpdated}
             effectiveSorting={effectiveSorting}
+            filterCount={effectiveCriteria.length + (effectiveOwnerScope === 'mine' ? 1 : 0)}
+            hasSearch={debouncedSearch.trim().length > 0}
           />
           <div className="flex items-center gap-2 shrink-0">
+            {/* Search */}
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                placeholder="Search this list..."
+                className="pl-8 pr-8 py-2 w-52 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+              />
+              {searchTerm && (
+                <button
+                  onClick={() => { setSearchTerm(''); setDebouncedSearch(''); }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Filter button */}
+            <div className="relative">
+              <button
+                onClick={() => setFilterPanelOpen(true)}
+                className={`p-2 rounded-lg border transition-colors ${hasActiveFilters ? 'border-blue-300 bg-blue-50 text-blue-600 hover:bg-blue-100' : 'border-gray-200 hover:bg-gray-50 text-gray-500 hover:text-gray-700'}`}
+                title="Filters"
+              >
+                <Filter className="w-4 h-4" />
+              </button>
+              {hasActiveFilters && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-600 text-white text-[9px] font-bold rounded-full flex items-center justify-center pointer-events-none">
+                  {effectiveCriteria.length + (effectiveOwnerScope === 'mine' ? 1 : 0)}
+                </span>
+              )}
+            </div>
+
             {/* Gear menu */}
             <div className="relative" ref={gearRef}>
               <button
@@ -510,7 +607,6 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
                       const isActive = effectiveSorting[0]?.field === col.field;
                       const dir = isActive ? effectiveSorting[0].direction : null;
                       const width = colWidths[col.field];
-
                       return (
                         <th
                           key={col.field}
@@ -525,7 +621,6 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
                             {sortable && isActive && dir === 'asc' && <ArrowUp className="w-3 h-3 text-blue-600" />}
                             {sortable && isActive && dir === 'desc' && <ArrowDown className="w-3 h-3 text-blue-600" />}
                           </button>
-                          {/* Resize handle */}
                           <div
                             onMouseDown={e => onResizeStart(e, col.field)}
                             className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize opacity-0 group-hover:opacity-100 hover:bg-blue-300 transition-opacity"
@@ -537,34 +632,29 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {quotes.length === 0 && (
+                  {filteredQuotes.length === 0 && (
                     <tr>
                       <td colSpan={effectiveColumns.length + 1} className="px-6 py-12 text-center text-sm text-gray-500">
                         No quotes found for this view.
                       </td>
                     </tr>
                   )}
-                  {quotes.map(quote => (
+                  {filteredQuotes.map(quote => (
                     <tr key={quote.id} className="hover:bg-gray-50 transition-colors">
                       {effectiveColumns.map(col => {
                         const fieldDef = FIELD_CATALOG_MAP.get(col.field);
                         const align = fieldDef?.align || 'left';
                         const isLink = col.field === linkField;
-
                         return (
                           <td key={col.field} className={`px-4 py-3.5 whitespace-nowrap text-sm ${align === 'right' ? 'text-right' : 'text-left'}`}>
                             {isLink ? (
                               <div className="flex items-center gap-2">
-                                <button
-                                  onClick={() => onSelectQuote(quote.id)}
-                                  className="font-medium text-blue-600 hover:text-blue-800 hover:underline text-left"
-                                >
+                                <button onClick={() => onSelectQuote(quote.id)} className="font-medium text-blue-600 hover:text-blue-800 hover:underline text-left">
                                   {renderCell(quote, col.field)}
                                 </button>
                                 {quote.quote_number?.endsWith('-NEG') && (
                                   <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-800 rounded">
-                                    <GitBranch className="w-2.5 h-2.5" />
-                                    REVISION
+                                    <GitBranch className="w-2.5 h-2.5" /> REVISION
                                   </span>
                                 )}
                               </div>
@@ -579,27 +669,13 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
                           const quoteLocked = isQuoteLocked(quote.stage);
                           return (
                             <div className="flex items-center justify-end gap-1">
-                              <button
-                                onClick={() => onSelectQuote(quote.id)}
-                                title={quoteLocked ? 'View quote (locked)' : 'Edit quote'}
-                                className={`p-1.5 rounded transition-colors ${quoteLocked ? 'text-gray-400 hover:bg-gray-50' : 'text-blue-600 hover:bg-blue-50'}`}
-                              >
+                              <button onClick={() => onSelectQuote(quote.id)} title={quoteLocked ? 'View quote (locked)' : 'Edit quote'} className={`p-1.5 rounded transition-colors ${quoteLocked ? 'text-gray-400 hover:bg-gray-50' : 'text-blue-600 hover:bg-blue-50'}`}>
                                 <Pencil className="w-4 h-4" />
                               </button>
-                              <button
-                                onClick={() => handleClone(quote)}
-                                disabled={cloningId === quote.id}
-                                title="Clone quote"
-                                className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors disabled:opacity-50"
-                              >
+                              <button onClick={() => handleClone(quote)} disabled={cloningId === quote.id} title="Clone quote" className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors disabled:opacity-50">
                                 <Copy className="w-4 h-4" />
                               </button>
-                              <button
-                                onClick={() => !quoteLocked && setDeleteConfirmId(quote.id)}
-                                disabled={deletingId === quote.id || quoteLocked}
-                                title={quoteLocked ? 'Cannot delete locked quote' : 'Delete quote'}
-                                className={`p-1.5 rounded transition-colors disabled:opacity-50 ${quoteLocked ? 'text-gray-300 cursor-not-allowed' : 'text-red-500 hover:bg-red-50'}`}
-                              >
+                              <button onClick={() => !quoteLocked && setDeleteConfirmId(quote.id)} disabled={deletingId === quote.id || quoteLocked} title={quoteLocked ? 'Cannot delete locked quote' : 'Delete quote'} className={`p-1.5 rounded transition-colors disabled:opacity-50 ${quoteLocked ? 'text-gray-300 cursor-not-allowed' : 'text-red-500 hover:bg-red-50'}`}>
                                 <Trash2 className="w-4 h-4" />
                               </button>
                             </div>
@@ -638,6 +714,17 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
         columns={effectiveColumns}
         onSave={handleColumnsChange}
         isReadOnly={!canEditView(activeView)}
+      />
+
+      <FilterPanel
+        isOpen={filterPanelOpen}
+        onClose={() => setFilterPanelOpen(false)}
+        criteria={effectiveCriteria}
+        filterLogic={effectiveFilterLogic}
+        ownerScope={effectiveOwnerScope}
+        ownerProfiles={ownerProfiles}
+        isReadOnly={!canEditView(activeView)}
+        onSave={handleFilterSave}
       />
     </div>
   );
