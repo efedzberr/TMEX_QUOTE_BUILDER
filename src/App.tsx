@@ -186,6 +186,8 @@ function App() {
         version: 1,
       });
 
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+
       const { data: newQuote, error } = await supabase
         .from('quotes')
         .insert({
@@ -193,6 +195,7 @@ function App() {
           quote_name_sequence: nextSequence,
           quote_name_version: 1,
           owner_name: defaultOwner,
+          owner_user_id: currentUser?.id || null,
           status: 'New',
           stage: 'New',
           rate_type: 'Flat Rate',
@@ -264,6 +267,16 @@ function App() {
   const handleSelectQuote = (quoteId: string) => {
     setCurrentQuoteId(quoteId);
     setViewMode('builder');
+    // Track recently viewed
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await supabase.from('recent_record_views').upsert(
+          { user_id: user.id, object: 'quote', record_id: quoteId, viewed_at: new Date().toISOString() },
+          { onConflict: 'user_id,object,record_id' }
+        );
+      }
+    })();
   };
 
   const handleNavigate = (target: ViewMode) => {
