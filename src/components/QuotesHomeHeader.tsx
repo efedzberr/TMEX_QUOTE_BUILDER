@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { ChevronDown, Pin, PinOff, Search, Check, FileText } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { sortLabelFromCatalog } from '../lib/quoteFieldCatalog';
 
 export interface ListView {
   id: string;
@@ -37,6 +38,7 @@ interface QuotesHomeHeaderProps {
   onViewChange: (view: ListView) => void;
   itemCount: number;
   lastUpdated: Date | null;
+  effectiveSorting?: ListViewSort[];
 }
 
 function relativeTime(date: Date): string {
@@ -51,22 +53,9 @@ function relativeTime(date: Date): string {
   return `${days}d ago`;
 }
 
-function sortLabel(sorting: ListViewSort[]): string {
-  if (!sorting || sorting.length === 0) return 'Created Date';
-  const first = sorting[0];
-  const labels: Record<string, string> = {
-    created_at: 'Created Date',
-    quote_number: 'Quote Number',
-    total_amount: 'Total Amount',
-    stage: 'Stage',
-    owner_name: 'Owner',
-    bill_to_customer: 'Account',
-    currency: 'Currency',
-  };
-  return labels[first.field] || first.field;
-}
 
-export function QuotesHomeHeader({ activeView, onViewChange, itemCount, lastUpdated }: QuotesHomeHeaderProps) {
+
+export function QuotesHomeHeader({ activeView, onViewChange, itemCount, lastUpdated, effectiveSorting }: QuotesHomeHeaderProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [allViews, setAllViews] = useState<ListView[]>([]);
@@ -261,8 +250,8 @@ export function QuotesHomeHeader({ activeView, onViewChange, itemCount, lastUpda
 
       <p className="mt-1.5 text-xs text-gray-500">
         {itemCount} {itemCount === 1 ? 'item' : 'items'}
-        {activeView?.sorting && activeView.sorting.length > 0 && (
-          <> &bull; Sorted by {sortLabel(activeView.sorting)}</>
+        {(effectiveSorting || activeView?.sorting || []).length > 0 && (
+          <> &bull; Sorted by {sortLabelFromCatalog(effectiveSorting || activeView?.sorting || [])}</>
         )}
         {lastUpdated && (
           <> &bull; Updated {relativeTime(lastUpdated)}</>
