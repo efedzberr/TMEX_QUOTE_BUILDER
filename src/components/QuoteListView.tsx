@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { Plus, Trash2, Pencil, Copy, Lock, GitBranch, Settings, ArrowUp, ArrowDown, Columns3, RotateCcw as ResetIcon, Filter, Search, X } from 'lucide-react';
+import { Plus, Trash2, Pencil, Copy, Lock, GitBranch, Settings, ArrowUp, ArrowDown, Columns3, RotateCcw as ResetIcon, Filter, Search, X, FilePlus, Share2 } from 'lucide-react';
 import { supabase, Quote, QuoteLane } from '../lib/supabase';
 import { isQuoteLocked } from '../lib/constants';
 import { calculateQuoteReviewStatus } from '../lib/customerPortalHelpers';
 import { QuotesHomeHeader, ListView, ListViewFilter, ListViewColumn, ListViewSort } from './QuotesHomeHeader';
 import { SelectFieldsModal } from './SelectFieldsModal';
 import { FilterPanel } from './FilterPanel';
+import { ListViewModals, ViewModalType } from './ListViewModals';
 import { FIELD_CATALOG_MAP, isLinkField } from '../lib/quoteFieldCatalog';
 import { FilterCriterion, OwnerScope, applyComposedFilters } from '../lib/quoteFilterEngine';
 
@@ -52,6 +53,9 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
 
   // Select fields modal
   const [selectFieldsOpen, setSelectFieldsOpen] = useState(false);
+
+  // View management modal
+  const [viewModalType, setViewModalType] = useState<ViewModalType>(null);
 
   // Column widths
   const [colWidths, setColWidths] = useState<Record<string, number>>({});
@@ -352,6 +356,67 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
     loadWidthsForView(view.id);
   }
 
+  // --- View management handlers ---
+  function getEffectiveFiltersForSave(): ListViewFilter[] {
+    const criteria = sessionFilters?.criteria ?? activeCriteria;
+    const scope = sessionFilters?.ownerScope ?? activeOwnerScope;
+    const filters: ListViewFilter[] = [];
+    if (scope === 'mine') filters.push({ field: 'owner_user_id', operator: 'equals', value: '$CURRENT_USER' });
+    for (const c of criteria) filters.push({ field: c.field, operator: c.operator, value: c.value });
+    return filters;
+  }
+
+  function getEffectiveFilterLogicForSave(): string {
+    return sessionFilters?.filterLogic ?? activeFilterLogic;
+  }
+
+  function handleViewCreated(view: ListView) {
+    setActiveView(view);
+    setSessionColumns(null);
+    setSessionSorting(null);
+    setSessionFilters(null);
+    setReadOnlyNotice(false);
+    applyViewFilters(view);
+    loadQuotesForView(view, userId);
+    setToast('List view created');
+  }
+
+  function handleViewUpdated(view: ListView) {
+    setActiveView(view);
+    setToast('List view updated');
+  }
+
+  async function handleViewDeleted(deletedId: string) {
+    if (!userId) return;
+    // Clean stale id from recents
+    const { data: prefs } = await supabase
+      .from('user_list_view_preferences')
+      .select('pinned_list_view_id, recent_list_view_ids, display_prefs')
+      .eq('user_id', userId).eq('object', 'quote').maybeSingle();
+
+    const recentIds: string[] = (prefs?.recent_list_view_ids || []).filter((id: string) => id !== deletedId);
+    const pinnedId = prefs?.pinned_list_view_id === deletedId ? null : prefs?.pinned_list_view_id;
+
+    await supabase.from('user_list_view_preferences').upsert({
+      user_id: userId, object: 'quote',
+      pinned_list_view_id: pinnedId,
+      recent_list_view_ids: recentIds,
+      display_prefs: prefs?.display_prefs || {},
+    }, { onConflict: 'user_id,object' });
+
+    // Activate fallback: pinned view or Recently Viewed
+    const fallbackId = pinnedId || SYSTEM_VIEW_RECENT;
+    const { data: fallback } = await supabase.from('list_views').select('*').eq('id', fallbackId).maybeSingle();
+    const fb = (fallback as ListView | null);
+    if (fb) {
+      handleViewChange(fb);
+    } else {
+      const { data: allView } = await supabase.from('list_views').select('*').eq('id', SYSTEM_VIEW_ALL).maybeSingle();
+      if (allView) handleViewChange(allView as ListView);
+    }
+    setToast('List view deleted');
+  }
+
   async function loadWidthsForView(viewId: string) {
     if (!userId) return;
     const { data: prefs } = await supabase
@@ -555,7 +620,40 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
                 <Settings className="w-4 h-4" />
               </button>
               {gearOpen && (
-                <div className="absolute right-0 top-full mt-1 w-56 bg-white border border-gray-200 rounded-lg shadow-lg z-40 py-1">
+                <div className="absolute right-0 top-full mt-1 w-60 bg-white border border-gray-200 rounded-lg shadow-lg z-40 py-1">
+                  <button
+                    onClick={() => { setGearOpen(false); setViewModalType('new'); }}
+                    className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 text-left"
+                  >
+                    <FilePlus className="w-4 h-4 text-gray-400" />
+                    New
+                  </button>
+                  <button
+                    onClick={() => { setGearOpen(false); setViewModalType('clone'); }}
+                    className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 text-left"
+                  >
+                    <Copy className="w-4 h-4 text-gray-400" />
+                    Clone
+                  </button>
+                  <button
+                    onClick={() => { if (canEditView(activeView)) { setGearOpen(false); setViewModalType('rename'); } }}
+                    disabled={!canEditView(activeView)}
+                    title={activeView?.is_system ? "System views can't be modified" : undefined}
+                    className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left ${canEditView(activeView) ? 'text-gray-700 hover:bg-gray-50' : 'text-gray-300 cursor-not-allowed'}`}
+                  >
+                    <Pencil className="w-4 h-4 text-gray-400" />
+                    Rename
+                  </button>
+                  <button
+                    onClick={() => { if (canEditView(activeView)) { setGearOpen(false); setViewModalType('sharing'); } }}
+                    disabled={!canEditView(activeView)}
+                    title={activeView?.is_system ? "System views can't be modified" : undefined}
+                    className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left ${canEditView(activeView) ? 'text-gray-700 hover:bg-gray-50' : 'text-gray-300 cursor-not-allowed'}`}
+                  >
+                    <Share2 className="w-4 h-4 text-gray-400" />
+                    Sharing Settings
+                  </button>
+                  <div className="my-1 border-t border-gray-100" />
                   <button
                     onClick={() => { setGearOpen(false); setSelectFieldsOpen(true); }}
                     className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 text-left"
@@ -563,6 +661,16 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
                     <Columns3 className="w-4 h-4 text-gray-400" />
                     Select Fields to Display
                   </button>
+                  <button
+                    onClick={() => { if (canEditView(activeView)) { setGearOpen(false); setViewModalType('delete'); } }}
+                    disabled={!canEditView(activeView)}
+                    title={activeView?.is_system ? "System views can't be modified" : undefined}
+                    className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left ${canEditView(activeView) ? 'text-red-600 hover:bg-red-50' : 'text-gray-300 cursor-not-allowed'}`}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Delete
+                  </button>
+                  <div className="my-1 border-t border-gray-100" />
                   <button
                     onClick={resetSorting}
                     className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 text-left"
@@ -725,6 +833,21 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
         ownerProfiles={ownerProfiles}
         isReadOnly={!canEditView(activeView)}
         onSave={handleFilterSave}
+      />
+
+      <ListViewModals
+        modalType={viewModalType}
+        onClose={() => setViewModalType(null)}
+        activeView={activeView}
+        userId={userId}
+        isAdmin={isAdmin}
+        effectiveColumns={effectiveColumns}
+        effectiveSorting={effectiveSorting}
+        effectiveFilters={getEffectiveFiltersForSave()}
+        effectiveFilterLogic={getEffectiveFilterLogicForSave()}
+        onViewCreated={handleViewCreated}
+        onViewUpdated={handleViewUpdated}
+        onViewDeleted={handleViewDeleted}
       />
     </div>
   );
