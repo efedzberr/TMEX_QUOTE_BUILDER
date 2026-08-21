@@ -853,32 +853,6 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
                 )}
               </div>
 
-              {/* Filter button */}
-              <div className="relative">
-                <button
-                  onClick={() => setFilterPanelOpen(true)}
-                  className={`p-2 rounded-lg border transition-colors ${hasActiveFilters ? 'border-blue-300 bg-blue-50 text-blue-600 hover:bg-blue-100' : 'border-gray-200 hover:bg-gray-50 text-gray-500 hover:text-gray-700'}`}
-                  title="Filters"
-                >
-                  <Filter className="w-4 h-4" />
-                </button>
-                {hasActiveFilters && (
-                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-600 text-white text-[9px] font-bold rounded-full flex items-center justify-center pointer-events-none">
-                    {effectiveCriteria.length + (effectiveOwnerScope === 'mine' ? 1 : 0)}
-                  </span>
-                )}
-              </div>
-
-              {/* Refresh */}
-              <button
-                onClick={handleRefresh}
-                disabled={refreshing}
-                className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-500 hover:text-gray-700 transition-colors disabled:opacity-50"
-                title="Refresh"
-              >
-                <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-              </button>
-
               {/* Gear menu */}
               <div className="relative" ref={gearRef}>
                 <button
@@ -914,6 +888,32 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
                       <ResetIcon className="w-4 h-4 text-gray-400" /> Reset Column Sorting
                     </button>
                   </div>
+                )}
+              </div>
+
+              {/* Refresh */}
+              <button
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-500 hover:text-gray-700 transition-colors disabled:opacity-50"
+                title="Refresh"
+              >
+                <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+              </button>
+
+              {/* Filter button */}
+              <div className="relative">
+                <button
+                  onClick={() => setFilterPanelOpen(true)}
+                  className={`p-2 rounded-lg border transition-colors ${hasActiveFilters ? 'border-blue-300 bg-blue-50 text-blue-600 hover:bg-blue-100' : 'border-gray-200 hover:bg-gray-50 text-gray-500 hover:text-gray-700'}`}
+                  title="Filters"
+                >
+                  <Filter className="w-4 h-4" />
+                </button>
+                {hasActiveFilters && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-600 text-white text-[9px] font-bold rounded-full flex items-center justify-center pointer-events-none">
+                    {effectiveCriteria.length + (effectiveOwnerScope === 'mine' ? 1 : 0)}
+                  </span>
                 )}
               </div>
             </div>
