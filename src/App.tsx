@@ -46,12 +46,23 @@ function App() {
   const [showSendToCustomer, setShowSendToCustomer] = useState(false);
   const [showViewResponse, setShowViewResponse] = useState(false);
   const [showViewSignature, setShowViewSignature] = useState(false);
+  const [appIsAdmin, setAppIsAdmin] = useState(false);
 
   useEffect(() => {
     if (viewMode === 'builder' && currentQuoteId) {
       loadQuote(currentQuoteId);
     }
   }, [viewMode, currentQuoteId]);
+
+  useEffect(() => {
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data } = await supabase.from('user_profiles').select('is_admin').eq('id', user.id).maybeSingle();
+        if (data?.is_admin) setAppIsAdmin(true);
+      }
+    })();
+  }, []);
 
   async function loadQuote(quoteId: string) {
     setLoading(true);
@@ -1441,9 +1452,13 @@ function App() {
   };
 
   if (viewMode === 'admin') {
+    if (!appIsAdmin) {
+      setViewMode('list');
+      return null;
+    }
     return (
       <div className="flex min-h-screen">
-        <Sidebar current={viewMode} onNavigate={handleNavigate} />
+        <Sidebar current={viewMode} onNavigate={handleNavigate} isAdmin={appIsAdmin} />
         <div className="flex-1 min-w-0"><TopBar /><AdministrationView /></div>
       </div>
     );
@@ -1452,7 +1467,7 @@ function App() {
   if (viewMode === 'mass-update') {
     return (
       <div className="flex min-h-screen">
-        <Sidebar current={viewMode} onNavigate={handleNavigate} />
+        <Sidebar current={viewMode} onNavigate={handleNavigate} isAdmin={appIsAdmin} />
         <div className="flex-1 min-w-0"><TopBar /><MassUpdateView onViewLog={() => setViewMode('mass-update-log')} /></div>
       </div>
     );
@@ -1461,7 +1476,7 @@ function App() {
   if (viewMode === 'mass-update-log') {
     return (
       <div className="flex min-h-screen">
-        <Sidebar current={viewMode} onNavigate={handleNavigate} />
+        <Sidebar current={viewMode} onNavigate={handleNavigate} isAdmin={appIsAdmin} />
         <div className="flex-1 min-w-0"><TopBar /><MassUpdateLogView /></div>
       </div>
     );
@@ -1470,7 +1485,7 @@ function App() {
   if (viewMode === 'home') {
     return (
       <div className="flex min-h-screen">
-        <Sidebar current={viewMode} onNavigate={handleNavigate} />
+        <Sidebar current={viewMode} onNavigate={handleNavigate} isAdmin={appIsAdmin} />
         <div className="flex-1 min-w-0"><TopBar />
           <DashboardView onNavigate={handleNavigate} onCreateQuote={() => setShowNewQuoteForm(true)} onOpenQuote={handleSelectQuote} />
           <NewQuoteModal
@@ -1487,7 +1502,7 @@ function App() {
   if (viewMode === 'dashboards') {
     return (
       <div className="flex min-h-screen">
-        <Sidebar current={viewMode} onNavigate={handleNavigate} />
+        <Sidebar current={viewMode} onNavigate={handleNavigate} isAdmin={appIsAdmin} />
         <div className="flex-1 min-w-0"><TopBar /><DashboardsView /></div>
       </div>
     );
@@ -1496,7 +1511,7 @@ function App() {
   if (viewMode === 'customers') {
     return (
       <div className="flex min-h-screen">
-        <Sidebar current={viewMode} onNavigate={handleNavigate} />
+        <Sidebar current={viewMode} onNavigate={handleNavigate} isAdmin={appIsAdmin} />
         <div className="flex-1 min-w-0"><TopBar /><CustomersView /></div>
       </div>
     );
@@ -1505,7 +1520,7 @@ function App() {
   if (viewMode === 'import') {
     return (
       <div className="flex min-h-screen">
-        <Sidebar current={viewMode} onNavigate={handleNavigate} />
+        <Sidebar current={viewMode} onNavigate={handleNavigate} isAdmin={appIsAdmin} />
         <div className="flex-1 min-w-0"><TopBar /><ImportView onCreateQuote={() => setShowNewQuoteForm(true)} />
           <NewQuoteModal
             isOpen={showNewQuoteForm}
@@ -1520,7 +1535,7 @@ function App() {
   if (viewMode === 'list') {
     return (
       <div className="flex min-h-screen">
-        <Sidebar current={viewMode} onNavigate={handleNavigate} />
+        <Sidebar current={viewMode} onNavigate={handleNavigate} isAdmin={appIsAdmin} />
         <div className="flex-1 min-w-0"><TopBar />
           <QuoteListView
             onCreateNew={() => setShowNewQuoteForm(true)}
@@ -1559,7 +1574,7 @@ function App() {
     const bmIndex = lanes.findIndex(l => l.id === benchmarkLane.id);
     return (
       <div className="flex min-h-screen">
-        <Sidebar current={viewMode} onNavigate={handleNavigate} />
+        <Sidebar current={viewMode} onNavigate={handleNavigate} isAdmin={appIsAdmin} />
         <div className="flex-1 min-w-0"><TopBar />
           <BenchmarkDashboard
             lane={benchmarkLane}
@@ -1583,7 +1598,7 @@ function App() {
 
   return (
     <div className="flex min-h-screen">
-      <Sidebar current={viewMode} onNavigate={handleNavigate} />
+      <Sidebar current={viewMode} onNavigate={handleNavigate} isAdmin={appIsAdmin} />
       <div className="flex-1 min-w-0"><TopBar />
         <div className="min-h-screen bg-gray-50">
 

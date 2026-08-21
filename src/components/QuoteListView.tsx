@@ -801,116 +801,122 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
             filterCount={effectiveCriteria.length + (effectiveOwnerScope === 'mine' ? 1 : 0)}
             hasSearch={debouncedSearch.trim().length > 0}
           />
-          <div className="flex items-center gap-2 shrink-0">
-            {/* Selection chip */}
-            {selectedIds.size > 0 && (
-              <div className="flex items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200 rounded-lg">
-                  {selectedIds.size} selected
-                  <button onClick={clearSelection} className="hover:text-blue-900"><X className="w-3 h-3" /></button>
-                </span>
-                <button
-                  onClick={() => setBulkDeleteOpen(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  Delete selected
-                </button>
-              </div>
-            )}
-
-            {selectionCapHit && (
-              <span className="text-[10px] text-amber-600">Max {SELECTION_CAP} rows</span>
-            )}
-
-            {/* Search */}
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                placeholder="Search this list..."
-                className="pl-8 pr-8 py-2 w-52 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-              />
-              {searchTerm && (
-                <button onClick={() => { setSearchTerm(''); setDebouncedSearch(''); }} className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-gray-400 hover:text-gray-600">
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
-
-            {/* Filter button */}
-            <div className="relative">
-              <button
-                onClick={() => setFilterPanelOpen(true)}
-                className={`p-2 rounded-lg border transition-colors ${hasActiveFilters ? 'border-blue-300 bg-blue-50 text-blue-600 hover:bg-blue-100' : 'border-gray-200 hover:bg-gray-50 text-gray-500 hover:text-gray-700'}`}
-                title="Filters"
-              >
-                <Filter className="w-4 h-4" />
-              </button>
-              {hasActiveFilters && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-600 text-white text-[9px] font-bold rounded-full flex items-center justify-center pointer-events-none">
-                  {effectiveCriteria.length + (effectiveOwnerScope === 'mine' ? 1 : 0)}
-                </span>
-              )}
-            </div>
-
-            {/* Refresh */}
-            <button
-              onClick={handleRefresh}
-              disabled={refreshing}
-              className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-500 hover:text-gray-700 transition-colors disabled:opacity-50"
-              title="Refresh"
-            >
-              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-            </button>
-
-            {/* Gear menu */}
-            <div className="relative" ref={gearRef}>
-              <button
-                onClick={() => setGearOpen(!gearOpen)}
-                className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-500 hover:text-gray-700 transition-colors"
-                title="View options"
-              >
-                <Settings className="w-4 h-4" />
-              </button>
-              {gearOpen && (
-                <div className="absolute right-0 top-full mt-1 w-60 bg-white border border-gray-200 rounded-lg shadow-lg z-40 py-1">
-                  <button onClick={() => { setGearOpen(false); setViewModalType('new'); }} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 text-left">
-                    <FilePlus className="w-4 h-4 text-gray-400" /> New
-                  </button>
-                  <button onClick={() => { setGearOpen(false); setViewModalType('clone'); }} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 text-left">
-                    <Copy className="w-4 h-4 text-gray-400" /> Clone
-                  </button>
-                  <button onClick={() => { if (canEditView(activeView)) { setGearOpen(false); setViewModalType('rename'); } }} disabled={!canEditView(activeView)} title={activeView?.is_system ? "System views can't be modified" : undefined} className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left ${canEditView(activeView) ? 'text-gray-700 hover:bg-gray-50' : 'text-gray-300 cursor-not-allowed'}`}>
-                    <Pencil className="w-4 h-4 text-gray-400" /> Rename
-                  </button>
-                  <button onClick={() => { if (canEditView(activeView)) { setGearOpen(false); setViewModalType('sharing'); } }} disabled={!canEditView(activeView)} title={activeView?.is_system ? "System views can't be modified" : undefined} className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left ${canEditView(activeView) ? 'text-gray-700 hover:bg-gray-50' : 'text-gray-300 cursor-not-allowed'}`}>
-                    <Share2 className="w-4 h-4 text-gray-400" /> Sharing Settings
-                  </button>
-                  <div className="my-1 border-t border-gray-100" />
-                  <button onClick={() => { setGearOpen(false); setSelectFieldsOpen(true); }} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 text-left">
-                    <Columns3 className="w-4 h-4 text-gray-400" /> Select Fields to Display
-                  </button>
-                  <button onClick={() => { if (canEditView(activeView)) { setGearOpen(false); setViewModalType('delete'); } }} disabled={!canEditView(activeView)} title={activeView?.is_system ? "System views can't be modified" : undefined} className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left ${canEditView(activeView) ? 'text-red-600 hover:bg-red-50' : 'text-gray-300 cursor-not-allowed'}`}>
-                    <Trash2 className="w-4 h-4" /> Delete
-                  </button>
-                  <div className="my-1 border-t border-gray-100" />
-                  <button onClick={resetSorting} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 text-left">
-                    <ResetIcon className="w-4 h-4 text-gray-400" /> Reset Column Sorting
+          <div className="flex flex-col items-end gap-2 shrink-0">
+            {/* Top row: primary actions */}
+            <div className="flex items-center gap-2 flex-wrap justify-end">
+              {/* Selection chip */}
+              {selectedIds.size > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200 rounded-lg">
+                    {selectedIds.size} selected
+                    <button onClick={clearSelection} className="hover:text-blue-900"><X className="w-3 h-3" /></button>
+                  </span>
+                  <button
+                    onClick={() => setBulkDeleteOpen(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Delete selected
                   </button>
                 </div>
               )}
+
+              {selectionCapHit && (
+                <span className="text-[10px] text-amber-600">Max {SELECTION_CAP} rows</span>
+              )}
+
+              <button
+                onClick={onCreateNew}
+                className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+              >
+                <Plus className="w-4 h-4" />
+                New Quote
+              </button>
             </div>
 
-            <button
-              onClick={onCreateNew}
-              className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
-            >
-              <Plus className="w-4 h-4" />
-              New Quote
-            </button>
+            {/* Second row: list controls */}
+            <div className="flex items-center gap-2 flex-wrap justify-end">
+              {/* Search */}
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                  placeholder="Search this list..."
+                  className="pl-8 pr-8 py-2 w-52 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                />
+                {searchTerm && (
+                  <button onClick={() => { setSearchTerm(''); setDebouncedSearch(''); }} className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-gray-400 hover:text-gray-600">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Filter button */}
+              <div className="relative">
+                <button
+                  onClick={() => setFilterPanelOpen(true)}
+                  className={`p-2 rounded-lg border transition-colors ${hasActiveFilters ? 'border-blue-300 bg-blue-50 text-blue-600 hover:bg-blue-100' : 'border-gray-200 hover:bg-gray-50 text-gray-500 hover:text-gray-700'}`}
+                  title="Filters"
+                >
+                  <Filter className="w-4 h-4" />
+                </button>
+                {hasActiveFilters && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-600 text-white text-[9px] font-bold rounded-full flex items-center justify-center pointer-events-none">
+                    {effectiveCriteria.length + (effectiveOwnerScope === 'mine' ? 1 : 0)}
+                  </span>
+                )}
+              </div>
+
+              {/* Refresh */}
+              <button
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-500 hover:text-gray-700 transition-colors disabled:opacity-50"
+                title="Refresh"
+              >
+                <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+              </button>
+
+              {/* Gear menu */}
+              <div className="relative" ref={gearRef}>
+                <button
+                  onClick={() => setGearOpen(!gearOpen)}
+                  className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-500 hover:text-gray-700 transition-colors"
+                  title="View options"
+                >
+                  <Settings className="w-4 h-4" />
+                </button>
+                {gearOpen && (
+                  <div className="absolute right-0 top-full mt-1 w-60 bg-white border border-gray-200 rounded-lg shadow-lg z-40 py-1">
+                    <button onClick={() => { setGearOpen(false); setViewModalType('new'); }} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 text-left">
+                      <FilePlus className="w-4 h-4 text-gray-400" /> New
+                    </button>
+                    <button onClick={() => { setGearOpen(false); setViewModalType('clone'); }} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 text-left">
+                      <Copy className="w-4 h-4 text-gray-400" /> Clone
+                    </button>
+                    <button onClick={() => { if (canEditView(activeView)) { setGearOpen(false); setViewModalType('rename'); } }} disabled={!canEditView(activeView)} title={activeView?.is_system ? "System views can't be modified" : undefined} className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left ${canEditView(activeView) ? 'text-gray-700 hover:bg-gray-50' : 'text-gray-300 cursor-not-allowed'}`}>
+                      <Pencil className="w-4 h-4 text-gray-400" /> Rename
+                    </button>
+                    <button onClick={() => { if (canEditView(activeView)) { setGearOpen(false); setViewModalType('sharing'); } }} disabled={!canEditView(activeView)} title={activeView?.is_system ? "System views can't be modified" : undefined} className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left ${canEditView(activeView) ? 'text-gray-700 hover:bg-gray-50' : 'text-gray-300 cursor-not-allowed'}`}>
+                      <Share2 className="w-4 h-4 text-gray-400" /> Sharing Settings
+                    </button>
+                    <div className="my-1 border-t border-gray-100" />
+                    <button onClick={() => { setGearOpen(false); setSelectFieldsOpen(true); }} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 text-left">
+                      <Columns3 className="w-4 h-4 text-gray-400" /> Select Fields to Display
+                    </button>
+                    <button onClick={() => { if (canEditView(activeView)) { setGearOpen(false); setViewModalType('delete'); } }} disabled={!canEditView(activeView)} title={activeView?.is_system ? "System views can't be modified" : undefined} className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left ${canEditView(activeView) ? 'text-red-600 hover:bg-red-50' : 'text-gray-300 cursor-not-allowed'}`}>
+                      <Trash2 className="w-4 h-4" /> Delete
+                    </button>
+                    <div className="my-1 border-t border-gray-100" />
+                    <button onClick={resetSorting} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 text-left">
+                      <ResetIcon className="w-4 h-4 text-gray-400" /> Reset Column Sorting
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
 

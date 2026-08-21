@@ -8,21 +8,23 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string }>;
   viewMode: ViewMode;
   pinBottom?: boolean;
+  adminOnly?: boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
   { id: 'home', label: 'Home', icon: LayoutDashboard, viewMode: 'home' },
-  { id: 'dashboards', label: 'Dashboards', icon: BarChart3, viewMode: 'dashboards' },
   { id: 'quotes', label: 'Quotes', icon: FileText, viewMode: 'list' },
   { id: 'mass-update', label: 'Mass Update', icon: Layers, viewMode: 'mass-update' },
   { id: 'customers', label: 'Customers', icon: Users, viewMode: 'customers' },
-  { id: 'admin', label: 'Admin', icon: Settings, viewMode: 'admin' },
+  { id: 'dashboards', label: 'Dashboards', icon: BarChart3, viewMode: 'dashboards' },
+  { id: 'admin', label: 'Admin', icon: Settings, viewMode: 'admin', adminOnly: true },
   { id: 'import', label: 'Import', icon: Upload, viewMode: 'import', pinBottom: true },
 ];
 
 interface SidebarProps {
   current: ViewMode;
   onNavigate: (v: ViewMode) => void;
+  isAdmin?: boolean;
 }
 
 function isActive(current: ViewMode, itemViewMode: ViewMode): boolean {
@@ -31,8 +33,8 @@ function isActive(current: ViewMode, itemViewMode: ViewMode): boolean {
   return current === itemViewMode;
 }
 
-export function Sidebar({ current, onNavigate }: SidebarProps) {
-  const topItems = NAV_ITEMS.filter(i => !i.pinBottom);
+export function Sidebar({ current, onNavigate, isAdmin = false }: SidebarProps) {
+  const topItems = NAV_ITEMS.filter(i => !i.pinBottom && (!i.adminOnly || isAdmin));
   const bottomItems = NAV_ITEMS.filter(i => i.pinBottom);
 
   return (
