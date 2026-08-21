@@ -6,9 +6,10 @@ import { EQUIPMENT_TYPES } from '../lib/constants';
 import { AccountLanesTab } from './admin/AccountLanesTab';
 import { CostStructureTab } from './admin/CostStructureTab';
 import { MarketInformationTab } from './admin/MarketInformationTab';
+import { UsersTab } from './admin/UsersTab';
 
 
-type AdminTab = 'accounts' | 'bill_to' | 'shippers' | 'cities' | 'global_variables' | 'border_crossings' | 'accessorials' | 'terms_conditions' | 'account_lanes' | 'cost_structure' | 'market_information';
+type AdminTab = 'accounts' | 'bill_to' | 'shippers' | 'cities' | 'global_variables' | 'border_crossings' | 'accessorials' | 'terms_conditions' | 'account_lanes' | 'cost_structure' | 'market_information' | 'users';
 
 
 interface BillTo {
@@ -1674,6 +1675,7 @@ const TABS: { id: AdminTab; label: string }[] = [
   { id: 'account_lanes', label: 'Account Lanes' },
   { id: 'cost_structure', label: 'Cost Structure' },
   { id: 'market_information', label: 'Market Information' },
+  { id: 'users', label: 'Users' },
 ];
 
 export function AdministrationView() {
@@ -1733,6 +1735,7 @@ export function AdministrationView() {
             {activeTab === 'account_lanes' && <AccountLanesTab onToast={handleToast} />}
             {activeTab === 'cost_structure' && <CostStructureTab onToast={handleToast} />}
             {activeTab === 'market_information' && <MarketInformationTab onToast={handleToast} />}
+            {activeTab === 'users' && <UsersTab onToast={handleToast} />}
           </div>
         </div>
       </div>
