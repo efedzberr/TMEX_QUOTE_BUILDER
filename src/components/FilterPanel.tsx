@@ -5,6 +5,11 @@ import {
   FilterCriterion, OwnerScope, getOperatorsForType,
   getPicklistValues, validateFilterLogic, rewriteFilterLogicOnRemove,
 } from '../lib/quoteFilterEngine';
+import {
+  RELATIVE_TOKENS_BY_UNIT, RELATIVE_TOKEN_MAP, RelativeUnit,
+  parseRelativeValue, serializeRelativeValue, isValidRelativeN,
+  RelativeValue,
+} from '../lib/relativeDates';
 
 interface FilterPanelProps {
   isOpen: boolean;
@@ -83,6 +88,17 @@ export function FilterPanel({ isOpen, onClose, criteria, filterLogic, ownerScope
 
   function handleSave() {
     if (logicError) return;
+    // Block save if any relative-date criterion has invalid N
+    for (const c of localCriteria) {
+      const fd = QUOTE_FIELD_CATALOG.find(f => f.key === c.field);
+      if (fd && (fd.dataType === 'date' || fd.dataType === 'datetime')) {
+        const rel = parseRelativeValue(c.value);
+        if (rel) {
+          const def = RELATIVE_TOKEN_MAP.get(rel.token);
+          if (def?.takesN && !isValidRelativeN(rel.n)) return;
+        }
+      }
+    }
     onSave(localCriteria, localLogic, localScope);
     onClose();
   }
@@ -228,6 +244,30 @@ function CriterionRow({ index, criterion, ownerProfiles, onUpdate, onRemove }: {
   const operators = fieldDef ? getOperatorsForType(fieldDef.dataType) : [];
   const picklistValues = criterion.field ? getPicklistValues(criterion.field) : null;
   const isOwnerField = criterion.field === 'owner_name';
+  const isDateField = fieldDef?.dataType === 'date' || fieldDef?.dataType === 'datetime';
+
+  const relValue = isDateField ? parseRelativeValue(criterion.value) : null;
+  const dateMode: 'specific' | 'relative' = relValue ? 'relative' : 'specific';
+
+  function setDateMode(mode: 'specific' | 'relative') {
+    if (mode === 'specific') {
+      onUpdate({ value: '' });
+    } else {
+      onUpdate({ value: serializeRelativeValue({ token: 'TODAY' }) });
+    }
+  }
+
+  function updateRelativeToken(token: string) {
+    const def = RELATIVE_TOKEN_MAP.get(token);
+    const newVal: RelativeValue = { token };
+    if (def?.takesN) newVal.n = relValue?.n || 7;
+    onUpdate({ value: serializeRelativeValue(newVal) });
+  }
+
+  function updateRelativeN(n: number) {
+    if (!relValue) return;
+    onUpdate({ value: serializeRelativeValue({ token: relValue.token, n }) });
+  }
 
   return (
     <div className="p-3 rounded-lg border border-gray-200 bg-gray-50/50 space-y-2">
@@ -280,12 +320,15 @@ function CriterionRow({ index, criterion, ownerProfiles, onUpdate, onRemove }: {
             <option key={p.id} value={p.display_name}>{p.display_name}</option>
           ))}
         </select>
-      ) : fieldDef?.dataType === 'date' || fieldDef?.dataType === 'datetime' ? (
-        <input
-          type="date"
-          value={criterion.value}
-          onChange={e => onUpdate({ value: e.target.value })}
-          className="w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-blue-300"
+      ) : isDateField ? (
+        <DateValueInput
+          mode={dateMode}
+          onModeChange={setDateMode}
+          specificValue={dateMode === 'specific' ? criterion.value : ''}
+          onSpecificChange={v => onUpdate({ value: v })}
+          relativeValue={relValue}
+          onTokenChange={updateRelativeToken}
+          onNChange={updateRelativeN}
         />
       ) : fieldDef?.dataType === 'number' || fieldDef?.dataType === 'currency' ? (
         <input
@@ -304,6 +347,91 @@ function CriterionRow({ index, criterion, ownerProfiles, onUpdate, onRemove }: {
           placeholder="Enter value"
           className="w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-blue-300"
         />
+      )}
+    </div>
+  );
+}
+
+// --- Date value input with specific/relative modes ---
+
+const UNIT_LABELS: Record<RelativeUnit, string> = {
+  day: 'Day',
+  week: 'Week',
+  month: 'Month',
+  quarter: 'Quarter',
+  year: 'Year',
+};
+
+function DateValueInput({ mode, onModeChange, specificValue, onSpecificChange, relativeValue, onTokenChange, onNChange }: {
+  mode: 'specific' | 'relative';
+  onModeChange: (m: 'specific' | 'relative') => void;
+  specificValue: string;
+  onSpecificChange: (v: string) => void;
+  relativeValue: RelativeValue | null;
+  onTokenChange: (token: string) => void;
+  onNChange: (n: number) => void;
+}) {
+  const currentDef = relativeValue ? RELATIVE_TOKEN_MAP.get(relativeValue.token) : null;
+  const nValid = !currentDef?.takesN || isValidRelativeN(relativeValue?.n);
+
+  return (
+    <div className="space-y-2">
+      {/* Mode toggle */}
+      <div className="flex rounded-md border border-gray-200 overflow-hidden">
+        <button
+          type="button"
+          onClick={() => onModeChange('specific')}
+          className={`flex-1 px-2.5 py-1 text-xs font-medium transition-colors ${mode === 'specific' ? 'bg-blue-50 text-blue-700 border-r border-gray-200' : 'bg-white text-gray-500 hover:bg-gray-50 border-r border-gray-200'}`}
+        >
+          Specific date
+        </button>
+        <button
+          type="button"
+          onClick={() => onModeChange('relative')}
+          className={`flex-1 px-2.5 py-1 text-xs font-medium transition-colors ${mode === 'relative' ? 'bg-blue-50 text-blue-700' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
+        >
+          Relative value
+        </button>
+      </div>
+
+      {mode === 'specific' ? (
+        <input
+          type="date"
+          value={specificValue}
+          onChange={e => onSpecificChange(e.target.value)}
+          className="w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-blue-300"
+        />
+      ) : (
+        <div className="space-y-1.5">
+          <select
+            value={relativeValue?.token || 'TODAY'}
+            onChange={e => onTokenChange(e.target.value)}
+            className="w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-blue-300"
+          >
+            {(Object.keys(RELATIVE_TOKENS_BY_UNIT) as RelativeUnit[]).map(unit => (
+              <optgroup key={unit} label={UNIT_LABELS[unit]}>
+                {RELATIVE_TOKENS_BY_UNIT[unit].map(t => (
+                  <option key={t.token} value={t.token}>{t.label}</option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+          {currentDef?.takesN && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-500 shrink-0">N =</span>
+              <input
+                type="number"
+                min={1}
+                value={relativeValue?.n ?? ''}
+                onChange={e => onNChange(parseInt(e.target.value, 10) || 0)}
+                className={`w-20 px-2.5 py-1.5 text-sm border rounded-md bg-white focus:outline-none focus:ring-1 ${!nValid ? 'border-red-300 focus:ring-red-200' : 'border-gray-200 focus:ring-blue-300'}`}
+              />
+              {!nValid && (
+                <span className="text-[10px] text-red-500">Must be 1 or more</span>
+              )}
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

@@ -1,4 +1,5 @@
 import { FIELD_CATALOG_MAP, FieldDataType } from './quoteFieldCatalog';
+import { parseRelativeValue, resolveRelativeRange } from './relativeDates';
 
 export interface FilterCriterion {
   id: string;
@@ -117,8 +118,24 @@ function evaluateCriterion(record: Record<string, unknown>, criterion: FilterCri
 
   if (fieldDef.dataType === 'date' || fieldDef.dataType === 'datetime') {
     const d = new Date(String(raw ?? ''));
+    if (isNaN(d.getTime())) return false;
+
+    const rel = parseRelativeValue(val);
+    if (rel) {
+      const range = resolveRelativeRange(rel.token, rel.n ?? 1);
+      const ts = d.getTime();
+      switch (criterion.operator) {
+        case 'equals': return ts >= range.start.getTime() && ts < range.end.getTime();
+        case 'before': return ts < range.start.getTime();
+        case 'after': return ts >= range.end.getTime();
+        case 'on_or_before': return ts < range.end.getTime();
+        case 'on_or_after': return ts >= range.start.getTime();
+        default: return true;
+      }
+    }
+
     const v = new Date(val);
-    if (isNaN(d.getTime()) || isNaN(v.getTime())) return false;
+    if (isNaN(v.getTime())) return false;
     const dDay = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
     const vDay = new Date(v.getFullYear(), v.getMonth(), v.getDate()).getTime();
     switch (criterion.operator) {
