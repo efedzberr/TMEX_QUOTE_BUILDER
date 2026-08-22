@@ -17,43 +17,65 @@ function jsonResponse(body: unknown, status = 200) {
 
 async function verifyAdmin(
   serviceClient: ReturnType<typeof createClient>,
-  authHeader: string | null
+  authHeader: string | null,
+  supabaseUrl: string,
+  anonKey: string
 ): Promise<{ callerId: string } | Response> {
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return jsonResponse({ error: "Missing or invalid Authorization header" }, 403);
+    console.log("[admin-users] REJECT: missing/invalid Authorization header");
+    return jsonResponse({ error: "invalid_token", message: "Missing or invalid Authorization header" }, 403);
   }
 
   const token = authHeader.replace("Bearer ", "");
 
+  // Resolve caller identity via service client (trusted)
   const { data: { user }, error: userErr } = await serviceClient.auth.getUser(token);
   if (userErr || !user) {
-    return jsonResponse({ error: "Invalid token" }, 403);
+    console.log("[admin-users] REJECT: invalid token -", userErr?.message || "no user");
+    return jsonResponse({ error: "invalid_token", message: "Invalid or expired token" }, 403);
   }
 
-  // Verify AAL2 (MFA completed)
-  const aal = user.aal;
-  if (aal !== "aal2") {
-    // Also check the amr array for a totp entry as a fallback
-    const hasTotp = (user.amr || []).some(
-      (f: { method: string }) => f.method === "totp"
-    );
-    if (!hasTotp) {
-      return jsonResponse({ error: "MFA (AAL2) required" }, 403);
-    }
-  }
+  const callerId = user.id;
 
   // Check is_admin in user_profiles
   const { data: profile, error: profileErr } = await serviceClient
     .from("user_profiles")
     .select("is_admin")
-    .eq("id", user.id)
+    .eq("id", callerId)
     .maybeSingle();
 
-  if (profileErr || !profile || !profile.is_admin) {
-    return jsonResponse({ error: "Admin access required" }, 403);
+  const isAdmin = profile?.is_admin === true;
+  if (profileErr || !isAdmin) {
+    console.log(`[admin-users] REJECT: not_admin | user=${callerId} | profile_found=${!!profile} | is_admin=${profile?.is_admin}`);
+    return jsonResponse({ error: "not_admin", message: "Admin access required" }, 403);
   }
 
-  return { callerId: user.id };
+  // Verify AAL2 using a caller-scoped client with getAuthenticatorAssuranceLevel()
+  const callerClient = createClient(supabaseUrl, anonKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+    global: { headers: { Authorization: `Bearer ${token}` } },
+  });
+
+  let resolvedAal = "unknown";
+
+  const { data: aalData, error: aalErr } = await callerClient.auth.mfa.getAuthenticatorAssuranceLevel();
+  if (!aalErr && aalData) {
+    resolvedAal = aalData.currentLevel || "unknown";
+  }
+
+  // Fallback: if the API didn't return a clear level, check AMR from the user object
+  if (resolvedAal === "unknown" || resolvedAal === "null") {
+    const amr = (user as any).amr || [];
+    const hasTotp = amr.some((f: { method: string }) => f.method === "totp");
+    resolvedAal = hasTotp ? "aal2" : "aal1";
+  }
+
+  if (resolvedAal !== "aal2") {
+    console.log(`[admin-users] REJECT: aal2_required | user=${callerId} | is_admin=true | aal=${resolvedAal}`);
+    return jsonResponse({ error: "aal2_required", message: "MFA (AAL2) required" }, 403);
+  }
+
+  return { callerId };
 }
 
 // --- Action handlers ---
@@ -274,6 +296,7 @@ Deno.serve(async (req: Request) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
     const serviceClient = createClient(supabaseUrl, serviceRoleKey, {
       auth: { autoRefreshToken: false, persistSession: false },
@@ -281,7 +304,7 @@ Deno.serve(async (req: Request) => {
 
     // Verify caller is admin with AAL2
     const authHeader = req.headers.get("Authorization");
-    const verification = await verifyAdmin(serviceClient, authHeader);
+    const verification = await verifyAdmin(serviceClient, authHeader, supabaseUrl, anonKey);
     if (verification instanceof Response) return verification;
 
     const { callerId } = verification;
