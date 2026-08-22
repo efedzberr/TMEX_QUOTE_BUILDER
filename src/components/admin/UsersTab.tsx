@@ -472,6 +472,3 @@ function ConfirmActionModal({ action, onConfirm, onCancel }: { action: { type: s
     </div>
   );
 }
-
-
-export { UsersTab }
