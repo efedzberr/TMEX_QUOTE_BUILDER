@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { Search, X, UserPlus, Shield, ShieldOff, Ban, CheckCircle, KeyRound, MoreHorizontal, Users } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { Search, X, UserPlus, Shield, ShieldOff, Ban, CheckCircle, KeyRound, MoreHorizontal, Users, Trash2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/AuthContext';
 
@@ -33,7 +33,7 @@ async function callAdminUsers(action: string, payload: Record<string, unknown> =
   });
 
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+  if (!res.ok) throw new Error(data.message || data.error || `Error ${res.status}`);
   return data;
 }
 
@@ -46,8 +46,9 @@ export function UsersTab({ onToast }: UsersTabProps) {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [showInvite, setShowInvite] = useState(false);
-  const [actionMenuId, setActionMenuId] = useState<string | null>(null);
   const [confirmAction, setConfirmAction] = useState<{ type: string; user: UserRow } | null>(null);
+  const [actionMenuId, setActionMenuId] = useState<string | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   async function loadUsers() {
@@ -65,15 +66,38 @@ export function UsersTab({ onToast }: UsersTabProps) {
 
   useEffect(() => { loadUsers(); }, []);
 
+  const closeMenu = useCallback(() => {
+    setActionMenuId(null);
+    setMenuPos(null);
+  }, []);
+
   useEffect(() => {
+    if (!actionMenuId) return;
     function handleClick(e: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setActionMenuId(null);
+        closeMenu();
       }
     }
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') closeMenu();
+    }
     document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, []);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('mousedown', handleClick);
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, [actionMenuId, closeMenu]);
+
+  function openMenu(userId: string, buttonEl: HTMLButtonElement) {
+    if (actionMenuId === userId) {
+      closeMenu();
+      return;
+    }
+    const rect = buttonEl.getBoundingClientRect();
+    setMenuPos({ top: rect.bottom + 4, left: rect.right - 208 });
+    setActionMenuId(userId);
+  }
 
   const filtered = users
     .filter(u => {
@@ -99,10 +123,10 @@ export function UsersTab({ onToast }: UsersTabProps) {
   }
 
   async function handleToggleActive(user: UserRow) {
-    const active = !isActive(user);
+    const currentlyActive = isActive(user);
     try {
-      await callAdminUsers('set_active', { user_id: user.id, active: !active ? false : true });
-      onToast(`${user.display_name || user.email} ${!active ? 'deactivated' : 'activated'}`, 'success');
+      await callAdminUsers('set_active', { user_id: user.id, active: !currentlyActive });
+      onToast(`${user.display_name || user.email} ${currentlyActive ? 'deactivated' : 'activated'}`, 'success');
       loadUsers();
     } catch (e: any) {
       onToast(e.message, 'error');
@@ -119,6 +143,16 @@ export function UsersTab({ onToast }: UsersTabProps) {
     }
   }
 
+  async function handleDelete(user: UserRow) {
+    try {
+      await callAdminUsers('delete', { user_id: user.id });
+      onToast(`${user.display_name || user.email} has been permanently deleted.`, 'success');
+      loadUsers();
+    } catch (e: any) {
+      onToast(e.message, 'error');
+    }
+  }
+
   function executeConfirm() {
     if (!confirmAction) return;
     const { type, user } = confirmAction;
@@ -126,7 +160,10 @@ export function UsersTab({ onToast }: UsersTabProps) {
     if (type === 'toggle_admin') handleToggleAdmin(user);
     else if (type === 'toggle_active') handleToggleActive(user);
     else if (type === 'reset_mfa') handleResetMfa(user);
+    else if (type === 'delete') handleDelete(user);
   }
+
+  const menuUser = actionMenuId ? users.find(u => u.id === actionMenuId) : null;
 
   return (
     <div>
@@ -207,42 +244,13 @@ export function UsersTab({ onToast }: UsersTabProps) {
                     <td className="px-4 py-3 text-gray-500 text-xs">
                       {user.last_sign_in_at ? new Date(user.last_sign_in_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Never'}
                     </td>
-                    <td className="px-4 py-3 text-center relative">
+                    <td className="px-4 py-3 text-center">
                       <button
-                        onClick={() => setActionMenuId(actionMenuId === user.id ? null : user.id)}
+                        onClick={(e) => openMenu(user.id, e.currentTarget)}
                         className="p-1.5 rounded hover:bg-gray-100 text-gray-500"
                       >
                         <MoreHorizontal className="w-4 h-4" />
                       </button>
-                      {actionMenuId === user.id && (
-                        <div ref={menuRef} className="absolute right-4 top-full mt-1 w-52 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1">
-                          <button
-                            onClick={() => { setActionMenuId(null); setConfirmAction({ type: 'toggle_admin', user }); }}
-                            disabled={isSelf}
-                            title={isSelf ? "You can't change your own role" : undefined}
-                            className={`w-full flex items-center gap-2 px-4 py-2 text-sm text-left ${isSelf ? 'text-gray-300 cursor-not-allowed' : 'text-gray-700 hover:bg-gray-50'}`}
-                          >
-                            {user.is_admin ? <ShieldOff className="w-4 h-4 text-gray-400" /> : <Shield className="w-4 h-4 text-gray-400" />}
-                            {user.is_admin ? 'Remove Admin' : 'Make Admin'}
-                          </button>
-                          <button
-                            onClick={() => { setActionMenuId(null); setConfirmAction({ type: 'toggle_active', user }); }}
-                            disabled={isSelf}
-                            title={isSelf ? "You can't deactivate your own account" : undefined}
-                            className={`w-full flex items-center gap-2 px-4 py-2 text-sm text-left ${isSelf ? 'text-gray-300 cursor-not-allowed' : 'text-gray-700 hover:bg-gray-50'}`}
-                          >
-                            {active ? <Ban className="w-4 h-4 text-gray-400" /> : <CheckCircle className="w-4 h-4 text-gray-400" />}
-                            {active ? 'Deactivate' : 'Activate'}
-                          </button>
-                          <button
-                            onClick={() => { setActionMenuId(null); setConfirmAction({ type: 'reset_mfa', user }); }}
-                            className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left"
-                          >
-                            <KeyRound className="w-4 h-4 text-gray-400" />
-                            Reset 2FA
-                          </button>
-                        </div>
-                      )}
                     </td>
                   </tr>
                 );
@@ -252,6 +260,44 @@ export function UsersTab({ onToast }: UsersTabProps) {
               )}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Portal-based dropdown menu */}
+      {actionMenuId && menuPos && menuUser && (
+        <div
+          ref={menuRef}
+          className="fixed w-52 bg-white border border-gray-200 rounded-lg shadow-lg z-[9999] py-1"
+          style={{ top: menuPos.top, left: menuPos.left }}
+        >
+          <MenuButton
+            icon={menuUser.is_admin ? <ShieldOff className="w-4 h-4 text-gray-400" /> : <Shield className="w-4 h-4 text-gray-400" />}
+            label={menuUser.is_admin ? 'Remove Admin' : 'Make Admin'}
+            disabled={menuUser.id === currentUserId}
+            tooltip="You can't change your own role"
+            onClick={() => { closeMenu(); setConfirmAction({ type: 'toggle_admin', user: menuUser }); }}
+          />
+          <MenuButton
+            icon={isActive(menuUser) ? <Ban className="w-4 h-4 text-gray-400" /> : <CheckCircle className="w-4 h-4 text-gray-400" />}
+            label={isActive(menuUser) ? 'Deactivate' : 'Activate'}
+            disabled={menuUser.id === currentUserId}
+            tooltip="You can't deactivate your own account"
+            onClick={() => { closeMenu(); setConfirmAction({ type: 'toggle_active', user: menuUser }); }}
+          />
+          <MenuButton
+            icon={<KeyRound className="w-4 h-4 text-gray-400" />}
+            label="Reset 2FA"
+            onClick={() => { closeMenu(); setConfirmAction({ type: 'reset_mfa', user: menuUser }); }}
+          />
+          <div className="border-t border-gray-100 my-1" />
+          <MenuButton
+            icon={<Trash2 className="w-4 h-4 text-red-400" />}
+            label="Delete User"
+            disabled={menuUser.id === currentUserId}
+            tooltip="You can't delete your own account"
+            destructive
+            onClick={() => { closeMenu(); setConfirmAction({ type: 'delete', user: menuUser }); }}
+          />
         </div>
       )}
 
@@ -267,6 +313,33 @@ export function UsersTab({ onToast }: UsersTabProps) {
         />
       )}
     </div>
+  );
+}
+
+function MenuButton({ icon, label, disabled, tooltip, destructive, onClick }: {
+  icon: React.ReactNode;
+  label: string;
+  disabled?: boolean;
+  tooltip?: string;
+  destructive?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
+      title={disabled ? tooltip : undefined}
+      className={`w-full flex items-center gap-2 px-4 py-2 text-sm text-left transition-colors ${
+        disabled
+          ? 'text-gray-300 cursor-not-allowed'
+          : destructive
+            ? 'text-red-600 hover:bg-red-50'
+            : 'text-gray-700 hover:bg-gray-50'
+      }`}
+    >
+      {icon}
+      {label}
+    </button>
   );
 }
 
@@ -358,6 +431,7 @@ function ConfirmActionModal({ action, onConfirm, onCancel }: { action: { type: s
 
   let title = '';
   let description = '';
+  let isDestructive = false;
 
   if (type === 'toggle_admin') {
     title = user.is_admin ? 'Remove Admin Role' : 'Grant Admin Role';
@@ -370,9 +444,14 @@ function ConfirmActionModal({ action, onConfirm, onCancel }: { action: { type: s
     description = active
       ? `Deactivate ${name}? They will no longer be able to sign in.`
       : `Activate ${name}? They will be able to sign in again.`;
+    isDestructive = active;
   } else if (type === 'reset_mfa') {
     title = 'Reset 2FA';
     description = `Reset 2FA for ${name}? They will need to set it up again on their next login.`;
+  } else if (type === 'delete') {
+    title = 'Delete User';
+    description = `Delete ${name}? This permanently removes the user and cannot be undone.`;
+    isDestructive = true;
   }
 
   return (
@@ -384,7 +463,7 @@ function ConfirmActionModal({ action, onConfirm, onCancel }: { action: { type: s
           <button onClick={onCancel} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Cancel</button>
           <button
             onClick={onConfirm}
-            className={`px-4 py-2 text-sm font-medium rounded-lg text-white transition-colors ${type === 'toggle_active' && (!user.banned_until || new Date(user.banned_until) < new Date()) ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'}`}
+            className={`px-4 py-2 text-sm font-medium rounded-lg text-white transition-colors ${isDestructive ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'}`}
           >
             Confirm
           </button>
@@ -393,3 +472,6 @@ function ConfirmActionModal({ action, onConfirm, onCancel }: { action: { type: s
     </div>
   );
 }
+
+
+export { UsersTab }

@@ -298,6 +298,35 @@ async function handleResetMfa(
   });
 }
 
+async function handleDelete(
+  serviceClient: ReturnType<typeof createClient>,
+  callerId: string,
+  body: { user_id?: string }
+) {
+  const { user_id } = body;
+
+  if (!user_id || typeof user_id !== "string") {
+    return jsonResponse({ error: "user_id is required" }, 400);
+  }
+  if (user_id === callerId) {
+    return jsonResponse({ error: "Cannot delete your own account" }, 400);
+  }
+
+  // Delete auth user (cascades to user_profiles if FK is set, otherwise delete profile manually)
+  const { error: deleteErr } = await serviceClient.auth.admin.deleteUser(user_id);
+  if (deleteErr) {
+    if (deleteErr.message?.includes("not found")) {
+      return jsonResponse({ error: "Target user not found" }, 404);
+    }
+    return jsonResponse({ error: deleteErr.message || "Failed to delete user" }, 500);
+  }
+
+  // Also remove user_profiles row (in case there's no cascade)
+  await serviceClient.from("user_profiles").delete().eq("id", user_id);
+
+  return jsonResponse({ success: true, user_id });
+}
+
 // --- Main handler ---
 
 Deno.serve(async (req: Request) => {
@@ -338,6 +367,8 @@ Deno.serve(async (req: Request) => {
         return await handleSetActive(serviceClient, callerId, body);
       case "reset_mfa":
         return await handleResetMfa(serviceClient, body);
+      case "delete":
+        return await handleDelete(serviceClient, callerId, body);
       default:
         return jsonResponse({ error: `Unknown action: ${action}` }, 400);
     }
