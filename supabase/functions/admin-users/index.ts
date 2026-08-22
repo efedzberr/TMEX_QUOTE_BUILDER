@@ -96,9 +96,25 @@ async function handleList(serviceClient: ReturnType<typeof createClient>) {
     (profiles || []).map((p: { id: string; display_name: string | null; is_admin: boolean }) => [p.id, p])
   );
 
-  const result = users.map((u) => {
+  // For each user, check factors reliably via getUserById (listUsers may omit factors)
+  const result = await Promise.all(users.map(async (u) => {
     const profile = profileMap.get(u.id);
-    const mfaFactors = u.factors || [];
+
+    // First try factors from listUsers response
+    let mfaFactors = u.factors || [];
+
+    // If empty, fetch individually to get accurate factor data
+    if (mfaFactors.length === 0) {
+      try {
+        const { data: { user: fullUser } } = await serviceClient.auth.admin.getUserById(u.id);
+        if (fullUser?.factors) {
+          mfaFactors = fullUser.factors;
+        }
+      } catch {
+        // If individual fetch fails, proceed with empty factors
+      }
+    }
+
     const hasVerifiedTotp = mfaFactors.some(
       (f: { factor_type: string; status: string }) =>
         f.factor_type === "totp" && f.status === "verified"
@@ -114,7 +130,7 @@ async function handleList(serviceClient: ReturnType<typeof createClient>) {
       banned_until: u.banned_until,
       mfa_enrolled: hasVerifiedTotp,
     };
-  });
+  }));
 
   return jsonResponse({ users: result });
 }
