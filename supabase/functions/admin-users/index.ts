@@ -17,9 +17,7 @@ function jsonResponse(body: unknown, status = 200) {
 
 async function verifyAdmin(
   serviceClient: ReturnType<typeof createClient>,
-  authHeader: string | null,
-  supabaseUrl: string,
-  anonKey: string
+  authHeader: string | null
 ): Promise<{ callerId: string } | Response> {
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     console.log("[admin-users] REJECT: missing/invalid Authorization header");
@@ -28,7 +26,7 @@ async function verifyAdmin(
 
   const token = authHeader.replace("Bearer ", "");
 
-  // Resolve caller identity via service client (trusted)
+  // Resolve caller identity via service client (trusted verification)
   const { data: { user }, error: userErr } = await serviceClient.auth.getUser(token);
   if (userErr || !user) {
     console.log("[admin-users] REJECT: invalid token -", userErr?.message || "no user");
@@ -50,31 +48,33 @@ async function verifyAdmin(
     return jsonResponse({ error: "not_admin", message: "Admin access required" }, 403);
   }
 
-  // Verify AAL2 using a caller-scoped client with getAuthenticatorAssuranceLevel()
-  const callerClient = createClient(supabaseUrl, anonKey, {
-    auth: { autoRefreshToken: false, persistSession: false },
-    global: { headers: { Authorization: `Bearer ${token}` } },
-  });
+  // Determine AAL by decoding the JWT payload claims directly
+  let payloadAal = "unknown";
+  let amrHasTotp = false;
 
-  let resolvedAal = "unknown";
-
-  const { data: aalData, error: aalErr } = await callerClient.auth.mfa.getAuthenticatorAssuranceLevel();
-  if (!aalErr && aalData) {
-    resolvedAal = aalData.currentLevel || "unknown";
+  try {
+    const parts = token.split(".");
+    if (parts.length === 3) {
+      const payloadB64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+      const payloadJson = atob(payloadB64);
+      const payload = JSON.parse(payloadJson);
+      payloadAal = payload.aal || "unknown";
+      if (Array.isArray(payload.amr)) {
+        amrHasTotp = payload.amr.some((e: { method?: string }) => e.method === "totp" || e.method === "mfa");
+      }
+    }
+  } catch {
+    // If decode fails, leave as unknown
   }
 
-  // Fallback: if the API didn't return a clear level, check AMR from the user object
-  if (resolvedAal === "unknown" || resolvedAal === "null") {
-    const amr = (user as any).amr || [];
-    const hasTotp = amr.some((f: { method: string }) => f.method === "totp");
-    resolvedAal = hasTotp ? "aal2" : "aal1";
-  }
+  const isAal2 = payloadAal === "aal2" || amrHasTotp;
 
-  if (resolvedAal !== "aal2") {
-    console.log(`[admin-users] REJECT: aal2_required | user=${callerId} | is_admin=true | aal=${resolvedAal}`);
+  if (!isAal2) {
+    console.log(`[admin-users] REJECT: aal2_required | user=${callerId} | is_admin=true | payload.aal=${payloadAal} | amr_has_totp=${amrHasTotp}`);
     return jsonResponse({ error: "aal2_required", message: "MFA (AAL2) required" }, 403);
   }
 
+  console.log(`[admin-users] PASS | user=${callerId} | is_admin=true | payload.aal=${payloadAal} | amr_has_totp=${amrHasTotp}`);
   return { callerId };
 }
 
@@ -296,7 +296,6 @@ Deno.serve(async (req: Request) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
     const serviceClient = createClient(supabaseUrl, serviceRoleKey, {
       auth: { autoRefreshToken: false, persistSession: false },
@@ -304,7 +303,7 @@ Deno.serve(async (req: Request) => {
 
     // Verify caller is admin with AAL2
     const authHeader = req.headers.get("Authorization");
-    const verification = await verifyAdmin(serviceClient, authHeader, supabaseUrl, anonKey);
+    const verification = await verifyAdmin(serviceClient, authHeader);
     if (verification instanceof Response) return verification;
 
     const { callerId } = verification;
