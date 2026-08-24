@@ -17,16 +17,19 @@ import { SendToCustomerModal } from './components/SendToCustomerModal';
 import { CustomerReviewBanner } from './components/CustomerReviewBanner';
 import { ViewResponseModal } from './components/ViewResponseModal';
 import { ViewSignatureModal } from './components/ViewSignatureModal';
+import { Sidebar, ViewMode } from './components/Sidebar';
+import { TopBar } from './components/TopBar';
+import { DashboardView } from './components/home/DashboardView';
+import { DashboardsView } from './components/home/DashboardsView';
+import { CustomersView } from './components/customers/CustomersView';
+import { ImportView } from './components/import/ImportView';
 import { supabase, Quote, QuoteHistory as QuoteHistoryType, QuoteLane } from './lib/supabase';
-import { ArrowLeft } from 'lucide-react';
 import { CurrencyCode, convertLaneValues, buildQuoteName, isQuoteLocked } from './lib/constants';
 import { validateCompletedStage, CompletedStageValidationResult } from './lib/completedStageValidation';
 import { getPortalUrl, getPreviewUrl } from './lib/customerPortalHelpers';
 
-type ViewMode = 'list' | 'builder' | 'admin' | 'mass-update' | 'mass-update-log';
-
 function App() {
-  const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [viewMode, setViewMode] = useState<ViewMode>('home');
   const [currentQuoteId, setCurrentQuoteId] = useState<string | null>(null);
   const [quote, setQuote] = useState<Quote | null>(null);
   const [history, setHistory] = useState<QuoteHistoryType[]>([]);
@@ -43,12 +46,23 @@ function App() {
   const [showSendToCustomer, setShowSendToCustomer] = useState(false);
   const [showViewResponse, setShowViewResponse] = useState(false);
   const [showViewSignature, setShowViewSignature] = useState(false);
+  const [appIsAdmin, setAppIsAdmin] = useState(false);
 
   useEffect(() => {
     if (viewMode === 'builder' && currentQuoteId) {
       loadQuote(currentQuoteId);
     }
   }, [viewMode, currentQuoteId]);
+
+  useEffect(() => {
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data } = await supabase.from('user_profiles').select('is_admin').eq('id', user.id).maybeSingle();
+        if (data?.is_admin) setAppIsAdmin(true);
+      }
+    })();
+  }, []);
 
   async function loadQuote(quoteId: string) {
     setLoading(true);
@@ -152,7 +166,7 @@ function App() {
       const [globalVarsResult, accountCodeResult] = await Promise.all([
         supabase
           .from('global_variables')
-          .select('mxn_exchange_rate, cad_exchange_rate, fuel_rate_usd, us_fuel_difference')
+          .select('mxn_exchange_rate, cad_exchange_rate, fuel_rate_usd, us_fuel_difference, rate_per_mile')
           .limit(1)
           .maybeSingle(),
         supabase
@@ -168,6 +182,7 @@ function App() {
       const defaultCadRate = globalVarsData?.cad_exchange_rate || 0;
       const defaultFuelRate = globalVarsData?.fuel_rate_usd || 0;
       const defaultUsFuelDiff = globalVarsData?.us_fuel_difference || 0;
+      const defaultRatePerMile = globalVarsData?.rate_per_mile || 0;
 
       const accountCode = accountCodeResult.data?.account_code || 'XXXXXX';
       const defaultOwner = 'Susana Guajardo';
@@ -182,6 +197,8 @@ function App() {
         version: 1,
       });
 
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+
       const { data: newQuote, error } = await supabase
         .from('quotes')
         .insert({
@@ -189,6 +206,7 @@ function App() {
           quote_name_sequence: nextSequence,
           quote_name_version: 1,
           owner_name: defaultOwner,
+          owner_user_id: currentUser?.id || null,
           status: 'New',
           stage: 'New',
           rate_type: 'Flat Rate',
@@ -209,6 +227,7 @@ function App() {
           exchange_rate: defaultExchangeRate,
           cad_exchange_rate: defaultCadRate,
           today_fuel_rate: defaultFuelRate,
+          rate_per_mile: defaultRatePerMile,
           us_fuel_difference: defaultUsFuelDiff,
           generated_quote_name: generatedQuoteName,
         })
@@ -259,14 +278,30 @@ function App() {
   const handleSelectQuote = (quoteId: string) => {
     setCurrentQuoteId(quoteId);
     setViewMode('builder');
+    // Track recently viewed
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await supabase.from('recent_record_views').upsert(
+          { user_id: user.id, object: 'quote', record_id: quoteId, viewed_at: new Date().toISOString() },
+          { onConflict: 'user_id,object,record_id' }
+        );
+      }
+    })();
+  };
+
+  const handleNavigate = (target: ViewMode) => {
+    if (target === 'list' || target === 'home') {
+      setCurrentQuoteId(null);
+      setQuote(null);
+      setHistory([]);
+      setLanes([]);
+    }
+    setViewMode(target);
   };
 
   const handleBackToList = () => {
-    setViewMode('list');
-    setCurrentQuoteId(null);
-    setQuote(null);
-    setHistory([]);
-    setLanes([]);
+    handleNavigate('list');
   };
 
   const handleCloneQuote = async () => {
@@ -1417,38 +1452,108 @@ function App() {
   };
 
   if (viewMode === 'admin') {
-    return <AdministrationView onBack={() => setViewMode('list')} />;
+    if (!appIsAdmin) {
+      setViewMode('list');
+      return null;
+    }
+    return (
+      <div className="flex min-h-screen">
+        <Sidebar current={viewMode} onNavigate={handleNavigate} isAdmin={appIsAdmin} />
+        <div className="flex-1 min-w-0"><TopBar /><AdministrationView /></div>
+      </div>
+    );
   }
 
   if (viewMode === 'mass-update') {
-    return <MassUpdateView onBack={() => setViewMode('list')} onViewLog={() => setViewMode('mass-update-log')} />;
+    return (
+      <div className="flex min-h-screen">
+        <Sidebar current={viewMode} onNavigate={handleNavigate} isAdmin={appIsAdmin} />
+        <div className="flex-1 min-w-0"><TopBar /><MassUpdateView onViewLog={() => setViewMode('mass-update-log')} /></div>
+      </div>
+    );
   }
 
   if (viewMode === 'mass-update-log') {
-    return <MassUpdateLogView onBack={() => setViewMode('list')} />;
+    return (
+      <div className="flex min-h-screen">
+        <Sidebar current={viewMode} onNavigate={handleNavigate} isAdmin={appIsAdmin} />
+        <div className="flex-1 min-w-0"><TopBar /><MassUpdateLogView /></div>
+      </div>
+    );
+  }
+
+  if (viewMode === 'home') {
+    return (
+      <div className="flex min-h-screen">
+        <Sidebar current={viewMode} onNavigate={handleNavigate} isAdmin={appIsAdmin} />
+        <div className="flex-1 min-w-0"><TopBar />
+          <DashboardView onNavigate={handleNavigate} onCreateQuote={() => setShowNewQuoteForm(true)} onOpenQuote={handleSelectQuote} />
+          <NewQuoteModal
+            isOpen={showNewQuoteForm}
+            onClose={() => setShowNewQuoteForm(false)}
+            onSubmit={handleCreateNewQuote}
+            isLoading={loading}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  if (viewMode === 'dashboards') {
+    return (
+      <div className="flex min-h-screen">
+        <Sidebar current={viewMode} onNavigate={handleNavigate} isAdmin={appIsAdmin} />
+        <div className="flex-1 min-w-0"><TopBar /><DashboardsView /></div>
+      </div>
+    );
+  }
+
+  if (viewMode === 'customers') {
+    return (
+      <div className="flex min-h-screen">
+        <Sidebar current={viewMode} onNavigate={handleNavigate} isAdmin={appIsAdmin} />
+        <div className="flex-1 min-w-0"><TopBar /><CustomersView /></div>
+      </div>
+    );
+  }
+
+  if (viewMode === 'import') {
+    return (
+      <div className="flex min-h-screen">
+        <Sidebar current={viewMode} onNavigate={handleNavigate} isAdmin={appIsAdmin} />
+        <div className="flex-1 min-w-0"><TopBar /><ImportView onCreateQuote={() => setShowNewQuoteForm(true)} />
+          <NewQuoteModal
+            isOpen={showNewQuoteForm}
+            onClose={() => setShowNewQuoteForm(false)}
+            onSubmit={handleCreateNewQuote}
+            isLoading={loading}
+          /></div>
+      </div>
+    );
   }
 
   if (viewMode === 'list') {
     return (
-      <>
-        <QuoteListView
-          onCreateNew={() => setShowNewQuoteForm(true)}
-          onSelectQuote={handleSelectQuote}
-          onDeleteQuote={handleDeleteQuoteFromList}
-          onCloneQuote={handleCloneQuoteFromList}
-          onAdministration={() => setViewMode('admin')}
-          onMassUpdate={() => setViewMode('mass-update')}
-        />
-        <NewQuoteModal
-          isOpen={showNewQuoteForm}
-          onClose={() => setShowNewQuoteForm(false)}
-          onSubmit={handleCreateNewQuote}
-          isLoading={loading}
-        />
-        {toastMessage && (
-          <Toast message={toastMessage} type={toastType} onClose={() => setToastMessage(null)} />
-        )}
-      </>
+      <div className="flex min-h-screen">
+        <Sidebar current={viewMode} onNavigate={handleNavigate} isAdmin={appIsAdmin} />
+        <div className="flex-1 min-w-0"><TopBar />
+          <QuoteListView
+            onCreateNew={() => setShowNewQuoteForm(true)}
+            onSelectQuote={handleSelectQuote}
+            onDeleteQuote={handleDeleteQuoteFromList}
+            onCloneQuote={handleCloneQuoteFromList}
+          />
+          <NewQuoteModal
+            isOpen={showNewQuoteForm}
+            onClose={() => setShowNewQuoteForm(false)}
+            onSubmit={handleCreateNewQuote}
+            isLoading={loading}
+          />
+          {toastMessage && (
+            <Toast message={toastMessage} type={toastType} onClose={() => setToastMessage(null)} />
+          )}
+        </div>
+      </div>
     );
   }
 
@@ -1468,54 +1573,34 @@ function App() {
   if (benchmarkLane) {
     const bmIndex = lanes.findIndex(l => l.id === benchmarkLane.id);
     return (
-      <>
-        <BenchmarkDashboard
-          lane={benchmarkLane}
-          laneIndex={bmIndex !== -1 ? bmIndex + 1 : 1}
-          allLanes={lanes}
-          partnerAccount={quote.partner_account || ''}
-          onBack={() => setBenchmarkLane(null)}
-          onLaneChange={(l) => setBenchmarkLane(l)}
-        />
-        {toastMessage && (
-          <Toast
-            message={toastMessage}
-            type={toastType}
-            onClose={() => { setToastMessage(null); setToastType('success'); }}
+      <div className="flex min-h-screen">
+        <Sidebar current={viewMode} onNavigate={handleNavigate} isAdmin={appIsAdmin} />
+        <div className="flex-1 min-w-0"><TopBar />
+          <BenchmarkDashboard
+            lane={benchmarkLane}
+            laneIndex={bmIndex !== -1 ? bmIndex + 1 : 1}
+            allLanes={lanes}
+            partnerAccount={quote.partner_account || ''}
+            onBack={() => setBenchmarkLane(null)}
+            onLaneChange={(l) => setBenchmarkLane(l)}
           />
-        )}
-      </>
+          {toastMessage && (
+            <Toast
+              message={toastMessage}
+              type={toastType}
+              onClose={() => { setToastMessage(null); setToastType('success'); }}
+            />
+          )}
+        </div>
+      </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <header className="bg-white border-b border-gray-200 shadow-sm">
-        <div className="max-w-[1280px] mx-auto px-6 py-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <button
-                onClick={handleBackToList}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                title="Back to List"
-              >
-                <ArrowLeft className="w-5 h-5 text-gray-600" />
-              </button>
-              <img
-                src="/Transmex_Logo_II.jpeg"
-                alt="Transmex Logo"
-                className="h-10 object-contain"
-              />
-              <div className="text-sm text-gray-500">Smart Pricing Hub</div>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="text-sm text-gray-600">
-                <span className="font-medium">User:</span> {quote.owner_name}
-              </div>
-            </div>
-          </div>
-        </div>
-      </header>
+    <div className="flex min-h-screen">
+      <Sidebar current={viewMode} onNavigate={handleNavigate} isAdmin={appIsAdmin} />
+      <div className="flex-1 min-w-0"><TopBar />
+        <div className="min-h-screen bg-gray-50">
 
       <StageProgressBar
         currentStage={quote.stage || 'New'}
@@ -1749,6 +1834,8 @@ function App() {
           }}
         />
       )}
+    </div>
+      </div>
     </div>
   );
 }

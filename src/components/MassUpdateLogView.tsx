@@ -1,10 +1,7 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Zap, ChevronDown, ChevronUp, CheckCircle, AlertTriangle, XCircle, Calendar, User, Filter } from 'lucide-react';
+import { ChevronDown, ChevronUp, CheckCircle, AlertTriangle, XCircle, Calendar, User, Filter, Zap } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
-interface MassUpdateLogViewProps {
-  onBack: () => void;
-}
 
 interface LogEntry {
   id: string;
@@ -40,7 +37,7 @@ interface LogResult {
   error?: string;
 }
 
-export function MassUpdateLogView({ onBack }: MassUpdateLogViewProps) {
+export function MassUpdateLogView() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -80,21 +77,17 @@ export function MassUpdateLogView({ onBack }: MassUpdateLogViewProps) {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 flex flex-col">
-      <header className="bg-white border-b border-gray-200 shadow-sm">
-        <div className="max-w-[1200px] mx-auto px-6 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button onClick={onBack} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-              <ArrowLeft className="w-5 h-5 text-gray-600" />
-            </button>
-            <Zap className="w-5 h-5 text-amber-500" />
-            <h1 className="text-lg font-bold text-gray-900">Mass Update History</h1>
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      <div className="max-w-[1200px] mx-auto px-8 pt-10 pb-4 w-full">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Mass Update History</h1>
+            <p className="mt-1 text-sm text-gray-500">{logs.length} run{logs.length !== 1 ? 's' : ''} total</p>
           </div>
-          <span className="text-sm text-gray-500">{logs.length} run{logs.length !== 1 ? 's' : ''} total</span>
         </div>
-      </header>
+      </div>
 
-      <main className="flex-1 max-w-[1200px] w-full mx-auto px-6 py-6">
+      <main className="flex-1 max-w-[1200px] w-full mx-auto px-8 py-6">
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
