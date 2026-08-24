@@ -1,4 +1,4 @@
-import { X, AlertCircle, Plus, Lock, BarChart2, ChevronDown } from 'lucide-react';
+import { X, AlertCircle, Plus, Lock, BarChart2 } from 'lucide-react';
 import { supabase, Quote, QuoteLane } from '../lib/supabase';
 import { useState, useEffect, useRef } from 'react';
 import { CityLookupField } from './CityLookupField';
@@ -7,7 +7,6 @@ import { LaneSectionAccessorials, SectionAccessorial, calcSectionAccessorialsTot
 import { LANE_TYPES, LOAD_FREQUENCIES, COMMITMENT_TYPES, PRIORITIES, EQUIPMENT_TYPES, LIVE_LOAD_OPTIONS, formatCurrencyOrDash, CurrencyCode, CURRENCIES, normalizeCountryCode } from '../lib/constants';
 import { BorderCrossingLookup, useBorderCrossingCities, validateBorderCrossing } from './BorderCrossingLookup';
 import { MarketFilteredCityLookup } from './MarketFilteredCityLookup';
-import { fillLaneMiles } from '../lib/laneDistance';
 
 const UNITS_OPTIONS = ['Mi', 'Km'] as const;
 type UnitsCode = typeof UNITS_OPTIONS[number];
@@ -146,14 +145,6 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
   const { cities: borderCrossingCities } = useBorderCrossingCities();
   const [isDirty, setIsDirty] = useState(false);
   const [unsavedDialog, setUnsavedDialog] = useState<{ action: 'next' | 'previous' | 'close' } | null>(null);
-  const [distanceNotes, setDistanceNotes] = useState<string[]>([]);
-  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
-    actions: true,
-    general: false,
-    us: false,
-    mx: false,
-    additional: true,
-  });
 
   const [accountFuelData, setAccountFuelData] = useState<{ customer_fuel_program: boolean; fuel_program_type: string; fuel_rate_per_mile: number; fuel_program_method: string }>({ customer_fuel_program: false, fuel_program_type: 'FRPM', fuel_rate_per_mile: 0, fuel_program_method: 'per_mile' });
 
@@ -427,32 +418,6 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
     estimated_total_mx_section: '',
   });
 
-  useEffect(() => {
-    const origin = formData.origin_city;
-    const dest = formData.destination_city;
-    const crossing = formData.border_crossing;
-    if (!origin || !dest || !crossing) { setDistanceNotes([]); return; }
-    let cancelled = false;
-    fillLaneMiles(origin, dest, crossing).then(res => {
-      if (cancelled) return;
-      setFormData(prev => {
-        const updates: Partial<typeof prev> = {};
-        if (res.us_miles != null) updates.us_miles = res.us_miles;
-        if (res.mx_miles != null) updates.mx_miles = res.mx_miles;
-        const quoteRPM = quote?.rate_per_mile || 0;
-        const quoteFuel = quote?.today_fuel_rate || 0;
-        if (quoteRPM > 0 && !prev.us_rate_per_mile) updates.us_rate_per_mile = quoteRPM;
-        if (quoteRPM > 0 && !prev.mx_rate_per_mile) updates.mx_rate_per_mile = quoteRPM;
-        if (quoteFuel > 0 && !prev.us_fuel_rate) updates.us_fuel_rate = quoteFuel;
-        if (quoteFuel > 0 && !prev.mx_fuel_rate) updates.mx_fuel_rate = quoteFuel;
-        if (Object.keys(updates).length === 0) return prev;
-        return { ...prev, ...updates };
-      });
-      if (res.us_miles != null || res.mx_miles != null) setIsDirty(true);
-      setDistanceNotes(res.notes);
-    });
-    return () => { cancelled = true; };
-  }, [formData.origin_city, formData.destination_city, formData.border_crossing]);
 
 
   const getFieldVisibility = (serviceType: string | null | undefined, _countryOverride?: string) => {
@@ -1156,7 +1121,7 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black bg-opacity-50" onClick={() => handleNavigateWithCheck('close')} />
-      <div className="relative bg-white w-full max-w-[900px] max-h-[90vh] rounded-xl shadow-2xl flex flex-col overflow-hidden border border-gray-200">
+      <div className="relative bg-white w-full max-w-[900px] max-h-[90vh] rounded-lg shadow-2xl flex flex-col overflow-hidden">
         {(() => {
           const serviceType = lane.service_type || 'Door to Door';
           const tripType = lane.trip_type || 'One Way';
@@ -1166,140 +1131,43 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
           const isCircuitType = tripType === 'Circuit';
           const isPaired = !!(lane.paired_lane_id || pairedLane);
           let bannerText = `${serviceType} — ${tripType}`;
-          let laneInfo = '';
           if (isSB) {
             const totalLanes = (isRT || isCircuitType) ? 4 : 2;
             const laneIdx = lane.split_billing_index || 1;
-            bannerText += ` | Split Billing`;
-            laneInfo = `Lane ${laneIdx} of ${totalLanes}`;
+            bannerText += ` | Split Billing | Lane ${laneIdx} of ${totalLanes}`;
           } else if ((isRT || isCircuitType) && isPaired) {
             const laneIdx = lane.is_primary_lane === false ? 2 : 1;
-            laneInfo = `Lane ${laneIdx} of 2`;
+            bannerText += ` | Lane ${laneIdx} of 2`;
           }
           return (
             <div
-              className="flex-shrink-0 w-full font-semibold text-white flex items-center gap-2.5"
-              style={{ background: 'linear-gradient(90deg, #0a5f5e, #0e7c7b)', fontSize: '13.5px', padding: '11px 22px', letterSpacing: '0.3px' }}
+              className="flex-shrink-0 w-full font-bold text-white"
+              style={{ backgroundColor: '#0D6E7A', fontSize: '14px', padding: '12px 16px', borderRadius: '4px 4px 0 0' }}
             >
-              <span>{bannerText}</span>
-              {tripType && (
-                <span className="px-2 py-0.5 rounded-full text-[11px] font-medium" style={{ background: 'rgba(255,255,255,0.18)' }}>
-                  {tripType}
-                </span>
-              )}
-              {laneInfo && (
-                <span className="px-2 py-0.5 rounded-full text-[11px] font-medium" style={{ background: 'rgba(255,255,255,0.18)' }}>
-                  {laneInfo}
-                </span>
-              )}
+              {bannerText}
             </div>
           );
         })()}
-        <div className="flex-shrink-0 px-6 pt-5 pb-4 border-b border-gray-200">
+        <div className="flex-shrink-0 px-6 pt-6 pb-4 border-b border-gray-200">
           <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-bold text-gray-900">
-                {locked ? 'View' : 'Edit'} QL-{lane.sort_order.toString().padStart(8, '0')}{locked ? ' (Read Only)' : ''}
-              </h2>
-              <div className="text-xs text-gray-500 mt-1">
-                <span className="text-red-500 font-semibold">*</span> = Required Information
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setCollapsedSections({ actions: false, general: false, us: false, mx: false, additional: false })}
-                className="text-[11.5px] font-semibold px-2.5 py-1 rounded-md border transition-colors"
-                style={{ color: '#0a5f5e', background: '#e8f3f3', borderColor: '#b8dcdb' }}
-              >
-                Expand all
-              </button>
-              <button
-                onClick={() => setCollapsedSections({ actions: true, general: true, us: true, mx: true, additional: true })}
-                className="text-[11.5px] font-semibold px-2.5 py-1 rounded-md border transition-colors"
-                style={{ color: '#0a5f5e', background: '#e8f3f3', borderColor: '#b8dcdb' }}
-              >
-                Collapse all
-              </button>
-              <button
-                onClick={() => handleNavigateWithCheck('close')}
-                className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md transition-colors ml-1"
-                title="Close"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+            <h2 className="text-xl font-semibold text-gray-900">
+              {locked ? '🔒 View' : 'Edit'} QL-{lane.sort_order.toString().padStart(8, '0')}{locked ? ' (Read Only)' : ''}
+            </h2>
+            <button
+              onClick={() => handleNavigateWithCheck('close')}
+              className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md transition-colors"
+              title="Close"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          <div className="text-xs text-gray-500 mt-1">
+            <span className="text-red-500">*</span> = Required Information
           </div>
         </div>
 
-        {/* Sticky Summary Tile Strip */}
-        <div className="flex-shrink-0 px-6 py-2.5 bg-white border-b border-gray-200 shadow-sm">
-          <div className="flex items-center gap-3">
-            {(() => {
-              const fv = getFieldVisibility(lane.service_type);
-              const usAccTotal = calcSectionAccessorialsTotal(usAccessorials);
-              const mxAccTotal = calcSectionAccessorialsTotal(mxAccessorials);
-              const fp = accountFuelData.customer_fuel_program;
-              const tfr = quote?.today_fuel_rate || 0;
-              const isPercentFuel = accountFuelData.fuel_program_method === 'percentage' || accountFuelData.fuel_program_type === 'PERCENT';
-              const calcEffFR = (fuelRate: number, miles: number, estTotal: number) => {
-                if (!fp) return fuelRate;
-                if (!isPercentFuel) return accountFuelData.fuel_rate_per_mile;
-                return miles > 0 ? (estTotal * (accountFuelData.fuel_rate_per_mile / 100)) / miles : 0;
-              };
-              const calcDiff = (effFR: number) => fp && effFR < tfr ? tfr - effFR : 0;
-              const usFuelIncluded = formData.us_fuel_included_in_line_haul;
-              const mxFuelIncluded = formData.mx_fuel_included_in_line_haul;
-              const usEffFR = calcEffFR(formData.us_fuel_rate || 0, formData.us_miles || 0, formData.estimated_total_us_section || 0);
-              const usDiff = calcDiff(usEffFR);
-              const usAdjRPM = (formData.us_rate_per_mile || 0) + usDiff;
-              const usLH = fp && !fv.usFieldsDisabled ? (formData.us_miles || 0) * usAdjRPM : (formData.us_rate_type === 'RPM' ? (formData.us_miles || 0) * (formData.us_rate_per_mile || 0) : (formData.us_rate || 0));
-              const totalUSFuelCalc = (usFuelIncluded && !fp) ? 0 : (formData.us_miles || 0) * usEffFR;
-              const totalUSFixedCosts = fv.usFieldsDisabled ? 0 : (usLH + usAccTotal);
-              const totalUSVariableCosts = fv.usFieldsDisabled ? 0 : ((usFuelIncluded && !fp) ? 0 : totalUSFuelCalc);
-              const totalUSPortion = fv.usFieldsDisabled ? 0 : totalUSFixedCosts + totalUSVariableCosts;
-              const borderFee = isDomestic ? 0 : (formData.border_crossing_fee || 0);
-              const mxEffFR = calcEffFR(formData.mx_fuel_rate || 0, formData.mx_miles || 0, formData.estimated_total_mx_section || 0);
-              const mxDiff = calcDiff(mxEffFR);
-              const mxAdjRPM = (formData.mx_rate_per_mile || 0) + mxDiff;
-              const effectiveMxDisabled = fv.mxFieldsDisabled || !!formData.border_crossing_only;
-              const mxLH = fp && !effectiveMxDisabled ? (formData.mx_miles || 0) * mxAdjRPM : (formData.mx_rate_type === 'RPM' ? (formData.mx_miles || 0) * (formData.mx_rate_per_mile || 0) : (formData.mx_rate || 0));
-              const totalMXFuelCalc = (mxFuelIncluded && !fp) ? 0 : (formData.mx_miles || 0) * mxEffFR;
-              const totalMXFixedCosts = effectiveMxDisabled ? 0 : (mxLH + mxAccTotal);
-              const totalMXVariableCosts = effectiveMxDisabled ? 0 : ((mxFuelIncluded && !fp) ? 0 : totalMXFuelCalc);
-              const totalMXPortion = effectiveMxDisabled ? 0 : totalMXFixedCosts + totalMXVariableCosts;
-              let laneTotal = totalUSPortion + totalMXPortion + borderFee;
-              if (isLoop) laneTotal = totalMXPortion + borderFee;
-              else if (isDomestic) laneTotal = totalUSPortion;
-              else if (isDoorToDoor && isRoundTrip && lane.is_primary_lane === false && !isD2DSplitBilling) {
-                laneTotal = formData.border_crossing_only ? totalUSPortion + borderFee : totalMXPortion + borderFee;
-              } else if (isD2DSplitBilling) {
-                if (fv.usFieldsDisabled && !effectiveMxDisabled) laneTotal = totalMXPortion + borderFee;
-                else if (!fv.usFieldsDisabled && effectiveMxDisabled) laneTotal = totalUSPortion;
-              }
-              const tiles: { label: string; value: string; color: string; bg: string }[] = [
-                { label: 'Lane Total', value: formatCurrencyOrDash(laneTotal, currencyCode), color: '#0a5f5e', bg: '#e8f3f3' },
-              ];
-              if (!fv.usFieldsDisabled) {
-                tiles.push({ label: 'US Portion', value: formatCurrencyOrDash(totalUSPortion, currencyCode), color: '#2563eb', bg: '#eff5ff' });
-              }
-              if (!effectiveMxDisabled) {
-                tiles.push({ label: 'MX Portion', value: formatCurrencyOrDash(totalMXPortion, currencyCode), color: '#15803d', bg: '#ecfdf5' });
-              }
-              if (!isDomestic && borderFee > 0) {
-                tiles.push({ label: 'Border Fee', value: formatCurrencyOrDash(borderFee, currencyCode), color: '#b45309', bg: '#fffbeb' });
-              }
-              return tiles.map((tile, i) => (
-                <div key={i} className="flex-1 min-w-0 rounded-lg px-3 py-2 border" style={{ background: tile.bg, borderColor: `${tile.color}30` }}>
-                  <div className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: tile.color }}>{tile.label}</div>
-                  <div className="text-sm font-bold mt-0.5 truncate" style={{ color: tile.color }}>{tile.value}</div>
-                </div>
-              ));
-            })()}
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto px-6 py-5" style={{ background: '#f6f8fa' }}>
-          <div className="space-y-4">
+        <div className="flex-1 overflow-y-auto px-6 py-6">
+          <div className="space-y-6">
             {locked && (
               <div className="bg-[#FEF3C7] border border-amber-300 rounded-lg px-4 py-3 flex items-center gap-2 text-sm text-amber-900">
                 <span>🔒</span>
@@ -1307,24 +1175,8 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
               </div>
             )}
             <div className={locked ? 'pointer-events-none opacity-75' : ''}>
-            <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden" style={{ borderLeftWidth: '6px', borderLeftColor: '#0e7c7b' }}>
-              <button
-                type="button"
-                onClick={() => setCollapsedSections(s => ({ ...s, actions: !s.actions }))}
-                className="w-full flex items-center gap-3 px-5 py-3 text-left transition-colors"
-                style={{ background: '#e8f3f3' }}
-              >
-                <span className="text-xs font-bold tracking-wider uppercase" style={{ color: '#0a5f5e' }}>Actions</span>
-                <span className="text-[10.5px] font-semibold px-2 py-0.5 rounded" style={{ background: '#0e7c7b', color: '#fff', letterSpacing: '0.4px' }}>LANE SETUP</span>
-                {collapsedSections.actions && (
-                  <span className="ml-auto text-xs text-gray-500 font-mono font-medium">{formData.currency_code} / {formData.units_code} / BCO {formData.border_crossing_only ? 'Yes' : 'No'} / {formData.rate_type}</span>
-                )}
-                <span className={`${collapsedSections.actions ? '' : 'ml-auto'} text-gray-400 transition-transform ${collapsedSections.actions ? '' : 'rotate-180'}`}>
-                  <ChevronDown className="w-4 h-4" />
-                </span>
-              </button>
-              {!collapsedSections.actions && (
-              <div className="p-5 border-t border-gray-100">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-5">
+              <h3 className="text-sm font-semibold text-blue-800 mb-4">ACTIONS</h3>
               <div className="grid grid-cols-4 gap-x-6">
                 <div>
                   <label className="block text-sm text-gray-700 mb-1">Currency</label>
@@ -1447,8 +1299,6 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
                   <span>Border Crossing Only has been applied to both lanes in this {isRoundTrip ? 'Round Trip' : 'Circuit'} pair.</span>
                 </div>
               )}
-              </div>
-              )}
             </div>
 
             {isD2DSplitBilling && (
@@ -1540,29 +1390,8 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
               </div>
             )}
 
-            <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden" style={{ borderLeftWidth: '6px', borderLeftColor: '#475569' }}>
-              <button
-                type="button"
-                onClick={() => setCollapsedSections(s => ({ ...s, general: !s.general }))}
-                className="w-full flex items-center gap-3 px-5 py-3 text-left transition-colors"
-                style={{ background: '#f1f5f9' }}
-              >
-                <span className="text-xs font-bold tracking-wider uppercase text-gray-600">General Section</span>
-                <span className="text-[10.5px] font-semibold px-2 py-0.5 rounded text-white" style={{ background: '#475569', letterSpacing: '0.4px' }}>ROUTING</span>
-                {collapsedSections.general && (
-                  <span className="ml-auto text-xs text-gray-500 font-mono font-medium truncate max-w-[300px]">{formData.origin_city || '—'} → {formData.destination_city || '—'}</span>
-                )}
-                <span className={`${collapsedSections.general ? '' : 'ml-auto'} text-gray-400 transition-transform ${collapsedSections.general ? '' : 'rotate-180'}`}>
-                  <ChevronDown className="w-4 h-4" />
-                </span>
-              </button>
-              {!collapsedSections.general && (
-              <div className="p-5 border-t border-gray-100">
-              {distanceNotes.length > 0 && (
-                <div className="mb-3 px-3 py-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-700">
-                  {distanceNotes.map((n, i) => <div key={i}>{n}</div>)}
-                </div>
-              )}
+            <div className="bg-gray-100 rounded-lg p-5">
+              <h3 className="text-sm font-semibold text-gray-700 mb-4">GENERAL SECTION</h3>
               <div className="grid grid-cols-2 gap-x-6 gap-y-4">
                 <div>
                   <label className="block text-sm text-gray-700 mb-1">
@@ -2057,8 +1886,6 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
                   </div>
                 </div>
               </div>
-              </div>
-              )}
             </div>
 
 
@@ -2099,32 +1926,16 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
               const totalUSPortion = totalUSFixedCosts + totalUSVariableCosts;
 
               return (
-                <div className={`bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden ${isUSDisabled ? 'opacity-50' : ''}`} style={{ borderLeftWidth: '6px', borderLeftColor: '#2563eb' }}>
-                  <button
-                    type="button"
-                    onClick={() => setCollapsedSections(s => ({ ...s, us: !s.us }))}
-                    className="w-full flex items-center gap-3 px-5 py-3 text-left transition-colors"
-                    style={{ background: '#eff5ff' }}
-                  >
-                    <span className="text-xs font-bold tracking-wider uppercase" style={{ color: '#2563eb' }}>US Section</span>
-                    <span className="text-[10.5px] font-semibold px-2 py-0.5 rounded text-white" style={{ background: '#2563eb', letterSpacing: '0.4px' }}>{formData.us_rate_type === 'RPM' ? 'RPM' : 'FLAT'}</span>
-                    {isUSDisabled && isLoop && !isD2DSplitBilling && (
-                      <span className="text-xs text-gray-500 italic">Not applicable for Loop service</span>
-                    )}
-                    {isUSDisabled && isD2DSplitBilling && (
-                      <span className="text-xs text-gray-500 italic">Not applicable for this portion</span>
-                    )}
-                    {collapsedSections.us && !isUSDisabled && (
-                      <span className="ml-auto text-xs text-gray-500 font-mono">Total US <span className="font-semibold text-gray-900">{formatCurrencyOrDash(totalUSPortion, currencyCode)}</span></span>
-                    )}
-                    <span className={`${collapsedSections.us ? '' : 'ml-auto'} text-gray-400 transition-transform ${collapsedSections.us ? '' : 'rotate-180'}`}>
-                      <ChevronDown className="w-4 h-4" />
-                    </span>
-                  </button>
-                  {!collapsedSections.us && (
-                  <div className="p-5 border-t border-gray-100">
+                <div className={`rounded-lg p-5 ${isUSDisabled ? 'bg-gray-200' : 'bg-gray-100'}`}>
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3">
+                      <h3 className="text-sm font-semibold text-gray-700">US SECTION</h3>
+                      {isUSDisabled && isLoop && !isD2DSplitBilling && (
+                        <span className="text-xs text-gray-500 italic">Not applicable for Loop service</span>
+                      )}
+                      {isUSDisabled && isD2DSplitBilling && (
+                        <span className="text-xs text-gray-500 italic">Not applicable for this portion</span>
+                      )}
                     </div>
                     {!isUSDisabled && (
                       <div className="flex items-center gap-2">
@@ -2436,8 +2247,6 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
                     onChange={setUsAccessorialsDirty}
                     currencyCode={currencyCode}
                   />
-                  </div>
-                  )}
                 </div>
               );
             })()}
@@ -2479,32 +2288,16 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
               const totalMXPortion = totalMXFixedCosts + totalMXVariableCosts;
 
               return (
-                <div className={`bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden ${isMXDisabled ? 'opacity-50' : ''}`} style={{ borderLeftWidth: '6px', borderLeftColor: '#15803d' }}>
-                  <button
-                    type="button"
-                    onClick={() => setCollapsedSections(s => ({ ...s, mx: !s.mx }))}
-                    className="w-full flex items-center gap-3 px-5 py-3 text-left transition-colors"
-                    style={{ background: '#effaf1' }}
-                  >
-                    <span className="text-xs font-bold tracking-wider uppercase" style={{ color: '#15803d' }}>MX Section</span>
-                    <span className="text-[10.5px] font-semibold px-2 py-0.5 rounded text-white" style={{ background: '#15803d', letterSpacing: '0.4px' }}>{formData.mx_rate_type === 'RPM' ? 'RPM' : 'FLAT'}</span>
-                    {isMXDisabled && isDomestic && !isD2DSplitBilling && (
-                      <span className="text-xs text-gray-500 italic">Not applicable for Domestic service</span>
-                    )}
-                    {isMXDisabled && isD2DSplitBilling && (
-                      <span className="text-xs text-gray-500 italic">Not applicable for this portion</span>
-                    )}
-                    {collapsedSections.mx && !isMXDisabled && (
-                      <span className="ml-auto text-xs text-gray-500 font-mono">Total MX <span className="font-semibold text-gray-900">{formatCurrencyOrDash(totalMXPortion, currencyCode)}</span></span>
-                    )}
-                    <span className={`${collapsedSections.mx ? '' : 'ml-auto'} text-gray-400 transition-transform ${collapsedSections.mx ? '' : 'rotate-180'}`}>
-                      <ChevronDown className="w-4 h-4" />
-                    </span>
-                  </button>
-                  {!collapsedSections.mx && (
-                  <div className="p-5 border-t border-gray-100">
+                <div className={`rounded-lg p-5 ${isMXDisabled ? 'bg-gray-200' : 'bg-gray-100'}`}>
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3">
+                      <h3 className="text-sm font-semibold text-gray-700">MX SECTION</h3>
+                      {isMXDisabled && isDomestic && !isD2DSplitBilling && (
+                        <span className="text-xs text-gray-500 italic">Not applicable for Domestic service</span>
+                      )}
+                      {isMXDisabled && isD2DSplitBilling && (
+                        <span className="text-xs text-gray-500 italic">Not applicable for this portion</span>
+                      )}
                     </div>
                     {!isMXDisabled && (
                       <div className="flex items-center gap-2">
@@ -2816,29 +2609,12 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
                     onChange={setMxAccessorialsDirty}
                     currencyCode={currencyCode}
                   />
-                  </div>
-                  )}
                 </div>
               );
             })()}
 
-            <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden" style={{ borderLeftWidth: '6px', borderLeftColor: '#94a3b8' }}>
-              <button
-                type="button"
-                onClick={() => setCollapsedSections(s => ({ ...s, additional: !s.additional }))}
-                className="w-full flex items-center gap-3 px-5 py-3 text-left transition-colors"
-                style={{ background: '#f8fafc' }}
-              >
-                <span className="text-xs font-bold tracking-wider uppercase text-gray-500">Additional Information</span>
-                {collapsedSections.additional && (
-                  <span className="ml-auto text-xs text-gray-500 font-mono">{formData.type_of_service || 'optional'}</span>
-                )}
-                <span className={`${collapsedSections.additional ? '' : 'ml-auto'} text-gray-400 transition-transform ${collapsedSections.additional ? '' : 'rotate-180'}`}>
-                  <ChevronDown className="w-4 h-4" />
-                </span>
-              </button>
-              {!collapsedSections.additional && (
-              <div className="p-5 border-t border-gray-100">
+            <div className="bg-gray-100 rounded-lg p-5">
+              <h3 className="text-sm font-semibold text-gray-700 mb-4">Additional Information</h3>
               <div className="grid grid-cols-2 gap-x-6 gap-y-4">
                 <div>
                   <label className="block text-sm text-gray-700 mb-1">
@@ -2950,6 +2726,7 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
                 </div>
                 {getEquipmentSpecificFields()}
               </div>
+            </div>
 
             <div className="mt-4">
               <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -2963,78 +2740,77 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
                 className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
-              </div>
-              )}
-            </div>
             </div>
           </div>
         </div>
 
-        <div className="flex-shrink-0 px-6 py-3.5 bg-white border-t border-gray-200 flex items-center gap-3 flex-wrap">
-          <button
-            onClick={() => onBenchmark?.(lane)}
-            className="flex items-center gap-2 h-9 px-4 text-[13px] font-semibold rounded-lg border transition-colors"
-            style={{ color: '#0a5f5e', borderColor: '#cbd5e1', background: '#fff' }}
-          >
-            <BarChart2 className="w-4 h-4" />
-            Benchmark
-          </button>
-          <button
-            onClick={() => handleNavigateWithCheck('close')}
-            className="h-9 px-4 text-[13px] font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-          >
-            {locked ? 'Close' : 'Cancel'}
-          </button>
-          <div className="flex-1" />
-          <button
-            onClick={() => handleNavigateWithCheck('previous')}
-            disabled={!hasPreviousLane}
-            title={!hasPreviousLane ? 'This is the first lane' : ''}
-            className={`h-9 px-4 text-[13px] font-semibold rounded-lg border transition-colors ${
-              hasPreviousLane
-                ? 'text-gray-600 bg-gray-50 border-gray-300 hover:bg-gray-100'
-                : 'text-gray-300 bg-gray-50 border-gray-200 cursor-not-allowed'
-            }`}
-          >
-            Previous Lane
-          </button>
-          <button
-            onClick={() => handleNavigateWithCheck('next')}
-            disabled={!hasNextLane}
-            title={!hasNextLane ? 'This is the last lane' : ''}
-            className={`h-9 px-4 text-[13px] font-semibold rounded-lg border transition-colors ${
-              hasNextLane
-                ? 'text-gray-600 bg-gray-50 border-gray-300 hover:bg-gray-100'
-                : 'text-gray-300 bg-gray-50 border-gray-200 cursor-not-allowed'
-            }`}
-          >
-            Next Lane
-          </button>
-          {!locked && (
+        <div className="flex-shrink-0 px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-between gap-3">
+          <div className="flex gap-3">
             <button
-              onClick={() => handleSubmit()}
-              className="h-9 px-5 text-[13px] font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 border border-blue-600 transition-colors"
+              onClick={() => onBenchmark?.(lane)}
+              className="flex items-center gap-2 px-5 py-2 text-sm font-medium text-blue-600 bg-white border border-blue-600 rounded hover:bg-blue-50 transition-colors"
             >
-              Save
+              <BarChart2 className="w-4 h-4" />
+              Benchmark
             </button>
-          )}
-          {!locked && (
             <button
-              onClick={async () => {
-                if (hasNextLane) {
-                  const saved = await handleSubmit(true);
-                  if (saved) {
-                    onNextLane?.();
+              onClick={() => handleNavigateWithCheck('close')}
+              className="px-6 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 transition-colors"
+            >
+              {locked ? 'Close' : 'Cancel'}
+            </button>
+          </div>
+          <div className="flex gap-3">
+            <button
+              onClick={() => handleNavigateWithCheck('previous')}
+              disabled={!hasPreviousLane}
+              title={!hasPreviousLane ? 'This is the first lane' : ''}
+              className={`px-6 py-2 text-sm font-medium rounded transition-colors ${
+                hasPreviousLane
+                  ? 'text-blue-600 bg-white border border-blue-600 hover:bg-blue-50'
+                  : 'text-gray-400 bg-white border border-gray-300 cursor-not-allowed'
+              }`}
+            >
+              Previous Lane
+            </button>
+            <button
+              onClick={() => handleNavigateWithCheck('next')}
+              disabled={!hasNextLane}
+              title={!hasNextLane ? 'This is the last lane' : ''}
+              className={`px-6 py-2 text-sm font-medium rounded transition-colors ${
+                hasNextLane
+                  ? 'text-blue-600 bg-white border border-blue-600 hover:bg-blue-50'
+                  : 'text-gray-400 bg-white border border-gray-300 cursor-not-allowed'
+              }`}
+            >
+              Next Lane
+            </button>
+            {!locked && (
+              <button
+                onClick={() => handleSubmit()}
+                className="px-6 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700 transition-colors"
+              >
+                Save
+              </button>
+            )}
+            {!locked && (
+              <button
+                onClick={async () => {
+                  if (hasNextLane) {
+                    const saved = await handleSubmit(true);
+                    if (saved) {
+                      onNextLane?.();
+                    }
+                  } else {
+                    handleSubmit();
                   }
-                } else {
-                  handleSubmit();
-                }
-              }}
-              className="h-9 px-5 text-[13px] font-semibold text-white bg-green-600 rounded-lg hover:bg-green-700 border border-green-600 transition-colors"
-            >
+                }}
+                className="px-6 py-2 text-sm font-medium text-white bg-green-600 rounded hover:bg-green-700 transition-colors"
+              >
               Save and Next Lane
-            </button>
-          )}
+              </button>
+            )}
+          </div>
         </div>
 
         {unsavedDialog && (
