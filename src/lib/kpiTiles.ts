@@ -1,0 +1,99 @@
+import { supabase } from './supabase';
+import { ListView } from '../components/QuotesHomeHeader';
+
+export const KPI_MAX_TILES = 8;
+
+export interface KpiTile {
+  id: string;
+  object: string;
+  owner_user_id: string | null;
+  list_view_id: string | null;
+  title: string;
+  color: number;
+  position: number;
+  /** Joined list view; null when the view was deleted or is not visible. */
+  list_view: ListView | null;
+}
+
+export interface KpiTileInput {
+  title: string;
+  color: number;
+  list_view_id: string;
+}
+
+const LIST_VIEW_COLUMNS = 'id,name,object,owner_user_id,visibility,is_system,filters,filter_logic,columns,sorting';
+
+/** Personal tiles for the current user and object, ordered by position. */
+export async function fetchPersonalTiles(object: string, userId: string): Promise<KpiTile[]> {
+  const { data, error } = await supabase
+    .from('kpi_tiles')
+    .select(`id,object,owner_user_id,list_view_id,title,color,position,list_view:list_views(${LIST_VIEW_COLUMNS})`)
+    .eq('object', object)
+    .eq('owner_user_id', userId)
+    .order('position', { ascending: true });
+  if (error) throw error;
+  return (data || []).map(row => {
+    const lv = row.list_view as unknown;
+    return {
+      ...row,
+      list_view: (Array.isArray(lv) ? lv[0] ?? null : lv ?? null) as ListView | null,
+    } as KpiTile;
+  });
+}
+
+export async function createTile(object: string, userId: string, input: KpiTileInput, position: number): Promise<void> {
+  const { error } = await supabase.from('kpi_tiles').insert({
+    object,
+    owner_user_id: userId,
+    list_view_id: input.list_view_id,
+    title: input.title.trim(),
+    color: input.color,
+    position,
+  });
+  if (error) throw error;
+}
+
+export async function updateTile(id: string, input: KpiTileInput): Promise<void> {
+  const { error } = await supabase.from('kpi_tiles').update({
+    list_view_id: input.list_view_id,
+    title: input.title.trim(),
+    color: input.color,
+  }).eq('id', id);
+  if (error) throw error;
+}
+
+export async function deleteTile(id: string): Promise<void> {
+  const { error } = await supabase.from('kpi_tiles').delete().eq('id', id);
+  if (error) throw error;
+}
+
+/** Server-side counts. Returns a map view_id -> count (null when the view cannot be counted). */
+export async function countListViews(viewIds: string[]): Promise<Record<string, number | null>> {
+  const unique = Array.from(new Set(viewIds.filter(Boolean)));
+  if (unique.length === 0) return {};
+  const { data, error } = await supabase.rpc('count_list_views', { p_view_ids: unique });
+  if (error) throw error;
+  const result: Record<string, number | null> = {};
+  for (const id of unique) result[id] = null;
+  for (const row of (data || []) as { view_id: string; record_count: number | null }[]) {
+    result[row.view_id] = row.record_count == null ? null : Number(row.record_count);
+  }
+  return result;
+}
+
+/** Views the current user can see for the object (RLS-filtered), sorted by name. */
+export async function fetchSelectableViews(object: string): Promise<ListView[]> {
+  const { data, error } = await supabase
+    .from('list_views')
+    .select(LIST_VIEW_COLUMNS)
+    .eq('object', object)
+    .order('name', { ascending: true });
+  if (error) throw error;
+  return (data || []) as ListView[];
+}
+
+/** A view is countable server-side unless it filters on a client-computed field. */
+export function isViewCountable(view: ListView): boolean {
+  const filters = view.filters || [];
+  return !filters.some(f => f.field === 'customer_review_status');
+}

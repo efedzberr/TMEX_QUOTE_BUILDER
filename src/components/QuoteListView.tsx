@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import {
   Plus, Trash2, Pencil, Copy, Lock, GitBranch, Settings, ArrowUp, ArrowDown,
   Columns3, RotateCcw as ResetIcon, Filter, Search, X, FilePlus, Share2,
-  RefreshCw, MoreVertical, Eye, AlertCircle,
+  RefreshCw, MoreVertical, Eye, AlertCircle, BarChart3,
 } from 'lucide-react';
 import { supabase, Quote, QuoteLane } from '../lib/supabase';
 import { isQuoteLocked } from '../lib/constants';
@@ -12,6 +12,7 @@ import { QuotesHomeHeader, ListView, ListViewFilter, ListViewColumn, ListViewSor
 import { SelectFieldsModal } from './SelectFieldsModal';
 import { FilterPanel } from './FilterPanel';
 import { ListViewModals, ViewModalType } from './ListViewModals';
+import { KpiStrip } from './kpi/KpiStrip';
 import { FIELD_CATALOG_MAP, isLinkField } from '../lib/quoteFieldCatalog';
 import { FilterCriterion, OwnerScope, applyComposedFilters } from '../lib/quoteFilterEngine';
 
@@ -53,6 +54,7 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [kpiAddRequest, setKpiAddRequest] = useState(0);
 
   // Session overrides
   const [sessionColumns, setSessionColumns] = useState<ListViewColumn[] | null>(null);
@@ -891,6 +893,15 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
                 )}
               </div>
 
+              {/* Add KPI */}
+              <button
+                onClick={() => setKpiAddRequest(n => n + 1)}
+                className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-500 hover:text-gray-700 transition-colors"
+                title="Add KPI"
+              >
+                <BarChart3 className="w-4 h-4" />
+              </button>
+
               {/* Refresh */}
               <button
                 onClick={handleRefresh}
@@ -925,6 +936,16 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
             View is read-only — changes won't be saved. Clone the view to keep them.
           </div>
         )}
+
+        <KpiStrip
+          object="quote"
+          userId={userId}
+          activeViewId={activeView?.id}
+          onSelectView={handleViewChange}
+          refreshToken={lastUpdated}
+          addRequestId={kpiAddRequest}
+          onError={setToast}
+        />
 
         {/* Refreshing indicator */}
         {refreshing && (
