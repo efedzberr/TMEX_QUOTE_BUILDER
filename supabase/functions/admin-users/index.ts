@@ -90,10 +90,10 @@ async function handleList(serviceClient: ReturnType<typeof createClient>) {
   // Get all profiles
   const { data: profiles } = await serviceClient
     .from("user_profiles")
-    .select("id, display_name, is_admin, role_id");
+    .select("id, display_name, is_admin, profile_id, role_id");
 
   const profileMap = new Map(
-    (profiles || []).map((p: { id: string; display_name: string | null; is_admin: boolean; role_id: string | null }) => [p.id, p])
+    (profiles || []).map((p: { id: string; display_name: string | null; is_admin: boolean; profile_id: string | null; role_id: string | null }) => [p.id, p])
   );
 
   // For each user, check factors reliably via getUserById (listUsers may omit factors)
@@ -125,6 +125,7 @@ async function handleList(serviceClient: ReturnType<typeof createClient>) {
       email: u.email,
       display_name: profile?.display_name || null,
       is_admin: profile?.is_admin || false,
+      profile_id: profile?.profile_id || null,
       role_id: profile?.role_id || null,
       created_at: u.created_at,
       last_sign_in_at: u.last_sign_in_at,
@@ -138,19 +139,25 @@ async function handleList(serviceClient: ReturnType<typeof createClient>) {
 
 async function handleInvite(
   serviceClient: ReturnType<typeof createClient>,
-  body: { email?: string; display_name?: string; is_admin?: boolean; role_id?: string }
+  body: { email?: string; display_name?: string; is_admin?: boolean; profile_id?: string; role_id?: string }
 ) {
-  const { email, display_name, is_admin, role_id } = body;
+  const { email, display_name, is_admin, profile_id, role_id } = body;
 
   if (!email || typeof email !== "string" || !email.includes("@")) {
     return jsonResponse({ error: "A valid email is required" }, 400);
   }
-  if (!role_id || typeof role_id !== "string") {
-    return jsonResponse({ error: "A role is required" }, 400);
+  if (!profile_id || typeof profile_id !== "string") {
+    return jsonResponse({ error: "A profile is required" }, 400);
   }
-  const { data: roleRow } = await serviceClient.from("roles").select("id").eq("id", role_id).maybeSingle();
-  if (!roleRow) {
-    return jsonResponse({ error: "The selected role does not exist" }, 400);
+  const { data: profileRow } = await serviceClient.from("profiles").select("id").eq("id", profile_id).maybeSingle();
+  if (!profileRow) {
+    return jsonResponse({ error: "The selected profile does not exist" }, 400);
+  }
+  if (role_id) {
+    const { data: roleRow } = await serviceClient.from("roles").select("id").eq("id", role_id).maybeSingle();
+    if (!roleRow) {
+      return jsonResponse({ error: "The selected role does not exist" }, 400);
+    }
   }
 
   // Invite user (generates invite email)
@@ -178,7 +185,8 @@ async function handleInvite(
         id: userId,
         display_name: display_name || null,
         is_admin: is_admin === true,
-        role_id,
+        profile_id,
+        role_id: role_id || null,
       },
       { onConflict: "id" }
     );

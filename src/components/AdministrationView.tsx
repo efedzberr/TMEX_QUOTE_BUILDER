@@ -7,13 +7,13 @@ import { AccountLanesTab } from './admin/AccountLanesTab';
 import { CostStructureTab } from './admin/CostStructureTab';
 import { MarketInformationTab } from './admin/MarketInformationTab';
 import { UsersTab } from './admin/UsersTab';
-import { RolesTab } from './admin/RolesTab';
+import { ProfilesTab } from './admin/ProfilesTab';
 import { SlaTab } from './admin/SlaTab';
 import { usePermissions } from '../lib/permissions';
 import type { PermissionKey } from '../lib/permissionCatalog';
 
 
-type AdminTab = 'accounts' | 'bill_to' | 'shippers' | 'cities' | 'global_variables' | 'border_crossings' | 'accessorials' | 'terms_conditions' | 'account_lanes' | 'cost_structure' | 'market_information' | 'sla' | 'users' | 'roles';
+type AdminTab = 'accounts' | 'bill_to' | 'shippers' | 'cities' | 'global_variables' | 'border_crossings' | 'accessorials' | 'terms_conditions' | 'account_lanes' | 'cost_structure' | 'market_information' | 'sla' | 'users' | 'profiles';
 
 
 interface BillTo {
@@ -1681,7 +1681,7 @@ const TABS: { id: AdminTab; label: string; permission: PermissionKey }[] = [
   { id: 'market_information', label: 'Market Information', permission: 'admin.market_information' },
   { id: 'sla', label: 'SLA', permission: 'admin.sla' },
   { id: 'users', label: 'Users', permission: 'admin.users' },
-  { id: 'roles', label: 'Roles', permission: 'admin.roles' },
+  { id: 'profiles', label: 'Profiles', permission: 'admin.profiles' },
 ];
 
 export function AdministrationView() {
@@ -1750,7 +1750,7 @@ export function AdministrationView() {
             {activeTab === 'cost_structure' && <CostStructureTab onToast={handleToast} />}
             {activeTab === 'market_information' && <MarketInformationTab onToast={handleToast} />}
             {activeTab === 'users' && <UsersTab onToast={handleToast} />}
-            {activeTab === 'roles' && <RolesTab onToast={handleToast} />}
+            {activeTab === 'profiles' && <ProfilesTab onToast={handleToast} />}
             {activeTab === 'sla' && <SlaTab onToast={handleToast} />}
           </div>
         </div>

@@ -9,6 +9,7 @@ interface UserRow {
   email: string;
   display_name: string | null;
   is_admin: boolean;
+  profile_id: string | null;
   role_id: string | null;
   created_at: string;
   last_sign_in_at: string | null;
@@ -23,7 +24,7 @@ interface RoleOption {
 }
 
 async function fetchRoles(): Promise<RoleOption[]> {
-  const { data, error } = await supabaseClient.from('roles').select('id,name,is_system').order('is_system', { ascending: false }).order('name');
+  const { data, error } = await supabaseClient.from('profiles').select('id,name,is_system').order('is_system', { ascending: false }).order('name');
   if (error) throw error;
   return (data || []) as RoleOption[];
 }
@@ -88,9 +89,9 @@ export function UsersTab({ onToast }: UsersTabProps) {
 
   async function handleChangeRole(user: UserRow, newRoleId: string) {
     try {
-      const { error: updErr } = await supabaseClient.from('user_profiles').update({ role_id: newRoleId }).eq('id', user.id);
+      const { error: updErr } = await supabaseClient.from('user_profiles').update({ profile_id: newRoleId }).eq('id', user.id);
       if (updErr) throw updErr;
-      setUsers(prev => prev.map(u => u.id === user.id ? { ...u, role_id: newRoleId } : u));
+      setUsers(prev => prev.map(u => u.id === user.id ? { ...u, profile_id: newRoleId } : u));
       onToast(`${user.display_name || user.email} is now "${roleName(newRoleId) || 'Unassigned'}"`, 'success');
     } catch (e: any) {
       onToast(e.message || "We couldn't change the role.", 'error');
@@ -245,7 +246,7 @@ export function UsersTab({ onToast }: UsersTabProps) {
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Display Name</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Email</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Access</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Role</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Profile</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Status</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">2FA</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Last Sign-in</th>
@@ -268,10 +269,10 @@ export function UsersTab({ onToast }: UsersTabProps) {
                     <td className="px-4 py-3">
                       {user.is_admin ? (
                         <span className="text-xs text-gray-400 italic">All permissions</span>
-                      ) : roleName(user.role_id) ? (
-                        <span className="text-sm text-gray-900">{roleName(user.role_id)}</span>
+                      ) : roleName(user.profile_id) ? (
+                        <span className="text-sm text-gray-900">{roleName(user.profile_id)}</span>
                       ) : (
-                        <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-amber-50 text-amber-700 border border-amber-200">No role — Home only</span>
+                        <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-amber-50 text-amber-700 border border-amber-200">No profile — Home only</span>
                       )}
                     </td>
                     <td className="px-4 py-3">
@@ -329,7 +330,7 @@ export function UsersTab({ onToast }: UsersTabProps) {
           />
           <MenuButton
             icon={<Shield className="w-4 h-4 text-gray-400" />}
-            label="Change Role"
+            label="Change Profile"
             onClick={() => { closeMenu(); setChangeRoleUser(menuUser); }}
           />
           <MenuButton
@@ -401,19 +402,19 @@ function MenuButton({ icon, label, disabled, tooltip, destructive, onClick }: {
 }
 
 function ChangeRoleModal({ user, roles, onClose, onSave }: { user: UserRow; roles: RoleOption[]; onClose: () => void; onSave: (roleId: string) => void }) {
-  const [roleId, setRoleId] = useState(user.role_id || '');
+  const [roleId, setRoleId] = useState(user.profile_id || '');
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-sm p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-1">Change Role</h2>
+        <h2 className="text-lg font-semibold text-gray-900 mb-1">Change Profile</h2>
         <p className="text-sm text-gray-500 mb-4">{user.display_name || user.email}</p>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Profile</label>
         <select
           value={roleId}
           onChange={e => setRoleId(e.target.value)}
           className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
-          <option value="">Select a role...</option>
+          <option value="">Select a profile...</option>
           {roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
         </select>
         <p className="mt-2 text-xs text-gray-400">The change applies the next time the user loads the app.</p>
@@ -421,7 +422,7 @@ function ChangeRoleModal({ user, roles, onClose, onSave }: { user: UserRow; role
           <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Cancel</button>
           <button
             type="button"
-            disabled={!roleId || roleId === (user.role_id || '')}
+            disabled={!roleId || roleId === (user.profile_id || '')}
             onClick={() => onSave(roleId)}
             className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
           >
@@ -445,12 +446,12 @@ function InviteModal({ roles, onClose, onSuccess }: { roles: RoleOption[]; onClo
     e.preventDefault();
     if (!email.trim() || !email.includes('@')) { setError('Enter a valid email'); return; }
     if (!displayName.trim()) { setError('Display name is required'); return; }
-    if (!roleId) { setError('Role is required'); return; }
+    if (!roleId) { setError('Profile is required'); return; }
 
     setLoading(true);
     setError(null);
     try {
-      await callAdminUsers('invite', { email: email.trim(), display_name: displayName.trim(), is_admin: isAdmin, role_id: roleId });
+      await callAdminUsers('invite', { email: email.trim(), display_name: displayName.trim(), is_admin: isAdmin, profile_id: roleId });
       onSuccess(email.trim());
       onClose();
     } catch (e: any) {
@@ -490,13 +491,13 @@ function InviteModal({ roles, onClose, onSuccess }: { roles: RoleOption[]; onClo
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Role <span className="text-red-600">*</span></label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Profile <span className="text-red-600">*</span></label>
             <select
               value={roleId}
               onChange={e => setRoleId(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="">Select a role...</option>
+              <option value="">Select a profile...</option>
               {roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
             </select>
           </div>
