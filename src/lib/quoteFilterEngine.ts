@@ -1,6 +1,7 @@
 import { FIELD_CATALOG_MAP, FieldDataType } from './quoteFieldCatalog';
 import { parseRelativeValue, resolveRelativeRange } from './relativeDates';
 import { getDueStatus, parseLocalDate, DUE_STATUS_LABELS } from './dueStatus';
+import { getTimeMetrics, secondsToHours } from './timeTracking';
 import type { Quote } from './supabase';
 
 export interface FilterCriterion {
@@ -86,6 +87,11 @@ function getFieldValue(record: Record<string, unknown>, field: string, computeTo
   }
   if (field === 'due_status') {
     return getDueStatus(record as unknown as Quote).label;
+  }
+  if (field === 'age_days' || field === 'total_hours' || field === 'effective_hours' || field === 'hold_hours') {
+    const m = getTimeMetrics(record as unknown as Quote);
+    if (field === 'age_days') return m.ageDays;
+    return secondsToHours(field === 'total_hours' ? m.totalSeconds : field === 'effective_hours' ? m.effectiveSeconds : m.pausedSeconds);
   }
   if (field === 'due_date') {
     // date-only column: parse as local date so day comparisons don't shift by time zone

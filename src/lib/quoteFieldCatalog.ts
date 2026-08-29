@@ -35,6 +35,10 @@ export const QUOTE_FIELD_CATALOG: QuoteFieldDef[] = [
   { key: 'priority', label: 'Priority', dataType: 'picklist', sortable: true },
   { key: 'due_date', label: 'Due Date', dataType: 'date', sortable: true },
   { key: 'due_status', label: 'Due Status', dataType: 'picklist', sortable: false, computed: true },
+  { key: 'age_days', label: 'Age (days)', dataType: 'number', sortable: false, computed: true },
+  { key: 'total_hours', label: 'Total Time (hours)', dataType: 'number', sortable: false, computed: true },
+  { key: 'effective_hours', label: 'Effective Time (hours)', dataType: 'number', sortable: false, computed: true },
+  { key: 'hold_hours', label: 'Hold Time (hours)', dataType: 'number', sortable: false, computed: true },
   { key: 'created_at', label: 'Created Date', dataType: 'datetime', sortable: true },
   { key: 'customer_review_status', label: 'Customer Review Status', dataType: 'picklist', sortable: false, computed: true },
 ];

@@ -6,14 +6,6 @@ import type { ViewMode } from '../Sidebar';
 // TODO: replace with logged-in user when auth exists
 const CURRENT_USER_NAME = 'Susana Guajardo';
 
-const STAGE_COLORS: Record<string, string> = {
-  'New': 'bg-blue-100 text-blue-800',
-  'In Progress': 'bg-yellow-100 text-yellow-800',
-  'Completed': 'bg-green-100 text-green-800',
-  'Branch Manager Approval': 'bg-orange-100 text-orange-800',
-  'Sent to Customer': 'bg-teal-100 text-teal-800',
-  'Published': 'bg-gray-100 text-gray-800',
-};
 
 interface DashboardViewProps {
   onNavigate: (v: ViewMode) => void;
@@ -203,9 +195,7 @@ export function DashboardView({ onNavigate, onCreateQuote, onOpenQuote }: Dashbo
                     <td className="px-5 py-3 text-center text-sm text-gray-700">{recentLaneCounts[q.id] || 0}</td>
                     <td className="px-5 py-3 text-right text-sm font-medium text-gray-900">{formatFullCurrency(q.total_amount || 0)}</td>
                     <td className="px-5 py-3 text-center">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${STAGE_COLORS[q.stage || 'New'] || STAGE_COLORS['New']}`}>
-                        {q.stage || 'New'}
-                      </span>
+                      <span className="text-sm text-gray-900">{q.stage || 'New'}</span>
                     </td>
                     <td className="px-5 py-3 text-sm text-gray-500">{formatDate(q.created_at)}</td>
                     <td className="px-5 py-3 text-center">

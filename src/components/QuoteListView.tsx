@@ -9,6 +9,7 @@ import { supabase, Quote, QuoteLane } from '../lib/supabase';
 import { isQuoteLocked } from '../lib/constants';
 import { calculateQuoteReviewStatus } from '../lib/customerPortalHelpers';
 import { getDueStatus, formatLocalDate } from '../lib/dueStatus';
+import { getTimeMetrics, formatDuration } from '../lib/timeTracking';
 import { DueStatusBadge } from './DueStatusBadge';
 import { QuotesHomeHeader, ListView, ListViewFilter, ListViewColumn, ListViewSort } from './QuotesHomeHeader';
 import { SelectFieldsModal } from './SelectFieldsModal';
@@ -25,14 +26,6 @@ interface QuoteListViewProps {
   onCloneQuote: (quote: Quote) => void;
 }
 
-const STAGE_COLORS: Record<string, string> = {
-  'New': 'bg-blue-100 text-blue-800',
-  'In Progress': 'bg-yellow-100 text-yellow-800',
-  'Completed': 'bg-green-100 text-green-800',
-  'Branch Manager Approval': 'bg-orange-100 text-orange-800',
-  'Sent to Customer': 'bg-teal-100 text-teal-800',
-  'Published': 'bg-gray-100 text-gray-800',
-};
 
 const SYSTEM_VIEW_ALL = 'a0000000-0000-0000-0000-000000000001';
 const SYSTEM_VIEW_RECENT = 'a0000000-0000-0000-0000-000000000003';
@@ -617,6 +610,15 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
     if (field === 'due_status') {
       return <DueStatusBadge status={getDueStatus(quote)} />;
     }
+    if (field === 'age_days' || field === 'total_hours' || field === 'effective_hours' || field === 'hold_hours') {
+      const m = getTimeMetrics(quote);
+      if (field === 'age_days') return `${m.ageDays} ${m.ageDays === 1 ? 'day' : 'days'}`;
+      const secs = field === 'total_hours' ? m.totalSeconds : field === 'effective_hours' ? m.effectiveSeconds : m.pausedSeconds;
+      return <span className="tabular-nums">{formatDuration(secs)}</span>;
+    }
+    if (field === 'status') {
+      return quote.status || 'Active';
+    }
     if (field === 'due_date') {
       return quote.due_date ? formatLocalDate(quote.due_date) : '\u2014';
     }
@@ -628,8 +630,8 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
     if (field === 'stage') {
       const stage = quote.stage || 'New';
       return (
-        <span className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full w-fit ${STAGE_COLORS[stage] || STAGE_COLORS['New']}`}>
-          {isQuoteLocked(stage) && <Lock className="w-3 h-3" />}
+        <span className="inline-flex items-center gap-1 text-sm text-gray-900">
+          {isQuoteLocked(stage) && <Lock className="w-3 h-3 text-gray-400" />}
           {stage}
         </span>
       );
