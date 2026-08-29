@@ -1,5 +1,7 @@
 import { FIELD_CATALOG_MAP, FieldDataType } from './quoteFieldCatalog';
 import { parseRelativeValue, resolveRelativeRange } from './relativeDates';
+import { getDueStatus, parseLocalDate, DUE_STATUS_LABELS } from './dueStatus';
+import type { Quote } from './supabase';
 
 export interface FilterCriterion {
   id: string;
@@ -58,6 +60,7 @@ export const STATUS_VALUES = ['New', 'In Progress', 'Completed', 'Published'];
 export const CURRENCY_VALUES = ['USD', 'MXN', 'CAD'];
 export const OPPORTUNITY_TYPE_VALUES = ['BID', 'CONTRACT', 'STANDARD PUBLISH'];
 export const PRIORITY_VALUES = ['Standard', 'Low', 'High'];
+export const DUE_STATUS_VALUES = [DUE_STATUS_LABELS.on_time, DUE_STATUS_LABELS.due_soon, DUE_STATUS_LABELS.overdue, DUE_STATUS_LABELS.closed];
 
 export function getPicklistValues(field: string): string[] | null {
   switch (field) {
@@ -66,6 +69,7 @@ export function getPicklistValues(field: string): string[] | null {
     case 'currency': return CURRENCY_VALUES;
     case 'opportunity_type': return OPPORTUNITY_TYPE_VALUES;
     case 'priority': return PRIORITY_VALUES;
+    case 'due_status': return DUE_STATUS_VALUES;
     case 'customer_review_status': return ['pending', 'accepted', 'rejected', 'negotiate', 'mixed', 'expired'];
     default: return null;
   }
@@ -79,6 +83,13 @@ const SEARCH_FIELDS = [
 function getFieldValue(record: Record<string, unknown>, field: string, computeTotalAmount?: (id: string) => number): unknown {
   if (field === 'total_amount' && computeTotalAmount) {
     return computeTotalAmount(record.id as string);
+  }
+  if (field === 'due_status') {
+    return getDueStatus(record as unknown as Quote).label;
+  }
+  if (field === 'due_date') {
+    // date-only column: parse as local date so day comparisons don't shift by time zone
+    return parseLocalDate(record.due_date as string | null) ?? '';
   }
   return record[field];
 }

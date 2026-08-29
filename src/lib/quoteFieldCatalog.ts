@@ -32,6 +32,9 @@ export const QUOTE_FIELD_CATALOG: QuoteFieldDef[] = [
   { key: 'us_sales_rep', label: 'US Sales Rep', dataType: 'text', sortable: true },
   { key: 'mx_sales_rep', label: 'MX Sales Rep', dataType: 'text', sortable: true },
   { key: 'owner_name', label: 'Owner', dataType: 'user', sortable: true },
+  { key: 'priority', label: 'Priority', dataType: 'picklist', sortable: true },
+  { key: 'due_date', label: 'Due Date', dataType: 'date', sortable: true },
+  { key: 'due_status', label: 'Due Status', dataType: 'picklist', sortable: false, computed: true },
   { key: 'created_at', label: 'Created Date', dataType: 'datetime', sortable: true },
   { key: 'customer_review_status', label: 'Customer Review Status', dataType: 'picklist', sortable: false, computed: true },
 ];

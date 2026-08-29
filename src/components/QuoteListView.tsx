@@ -8,6 +8,8 @@ import {
 import { supabase, Quote, QuoteLane } from '../lib/supabase';
 import { isQuoteLocked } from '../lib/constants';
 import { calculateQuoteReviewStatus } from '../lib/customerPortalHelpers';
+import { getDueStatus, formatLocalDate } from '../lib/dueStatus';
+import { DueStatusBadge } from './DueStatusBadge';
 import { QuotesHomeHeader, ListView, ListViewFilter, ListViewColumn, ListViewSort } from './QuotesHomeHeader';
 import { SelectFieldsModal } from './SelectFieldsModal';
 import { FilterPanel } from './FilterPanel';
@@ -611,6 +613,17 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
       const c = cfg[status];
       if (!c) return status;
       return <span className={`inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded ${c.classes}`}>{c.label}</span>;
+    }
+    if (field === 'due_status') {
+      return <DueStatusBadge status={getDueStatus(quote)} />;
+    }
+    if (field === 'due_date') {
+      return quote.due_date ? formatLocalDate(quote.due_date) : '\u2014';
+    }
+    if (field === 'priority') {
+      const p = quote.priority || 'Standard';
+      const cls = p === 'High' ? 'text-red-700 bg-red-50' : p === 'Low' ? 'text-gray-600 bg-gray-100' : 'text-blue-700 bg-blue-50';
+      return <span className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full ${cls}`}>{p}</span>;
     }
     if (field === 'stage') {
       const stage = quote.stage || 'New';

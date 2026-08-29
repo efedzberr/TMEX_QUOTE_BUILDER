@@ -283,7 +283,7 @@ function CriterionRow({ index, criterion, ownerProfiles, onUpdate, onRemove }: {
         onChange={e => onUpdate({ field: e.target.value })}
         className="w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-blue-300"
       >
-        {QUOTE_FIELD_CATALOG.filter(f => !f.computed || f.key === 'total_amount').map(f => (
+        {QUOTE_FIELD_CATALOG.filter(f => !f.computed || f.key === 'total_amount' || f.key === 'due_status').map(f => (
           <option key={f.key} value={f.key}>{f.label}</option>
         ))}
       </select>
