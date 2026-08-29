@@ -989,6 +989,8 @@ async function createMassUpdateQuote(group: AccountGroup): Promise<string> {
     bill_to_customer: (originalQuote as Record<string, string>).bill_to_customer || '',
     shipper: (originalQuote as Record<string, string>).shipper || '',
     bco_partner: (originalQuote as Record<string, string>).bco_partner || '',
+    opportunity_type: (originalQuote as Record<string, string>).opportunity_type || null,
+    priority: (originalQuote as Record<string, string>).priority || 'Standard',
     status: 'New',
     stage: 'New',
     currency: (originalQuote as Record<string, string>).currency || 'USD',

@@ -547,6 +547,8 @@ function App() {
           shipper: sourceQuote.shipper,
           bco_partner: sourceQuote.bco_partner,
           opportunity: sourceQuote.opportunity,
+          opportunity_type: sourceQuote.opportunity_type || null,
+          priority: sourceQuote.priority || 'Standard',
         })
         .select()
         .single();
