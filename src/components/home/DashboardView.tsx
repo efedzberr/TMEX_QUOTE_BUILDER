@@ -3,8 +3,12 @@ import { FileText, DollarSign, Package, CheckCircle, Plus, ArrowRight } from 'lu
 import { supabase, Quote } from '../../lib/supabase';
 import type { ViewMode } from '../Sidebar';
 
-// TODO: replace with logged-in user when auth exists
-const CURRENT_USER_NAME = 'Susana Guajardo';
+async function fetchCurrentUserName(): Promise<string> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return '';
+  const { data } = await supabase.from('user_profiles').select('display_name').eq('id', user.id).maybeSingle();
+  return data?.display_name?.trim() || (user.email ? user.email.split('@')[0] : '');
+}
 
 
 interface DashboardViewProps {
@@ -35,6 +39,9 @@ function formatDate(dateStr: string): string {
 }
 
 export function DashboardView({ onNavigate, onCreateQuote, onOpenQuote }: DashboardViewProps) {
+  const [currentUserName, setCurrentUserName] = useState('');
+  useEffect(() => { fetchCurrentUserName().then(setCurrentUserName); }, []);
+
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -119,7 +126,7 @@ export function DashboardView({ onNavigate, onCreateQuote, onOpenQuote }: Dashbo
               {greeting} &middot; {longDate} &middot; {timeStr}
             </div>
             <h1 className="text-2xl font-bold mb-1">
-              Hola, {CURRENT_USER_NAME}. &iquest;Qu&eacute; cotizamos hoy?
+              Hola, {currentUserName}. &iquest;Qu&eacute; cotizamos hoy?
             </h1>
             <p className="text-sm text-blue-200 mb-5">
               Aqu&iacute; tienes el resumen de tu actividad reciente y tus cotizaciones en curso.
