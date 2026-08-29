@@ -71,7 +71,14 @@ export function KpiStrip({ object, userId, activeViewId, onSelectView, refreshTo
     return () => { cancelled = true; };
   }, [object, userId]);
   useEffect(() => { if (loaded) recount(tiles); }, [tiles, loaded, refreshToken, recount]);
-  useEffect(() => { if (addRequestId > 0) setModalTile('new'); }, [addRequestId]);
+  const requestAdd = useCallback(() => {
+    if (tiles.length >= KPI_MAX_TILES) {
+      onError?.(`Maximum of ${KPI_MAX_TILES} KPI tiles.`);
+      return;
+    }
+    setModalTile('new');
+  }, [tiles.length, onError]);
+  useEffect(() => { if (addRequestId > 0) requestAdd(); }, [addRequestId, requestAdd]);
 
   async function handleSave(input: KpiTileInput) {
     if (!userId) return;
