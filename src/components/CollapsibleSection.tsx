@@ -29,15 +29,15 @@ export function CollapsibleSection({ title, storageKey, defaultOpen = true, asid
   }, [open, storageKey]);
 
   return (
-    <div className={`bg-white rounded-lg border border-gray-200 ${className}`}>
+    <div className={`bg-white rounded-lg shadow-sm border border-gray-200 ${className}`}>
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between px-6 py-3 text-left"
+        className="w-full px-6 py-4 flex items-center justify-between text-left hover:bg-gray-50 transition-colors rounded-lg"
       >
         <span className="flex items-center gap-2">
-          {open ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
-          <span className="text-sm font-semibold text-gray-900">{title}</span>
+          {open ? <ChevronDown className="w-5 h-5 text-gray-600" /> : <ChevronRight className="w-5 h-5 text-gray-600" />}
+          <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
         </span>
         {aside && <span onClick={e => e.stopPropagation()}>{aside}</span>}
       </button>

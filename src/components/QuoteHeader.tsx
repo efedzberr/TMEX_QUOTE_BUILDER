@@ -303,7 +303,8 @@ export function QuoteHeader({
   const isRevisionQuote = quote.quote_number?.endsWith('-NEG') || false;
 
   return (
-    <div className="bg-white">
+    <div className="space-y-6">
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
       {isRevisionQuote && (
         <div className="bg-amber-50 border-b border-amber-200 px-6 py-2.5 flex items-center justify-between">
           <div className="flex items-center gap-2 text-sm text-amber-800">
@@ -323,7 +324,7 @@ export function QuoteHeader({
           )}
         </div>
       )}
-      <div className="px-6 py-6 border-b border-gray-200 flex gap-6">
+      <div className="px-6 py-6 flex gap-6">
         <div className="flex-1 flex">
           <div className="flex-1 border-r border-gray-300 pr-6 text-center">
             <div className="text-2xl mb-2">📋</div>
@@ -421,7 +422,8 @@ export function QuoteHeader({
         </div>
       </div>
 
-      <CollapsibleSection title="Quote General Information" storageKey="quote.general" className="mt-4 mx-6 mb-4">
+      </div>
+      <CollapsibleSection title="Quote General Information" storageKey="quote.general">
       <div className="px-6 py-4 grid grid-cols-5 gap-6">
         <div className="space-y-3">
           <div className="text-[11px] text-gray-500 uppercase tracking-wider font-semibold">People</div>
