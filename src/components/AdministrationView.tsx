@@ -7,9 +7,12 @@ import { AccountLanesTab } from './admin/AccountLanesTab';
 import { CostStructureTab } from './admin/CostStructureTab';
 import { MarketInformationTab } from './admin/MarketInformationTab';
 import { UsersTab } from './admin/UsersTab';
+import { RolesTab } from './admin/RolesTab';
+import { usePermissions } from '../lib/permissions';
+import type { PermissionKey } from '../lib/permissionCatalog';
 
 
-type AdminTab = 'accounts' | 'bill_to' | 'shippers' | 'cities' | 'global_variables' | 'border_crossings' | 'accessorials' | 'terms_conditions' | 'account_lanes' | 'cost_structure' | 'market_information' | 'users';
+type AdminTab = 'accounts' | 'bill_to' | 'shippers' | 'cities' | 'global_variables' | 'border_crossings' | 'accessorials' | 'terms_conditions' | 'account_lanes' | 'cost_structure' | 'market_information' | 'users' | 'roles';
 
 
 interface BillTo {
@@ -1663,23 +1666,32 @@ function ManageTermsConditions() {
   );
 }
 
-const TABS: { id: AdminTab; label: string }[] = [
-  { id: 'accounts', label: 'Partner Accounts' },
-  { id: 'bill_to', label: 'Bill To' },
-  { id: 'shippers', label: 'Shippers' },
-  { id: 'cities', label: 'Cities' },
-  { id: 'global_variables', label: 'Global Variables' },
-  { id: 'border_crossings', label: 'Border Crossing Cities' },
-  { id: 'accessorials', label: 'Accessorials' },
-  { id: 'terms_conditions', label: 'Terms & Conditions' },
-  { id: 'account_lanes', label: 'Account Lanes' },
-  { id: 'cost_structure', label: 'Cost Structure' },
-  { id: 'market_information', label: 'Market Information' },
-  { id: 'users', label: 'Users' },
+const TABS: { id: AdminTab; label: string; permission: PermissionKey }[] = [
+  { id: 'accounts', label: 'Partner Accounts', permission: 'admin.partner_accounts' },
+  { id: 'bill_to', label: 'Bill To', permission: 'admin.bill_to' },
+  { id: 'shippers', label: 'Shippers', permission: 'admin.shippers' },
+  { id: 'cities', label: 'Cities', permission: 'admin.cities' },
+  { id: 'global_variables', label: 'Global Variables', permission: 'admin.global_variables' },
+  { id: 'border_crossings', label: 'Border Crossing Cities', permission: 'admin.border_crossings' },
+  { id: 'accessorials', label: 'Accessorials', permission: 'admin.accessorials' },
+  { id: 'terms_conditions', label: 'Terms & Conditions', permission: 'admin.terms_conditions' },
+  { id: 'account_lanes', label: 'Account Lanes', permission: 'admin.account_lanes' },
+  { id: 'cost_structure', label: 'Cost Structure', permission: 'admin.cost_structure' },
+  { id: 'market_information', label: 'Market Information', permission: 'admin.market_information' },
+  { id: 'users', label: 'Users', permission: 'admin.users' },
+  { id: 'roles', label: 'Roles', permission: 'admin.roles' },
 ];
 
 export function AdministrationView() {
-  const [activeTab, setActiveTab] = useState<AdminTab>('accounts');
+  const { can } = usePermissions();
+  const visibleTabs = TABS.filter(t => can(t.permission));
+  const [activeTab, setActiveTab] = useState<AdminTab>(visibleTabs[0]?.id ?? 'accounts');
+
+  // Keep the active tab valid when permissions load or change
+  useEffect(() => {
+    if (visibleTabs.length > 0 && !visibleTabs.some(t => t.id === activeTab)) setActiveTab(visibleTabs[0].id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleTabs.map(t => t.id).join(',')]);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error'>('success');
 
@@ -1707,7 +1719,7 @@ export function AdministrationView() {
           <div className="px-6 pt-5 pb-0 border-b border-gray-200">
             <h1 className="text-xl font-semibold text-gray-900 mb-4">Administration</h1>
             <nav className="flex gap-0 overflow-x-auto">
-              {TABS.map(tab => (
+              {visibleTabs.map(tab => (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
@@ -1736,6 +1748,7 @@ export function AdministrationView() {
             {activeTab === 'cost_structure' && <CostStructureTab onToast={handleToast} />}
             {activeTab === 'market_information' && <MarketInformationTab onToast={handleToast} />}
             {activeTab === 'users' && <UsersTab onToast={handleToast} />}
+            {activeTab === 'roles' && <RolesTab onToast={handleToast} />}
           </div>
         </div>
       </div>

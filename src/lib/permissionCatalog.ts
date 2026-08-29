@@ -2,7 +2,9 @@ import type { ViewMode } from '../components/Sidebar';
 
 export type PermissionKey =
   | 'module.quotes' | 'module.mass_update' | 'module.customers' | 'module.dashboards' | 'module.import'
-  | 'admin.users' | 'admin.cost_structure' | 'admin.market_information' | 'admin.account_lanes' | 'admin.roles'
+  | 'admin.partner_accounts' | 'admin.bill_to' | 'admin.shippers' | 'admin.cities' | 'admin.global_variables'
+  | 'admin.border_crossings' | 'admin.accessorials' | 'admin.terms_conditions'
+  | 'admin.account_lanes' | 'admin.cost_structure' | 'admin.market_information' | 'admin.users' | 'admin.roles'
   | 'quote.header' | 'quote.history' | 'quote.tab_lanes' | 'quote.tab_accessorials' | 'quote.tab_terms' | 'quote.tab_pdf';
 
 export interface PermissionDef {
@@ -33,10 +35,18 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     id: 'admin',
     label: 'Administration',
     permissions: [
-      { key: 'admin.users', label: 'Users', description: 'Admin → Users tab' },
+      { key: 'admin.partner_accounts', label: 'Partner Accounts', description: 'Admin → Partner Accounts tab' },
+      { key: 'admin.bill_to', label: 'Bill To', description: 'Admin → Bill To tab' },
+      { key: 'admin.shippers', label: 'Shippers', description: 'Admin → Shippers tab' },
+      { key: 'admin.cities', label: 'Cities', description: 'Admin → Cities tab' },
+      { key: 'admin.global_variables', label: 'Global Variables', description: 'Admin → Global Variables tab' },
+      { key: 'admin.border_crossings', label: 'Border Crossing Cities', description: 'Admin → Border Crossing Cities tab' },
+      { key: 'admin.accessorials', label: 'Accessorials', description: 'Admin → Accessorials tab' },
+      { key: 'admin.terms_conditions', label: 'Terms & Conditions', description: 'Admin → Terms & Conditions tab' },
+      { key: 'admin.account_lanes', label: 'Account Lanes', description: 'Admin → Account Lanes tab' },
       { key: 'admin.cost_structure', label: 'Cost Structure', description: 'Admin → Cost Structure tab' },
       { key: 'admin.market_information', label: 'Market Information', description: 'Admin → Market Information tab' },
-      { key: 'admin.account_lanes', label: 'Account Lanes', description: 'Admin → Account Lanes tab' },
+      { key: 'admin.users', label: 'Users', description: 'Admin → Users tab' },
       { key: 'admin.roles', label: 'Roles', description: 'Admin → Roles tab' },
     ],
   },
