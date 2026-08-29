@@ -47,7 +47,7 @@ export function KpiTile({
       onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
       onDrop={e => { e.preventDefault(); onDrop(); }}
       onDragEnd={onDragEnd}
-      className={`group relative flex-shrink-0 w-40 rounded-lg border-2 bg-white transition-all ${unavailable ? 'cursor-default' : 'cursor-pointer hover:shadow-md'} ${dragging ? 'opacity-40' : ''} ${dropTarget && !dragging ? 'ring-2 ring-blue-400 ring-offset-2' : ''}`}
+      className={`group relative flex-1 min-w-0 rounded-lg border-2 bg-white transition-all ${unavailable ? 'cursor-default' : 'cursor-pointer hover:shadow-md'} ${dragging ? 'opacity-40' : ''} ${dropTarget && !dragging ? 'ring-2 ring-blue-400 ring-offset-2' : ''}`}
       style={{
         borderColor: active ? hex : kpiColorTint(hex, 0.45),
         backgroundColor: active ? kpiColorTint(hex, 0.08) : '#FFFFFF',
@@ -55,12 +55,10 @@ export function KpiTile({
       onClick={() => { if (!unavailable) onClick(); }}
       title={unavailable ? 'View not available' : tile.list_view?.name}
     >
-      <div className="px-3 pt-2.5 pb-2">
-        <div className="flex items-start justify-between gap-1">
-          <div className="flex items-center gap-0.5 min-w-0">
-            <GripVertical className="w-3 h-3 -ml-1.5 text-gray-300 opacity-0 group-hover:opacity-100 cursor-grab flex-shrink-0" />
-            <p className={`text-[11px] font-semibold uppercase tracking-wide truncate ${unavailable ? 'text-gray-400' : 'text-[#0F2A5C]'}`}>{tile.title}</p>
-          </div>
+      <div className="px-3 pt-2 pb-2" style={{ textAlign: tile.align || 'left' }}>
+        <div className="flex items-start gap-1">
+          <GripVertical className="w-3 h-3 -ml-1.5 mt-0.5 text-gray-300 opacity-0 group-hover:opacity-100 cursor-grab flex-shrink-0" />
+          <p className={`flex-1 min-w-0 text-[11px] font-semibold uppercase tracking-wide truncate ${unavailable ? 'text-gray-400' : 'text-[#0F2A5C]'}`}>{tile.title}</p>
           <div className="relative -mr-1.5 -mt-1" ref={menuRef}>
             <button
               onClick={e => { e.stopPropagation(); setMenuOpen(o => !o); }}
@@ -81,8 +79,8 @@ export function KpiTile({
             )}
           </div>
         </div>
-        <p className="mt-1 text-3xl font-bold leading-none tabular-nums" style={{ color: hex }}>
-          {display || <span className="inline-block w-10 h-7 bg-gray-100 rounded animate-pulse" />}
+        <p className="mt-0.5 text-2xl font-bold leading-none tabular-nums" style={{ color: hex }}>
+          {display || <span className="inline-block w-8 h-6 bg-gray-100 rounded animate-pulse" />}
         </p>
         {unavailable && <p className="mt-1 text-[10px] text-gray-400 italic">View not available</p>}
       </div>

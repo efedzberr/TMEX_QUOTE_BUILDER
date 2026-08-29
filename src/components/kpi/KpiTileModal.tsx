@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Check } from 'lucide-react';
+import { AlignCenter, AlignLeft, AlignRight, Check } from 'lucide-react';
 import { ListView } from '../QuotesHomeHeader';
 import { KPI_PALETTE } from '../../lib/kpiPalette';
-import { KpiTile, KpiTileInput, fetchSelectableViews, isViewCountable } from '../../lib/kpiTiles';
+import { KpiAlign, KpiTile, KpiTileInput, fetchSelectableViews, isViewCountable } from '../../lib/kpiTiles';
 
 interface KpiTileModalProps {
   object: string;
@@ -15,6 +15,7 @@ interface KpiTileModalProps {
 export function KpiTileModal({ object, tile, onSave, onClose }: KpiTileModalProps) {
   const [title, setTitle] = useState(tile?.title ?? '');
   const [color, setColor] = useState<number>(tile?.color ?? 1);
+  const [align, setAlign] = useState<KpiAlign>(tile?.align ?? 'left');
   const [viewId, setViewId] = useState<string>(tile?.list_view_id ?? '');
   const [views, setViews] = useState<ListView[]>([]);
   const [loadingViews, setLoadingViews] = useState(true);
@@ -47,7 +48,7 @@ export function KpiTileModal({ object, tile, onSave, onClose }: KpiTileModalProp
     setSaving(true);
     setError(null);
     try {
-      await onSave({ title: t, color, list_view_id: viewId });
+      await onSave({ title: t, color, align, list_view_id: viewId });
     } catch (err) {
       const msg = err instanceof Error ? err.message : '';
       setError(msg.includes('Maximum of 8') ? 'Maximum of 8 KPI tiles per strip reached.' : "We couldn't save the KPI tile.");
@@ -106,6 +107,25 @@ export function KpiTileModal({ object, tile, onSave, onClose }: KpiTileModalProp
           ))}
         </div>
 
+        <label className="block text-xs font-medium text-gray-600 mt-4 mb-2">Alignment</label>
+        <div className="inline-flex rounded-md border border-gray-200 overflow-hidden">
+          {([
+            { value: 'left', Icon: AlignLeft, label: 'Left' },
+            { value: 'center', Icon: AlignCenter, label: 'Center' },
+            { value: 'right', Icon: AlignRight, label: 'Right' },
+          ] as { value: KpiAlign; Icon: typeof AlignLeft; label: string }[]).map(({ value, Icon, label }) => (
+            <button
+              key={value}
+              type="button"
+              title={label}
+              onClick={() => setAlign(value)}
+              className={`px-3 py-1.5 text-xs flex items-center gap-1 border-r last:border-r-0 border-gray-200 transition-colors ${align === value ? 'bg-blue-50 text-blue-700' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+            >
+              <Icon className="w-3.5 h-3.5" /> {label}
+            </button>
+          ))}
+        </div>
+
         {error && <p className="text-xs text-red-600 mt-3">{error}</p>}
 
         <div className="flex gap-3 justify-end mt-6">
@@ -118,3 +138,6 @@ export function KpiTileModal({ object, tile, onSave, onClose }: KpiTileModalProp
     </div>
   );
 }
+
+
+export { KpiTileModal }

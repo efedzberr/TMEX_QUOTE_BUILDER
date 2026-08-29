@@ -158,7 +158,7 @@ export function KpiStrip({ object, userId, activeViewId, onSelectView, refreshTo
             <Plus className="w-4 h-4" /> Add KPI
           </button>
         ) : (
-          <div className={`flex gap-3 overflow-x-auto pb-1 ${countsLoading ? 'opacity-80' : ''}`}>
+          <div className={`flex gap-2.5 ${countsLoading ? 'opacity-80' : ''}`}>
             {tiles.map(tile => (
               <KpiTile
                 key={tile.id}

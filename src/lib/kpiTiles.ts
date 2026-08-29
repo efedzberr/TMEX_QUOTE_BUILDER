@@ -3,6 +3,8 @@ import { ListView } from '../components/QuotesHomeHeader';
 
 export const KPI_MAX_TILES = 8;
 
+export type KpiAlign = 'left' | 'center' | 'right';
+
 export interface KpiTile {
   id: string;
   object: string;
@@ -10,6 +12,7 @@ export interface KpiTile {
   list_view_id: string | null;
   title: string;
   color: number;
+  align: KpiAlign;
   position: number;
   /** Joined list view; null when the view was deleted or is not visible. */
   list_view: ListView | null;
@@ -18,6 +21,7 @@ export interface KpiTile {
 export interface KpiTileInput {
   title: string;
   color: number;
+  align: KpiAlign;
   list_view_id: string;
 }
 
@@ -27,7 +31,7 @@ const LIST_VIEW_COLUMNS = 'id,name,object,owner_user_id,visibility,is_system,fil
 export async function fetchPersonalTiles(object: string, userId: string): Promise<KpiTile[]> {
   const { data, error } = await supabase
     .from('kpi_tiles')
-    .select(`id,object,owner_user_id,list_view_id,title,color,position,list_view:list_views(${LIST_VIEW_COLUMNS})`)
+    .select(`id,object,owner_user_id,list_view_id,title,color,align,position,list_view:list_views(${LIST_VIEW_COLUMNS})`)
     .eq('object', object)
     .eq('owner_user_id', userId)
     .order('position', { ascending: true });
@@ -48,6 +52,7 @@ export async function createTile(object: string, userId: string, input: KpiTileI
     list_view_id: input.list_view_id,
     title: input.title.trim(),
     color: input.color,
+    align: input.align,
     position,
   });
   if (error) throw error;
@@ -58,6 +63,7 @@ export async function updateTile(id: string, input: KpiTileInput): Promise<void>
     list_view_id: input.list_view_id,
     title: input.title.trim(),
     color: input.color,
+    align: input.align,
   }).eq('id', id);
   if (error) throw error;
 }
