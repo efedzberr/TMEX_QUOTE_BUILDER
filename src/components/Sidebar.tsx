@@ -1,4 +1,5 @@
 import { LayoutDashboard, BarChart3, FileText, Layers, Users, Settings, Upload, Truck } from 'lucide-react';
+import { usePermissions } from '../lib/permissions';
 
 export type ViewMode = 'home' | 'dashboards' | 'list' | 'builder' | 'admin' | 'mass-update' | 'mass-update-log' | 'customers' | 'import';
 
@@ -34,8 +35,10 @@ function isActive(current: ViewMode, itemViewMode: ViewMode): boolean {
 }
 
 export function Sidebar({ current, onNavigate, isAdmin = false }: SidebarProps) {
-  const topItems = NAV_ITEMS.filter(i => !i.pinBottom && (!i.adminOnly || isAdmin));
-  const bottomItems = NAV_ITEMS.filter(i => i.pinBottom);
+  const { canView } = usePermissions();
+  const allowed = (i: NavItem) => (!i.adminOnly || isAdmin || canView(i.viewMode)) && canView(i.viewMode);
+  const topItems = NAV_ITEMS.filter(i => !i.pinBottom && allowed(i));
+  const bottomItems = NAV_ITEMS.filter(i => i.pinBottom && allowed(i));
 
   return (
     <aside

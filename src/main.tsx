@@ -7,6 +7,7 @@ import { CustomerReviewPreview } from './components/portal/CustomerReviewPreview
 import { SetPasswordPage } from './components/auth/SetPasswordPage.tsx';
 import { AuthProvider } from './lib/AuthContext.tsx';
 import { AuthGate } from './components/auth/LoginFlow.tsx';
+import { PermissionsProvider } from './lib/permissions.tsx';
 import './index.css';
 
 createRoot(document.getElementById('root')!).render(
@@ -33,7 +34,9 @@ createRoot(document.getElementById('root')!).render(
             path="/*"
             element={
               <AuthGate>
-                <App />
+                <PermissionsProvider>
+                  <App />
+                </PermissionsProvider>
               </AuthGate>
             }
           />

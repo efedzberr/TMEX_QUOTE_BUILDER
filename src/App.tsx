@@ -27,6 +27,7 @@ import { supabase, Quote, QuoteHistory as QuoteHistoryType, QuoteLane } from './
 import { CurrencyCode, convertLaneValues, buildQuoteName, isQuoteLocked } from './lib/constants';
 import { validateCompletedStage, CompletedStageValidationResult } from './lib/completedStageValidation';
 import { getPortalUrl, getPreviewUrl } from './lib/customerPortalHelpers';
+import { usePermissions } from './lib/permissions';
 
 function App() {
   const [viewMode, setViewMode] = useState<ViewMode>('home');
@@ -47,6 +48,17 @@ function App() {
   const [showViewResponse, setShowViewResponse] = useState(false);
   const [showViewSignature, setShowViewSignature] = useState(false);
   const [appIsAdmin, setAppIsAdmin] = useState(false);
+  const { canView, loading: permissionsLoading } = usePermissions();
+
+  // Permission guard: if the current view is not allowed, go Home
+  useEffect(() => {
+    if (permissionsLoading) return;
+    if (!canView(viewMode)) {
+      setCurrentQuoteId(null);
+      setQuote(null);
+      setViewMode('home');
+    }
+  }, [permissionsLoading, canView, viewMode]);
 
   useEffect(() => {
     if (viewMode === 'builder' && currentQuoteId) {
@@ -291,6 +303,7 @@ function App() {
   };
 
   const handleNavigate = (target: ViewMode) => {
+    if (!canView(target)) target = 'home';
     if (target === 'list' || target === 'home') {
       setCurrentQuoteId(null);
       setQuote(null);
