@@ -7,6 +7,7 @@ import { KpiTileModal } from './KpiTileModal';
 import {
   KPI_MAX_TILES, KpiTile as KpiTileData, KpiTileInput,
   fetchPersonalTiles, createTile, updateTile, deleteTile, countListViews,
+  saveTileOrder, loadKpiPrefs, saveKpiPrefs,
 } from '../../lib/kpiTiles';
 
 interface KpiStripProps {
@@ -28,6 +29,8 @@ export function KpiStrip({ object, userId, activeViewId, onSelectView, refreshTo
   const [countsLoading, setCountsLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
   const [modalTile, setModalTile] = useState<KpiTileData | null | 'new'>(null);
   const [deleteTarget, setDeleteTarget] = useState<KpiTileData | null>(null);
 
@@ -61,6 +64,12 @@ export function KpiStrip({ object, userId, activeViewId, onSelectView, refreshTo
   }, []);
 
   useEffect(() => { loadTiles(); }, [loadTiles]);
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    loadKpiPrefs(object, userId).then(p => { if (!cancelled) setCollapsed(p.kpi_collapsed); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [object, userId]);
   useEffect(() => { if (loaded) recount(tiles); }, [tiles, loaded, refreshToken, recount]);
   useEffect(() => { if (addRequestId > 0) setModalTile('new'); }, [addRequestId]);
 
@@ -89,6 +98,31 @@ export function KpiStrip({ object, userId, activeViewId, onSelectView, refreshTo
     }
   }
 
+  function toggleCollapsed() {
+    const next = !collapsed;
+    setCollapsed(next);
+    if (userId) saveKpiPrefs(object, userId, { kpi_collapsed: next }).catch(err => console.error('Error saving KPI prefs:', err));
+  }
+
+  function handleDrop(targetId: string) {
+    if (!dragId || dragId === targetId) { setDragId(null); setOverId(null); return; }
+    const from = tiles.findIndex(t => t.id === dragId);
+    const to = tiles.findIndex(t => t.id === targetId);
+    if (from < 0 || to < 0) { setDragId(null); setOverId(null); return; }
+    const reordered = [...tiles];
+    const [moved] = reordered.splice(from, 1);
+    reordered.splice(to, 0, moved);
+    const withPositions = reordered.map((t, i) => ({ ...t, position: i }));
+    setTiles(withPositions);
+    setDragId(null);
+    setOverId(null);
+    saveTileOrder(withPositions.map(t => t.id)).catch(err => {
+      console.error('Error saving KPI order:', err);
+      onError?.("We couldn't save the KPI order.");
+      loadTiles();
+    });
+  }
+
   if (!userId) return null;
 
   const atMax = tiles.length >= KPI_MAX_TILES;
@@ -97,7 +131,7 @@ export function KpiStrip({ object, userId, activeViewId, onSelectView, refreshTo
     <div className="mb-3">
       <div className="flex items-center justify-between mb-1.5">
         <button
-          onClick={() => setCollapsed(c => !c)}
+          onClick={toggleCollapsed}
           className="flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-gray-700"
         >
           {collapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
@@ -134,6 +168,12 @@ export function KpiStrip({ object, userId, activeViewId, onSelectView, refreshTo
                 onClick={() => { if (tile.list_view) onSelectView(tile.list_view); }}
                 onEdit={() => setModalTile(tile)}
                 onDelete={() => setDeleteTarget(tile)}
+                dragging={dragId === tile.id}
+                dropTarget={overId === tile.id}
+                onDragStart={() => setDragId(tile.id)}
+                onDragEnter={() => { if (dragId) setOverId(tile.id); }}
+                onDragEnd={() => { setDragId(null); setOverId(null); }}
+                onDrop={() => handleDrop(tile.id)}
               />
             ))}
           </div>

@@ -67,6 +67,48 @@ export async function deleteTile(id: string): Promise<void> {
   if (error) throw error;
 }
 
+/** Persist a new order: position = index in ids. */
+export async function saveTileOrder(ids: string[]): Promise<void> {
+  const results = await Promise.all(
+    ids.map((id, index) => supabase.from('kpi_tiles').update({ position: index }).eq('id', id))
+  );
+  const failed = results.find(r => r.error);
+  if (failed?.error) throw failed.error;
+}
+
+export interface KpiDisplayPrefs {
+  kpi_collapsed: boolean;
+}
+
+/** Read KPI-related keys from user_list_view_preferences.display_prefs. */
+export async function loadKpiPrefs(object: string, userId: string): Promise<KpiDisplayPrefs> {
+  const { data } = await supabase
+    .from('user_list_view_preferences')
+    .select('display_prefs')
+    .eq('user_id', userId).eq('object', object)
+    .maybeSingle();
+  const dp = (data?.display_prefs as Record<string, unknown>) || {};
+  return { kpi_collapsed: dp.kpi_collapsed === true };
+}
+
+/** Merge KPI keys into display_prefs without touching other keys (column widths, etc.). */
+export async function saveKpiPrefs(object: string, userId: string, prefs: Partial<KpiDisplayPrefs>): Promise<void> {
+  const { data: existing } = await supabase
+    .from('user_list_view_preferences')
+    .select('display_prefs, pinned_list_view_id, recent_list_view_ids')
+    .eq('user_id', userId).eq('object', object)
+    .maybeSingle();
+  const dp = (existing?.display_prefs as Record<string, unknown>) || {};
+  const { error } = await supabase.from('user_list_view_preferences').upsert({
+    user_id: userId,
+    object,
+    pinned_list_view_id: existing?.pinned_list_view_id || null,
+    recent_list_view_ids: existing?.recent_list_view_ids || [],
+    display_prefs: { ...dp, ...prefs },
+  }, { onConflict: 'user_id,object' });
+  if (error) throw error;
+}
+
 /** Server-side counts. Returns a map view_id -> count (null when the view cannot be counted). */
 export async function countListViews(viewIds: string[]): Promise<Record<string, number | null>> {
   const unique = Array.from(new Set(viewIds.filter(Boolean)));
@@ -97,3 +139,6 @@ export function isViewCountable(view: ListView): boolean {
   const filters = view.filters || [];
   return !filters.some(f => f.field === 'customer_review_status');
 }
+
+
+export { KPI_MAX_TILES, fetchPersonalTiles, createTile, updateTile, deleteTile, countListViews, saveTileOrder, loadKpiPrefs, saveKpiPrefs }
