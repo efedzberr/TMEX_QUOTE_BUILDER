@@ -140,4 +140,3 @@ export function KpiTileModal({ object, tile, onSave, onClose }: KpiTileModalProp
 }
 
 
-export { KpiTileModal }
