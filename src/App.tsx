@@ -28,6 +28,8 @@ import { CurrencyCode, convertLaneValues, buildQuoteName, isQuoteLocked } from '
 import { validateCompletedStage, CompletedStageValidationResult } from './lib/completedStageValidation';
 import { getPortalUrl, getPreviewUrl } from './lib/customerPortalHelpers';
 import { usePermissions } from './lib/permissions';
+import { QuoteStatusTimeTracking } from './components/QuoteStatusTimeTracking';
+import { formatDuration, getTimeMetrics } from './lib/timeTracking';
 
 function App() {
   const [viewMode, setViewMode] = useState<ViewMode>('home');
@@ -724,15 +726,22 @@ function App() {
     if (!error) {
       const wasLocked = isQuoteLocked(quote.stage);
       const nowLocked = isQuoteLocked(newStage);
-      setQuote({ ...quote, stage: newStage });
+      const before = getTimeMetrics(quote);
+      const { data: clock } = await supabase
+        .from('quotes')
+        .select('status, closed_at, clock_state, clock_since, effective_seconds, paused_seconds')
+        .eq('id', quote.id)
+        .maybeSingle();
+      setQuote({ ...quote, stage: newStage, ...(clock || {}) });
 
-      await supabase.from('quote_history').insert({
+      const { data: inserted } = await supabase.from('quote_history').insert({
         quote_id: quote.id,
         date: new Date().toISOString(),
         user_name: quote.owner_name,
         action: 'Stage Changed',
-        notes: `Stage changed to ${newStage}`,
-      });
+        notes: `${quote.stage || 'New'} \u2192 ${newStage} (after ${formatDuration(before.currentStateSeconds)} in ${quote.stage || 'New'})`,
+      }).select();
+      if (inserted) setHistory(prev => [...prev, ...inserted]);
 
       if (wasLocked && !nowLocked) {
         setToastMessage('Quote unlocked. You can now edit this quote.');
@@ -744,6 +753,47 @@ function App() {
         }
       }
     }
+  };
+
+  const handleStatusChange = async (newStatus: string) => {
+    if (!quote || newStatus === (quote.status || 'Active')) return;
+
+    const { error } = await supabase
+      .from('quotes')
+      .update({ status: newStatus })
+      .eq('id', quote.id);
+
+    if (error) {
+      console.error('Error updating status:', error);
+      setToastMessage(`Error updating status: ${error.message}`);
+      setToastType('error');
+      return;
+    }
+
+    const before = getTimeMetrics(quote);
+    const { data: clock } = await supabase
+      .from('quotes')
+      .select('status, closed_at, clock_state, clock_since, effective_seconds, paused_seconds')
+      .eq('id', quote.id)
+      .maybeSingle();
+    setQuote({ ...quote, status: newStatus, ...(clock || {}) });
+
+    const prevStatus = quote.status || 'Active';
+    const action = newStatus === 'Cancelled' ? 'Quote Cancelled'
+      : prevStatus === 'Cancelled' ? 'Quote Reopened'
+      : newStatus === 'Active' ? 'Quote Resumed'
+      : 'Quote Paused';
+    const { data: inserted } = await supabase.from('quote_history').insert({
+      quote_id: quote.id,
+      date: new Date().toISOString(),
+      user_name: quote.owner_name,
+      action,
+      notes: `${prevStatus} \u2192 ${newStatus} (after ${formatDuration(before.currentStateSeconds)} as ${prevStatus})`,
+    }).select();
+    if (inserted) setHistory(prev => [...prev, ...inserted]);
+
+    setToastMessage(`Status updated to ${newStatus}`);
+    setToastType('success');
   };
 
   const handleToggleRateType = async () => {
@@ -1680,6 +1730,27 @@ function App() {
         </div>
       )}
 
+      {(quote.status || 'Active') !== 'Active' && (
+        <div className={`border-b ${quote.status === 'Cancelled' ? 'bg-red-50 border-red-200' : 'bg-[#FEF3C7] border-amber-300'}`}>
+          <div className="max-w-[1280px] mx-auto px-6 py-3 flex items-center justify-between">
+            <div className={`flex items-center gap-2 text-sm ${quote.status === 'Cancelled' ? 'text-red-900' : 'text-amber-900'}`}>
+              <span className="text-base">{quote.status === 'Cancelled' ? '\u26D4' : '\u23F8\uFE0F'}</span>
+              <span>
+                This quote is <strong>{quote.status}</strong> since {quote.clock_since ? new Date(quote.clock_since).toLocaleString('en-US', { month: 'short', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '\u2014'}
+                {' \u00B7 '}{formatDuration(getTimeMetrics(quote).currentStateSeconds)}
+                {quote.status === 'Cancelled' ? ' \u2014 all clocks are stopped.' : ' \u2014 hold time is running.'}
+              </span>
+            </div>
+            <button
+              onClick={() => handleStatusChange('Active')}
+              className="px-4 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              {quote.status === 'Cancelled' ? 'Reopen' : 'Resume'}
+            </button>
+          </div>
+        </div>
+      )}
+
       <CustomerReviewBanner
         quote={quote}
         lanes={lanes}
@@ -1743,6 +1814,10 @@ function App() {
               }
             }}
           />
+          )}
+
+          {can('quote.header') && (
+            <QuoteStatusTimeTracking quote={quote} onStatusChange={handleStatusChange} />
           )}
 
           {can('quote.history') && <QuoteHistory history={history} />}

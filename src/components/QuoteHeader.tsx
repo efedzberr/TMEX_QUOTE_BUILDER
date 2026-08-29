@@ -5,6 +5,7 @@ import { LookupField } from './LookupField';
 import { OWNERS, MX_SALES_REPRESENTATIVES, US_SALES_REPRESENTATIVES, EQUIPMENT_TYPES, formatCurrency, CurrencyCode, buildQuoteName, OPPORTUNITY_TYPES, QUOTE_PRIORITIES } from '../lib/constants';
 import { getDueStatus, formatLocalDate } from '../lib/dueStatus';
 import { DueStatusBadge } from './DueStatusBadge';
+import { CollapsibleSection } from './CollapsibleSection';
 import { supabase } from '../lib/supabase';
 
 interface QuoteHeaderProps {
@@ -420,6 +421,7 @@ export function QuoteHeader({
         </div>
       </div>
 
+      <CollapsibleSection title="Quote General Information" storageKey="quote.general" className="mt-4 mx-6 mb-4">
       <div className="px-6 py-4 grid grid-cols-5 gap-6">
         <div className="space-y-3">
           <div className="text-[11px] text-gray-500 uppercase tracking-wider font-semibold">People</div>
@@ -763,6 +765,7 @@ export function QuoteHeader({
           </div>
         </div>
       </div>
+      </CollapsibleSection>
     </div>
   );
 }

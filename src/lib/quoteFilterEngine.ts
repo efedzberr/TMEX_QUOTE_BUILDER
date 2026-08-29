@@ -56,7 +56,7 @@ export function getOperatorsForType(dataType: FieldDataType) {
 }
 
 export const STAGE_VALUES = ['New', 'In Progress', 'Completed', 'Branch Manager Approval', 'Sent to Customer', 'Published'];
-export const STATUS_VALUES = ['New', 'In Progress', 'Completed', 'Published'];
+export const STATUS_VALUES = ['Active', 'On Hold', 'Waiting for Information', 'Cancelled'];
 export const CURRENCY_VALUES = ['USD', 'MXN', 'CAD'];
 export const OPPORTUNITY_TYPE_VALUES = ['BID', 'CONTRACT', 'STANDARD PUBLISH'];
 export const PRIORITY_VALUES = ['Standard', 'Low', 'High'];
