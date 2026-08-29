@@ -90,10 +90,10 @@ async function handleList(serviceClient: ReturnType<typeof createClient>) {
   // Get all profiles
   const { data: profiles } = await serviceClient
     .from("user_profiles")
-    .select("id, display_name, is_admin, profile_id, role_id");
+    .select("id, display_name, phone, is_admin, profile_id, role_id");
 
   const profileMap = new Map(
-    (profiles || []).map((p: { id: string; display_name: string | null; is_admin: boolean; profile_id: string | null; role_id: string | null }) => [p.id, p])
+    (profiles || []).map((p: { id: string; display_name: string | null; phone: string | null; is_admin: boolean; profile_id: string | null; role_id: string | null }) => [p.id, p])
   );
 
   // For each user, check factors reliably via getUserById (listUsers may omit factors)
@@ -124,6 +124,7 @@ async function handleList(serviceClient: ReturnType<typeof createClient>) {
       id: u.id,
       email: u.email,
       display_name: profile?.display_name || null,
+      phone: profile?.phone || null,
       is_admin: profile?.is_admin || false,
       profile_id: profile?.profile_id || null,
       role_id: profile?.role_id || null,
@@ -139,9 +140,9 @@ async function handleList(serviceClient: ReturnType<typeof createClient>) {
 
 async function handleInvite(
   serviceClient: ReturnType<typeof createClient>,
-  body: { email?: string; display_name?: string; is_admin?: boolean; profile_id?: string; role_id?: string }
+  body: { email?: string; display_name?: string; phone?: string | null; is_admin?: boolean; profile_id?: string; role_id?: string }
 ) {
-  const { email, display_name, is_admin, profile_id, role_id } = body;
+  const { email, display_name, phone, is_admin, profile_id, role_id } = body;
 
   if (!email || typeof email !== "string" || !email.includes("@")) {
     return jsonResponse({ error: "A valid email is required" }, 400);
@@ -184,6 +185,7 @@ async function handleInvite(
       {
         id: userId,
         display_name: display_name || null,
+        phone: phone || null,
         is_admin: is_admin === true,
         profile_id,
         role_id: role_id || null,
@@ -195,11 +197,20 @@ async function handleInvite(
     return jsonResponse({ error: "User created but profile save failed" }, 500);
   }
 
+  // Mirror display_name and phone into auth.users.raw_user_meta_data
+  const metaPatch: Record<string, unknown> = {};
+  if (display_name) metaPatch.display_name = display_name;
+  if (phone) metaPatch.phone = phone;
+  if (Object.keys(metaPatch).length > 0) {
+    await serviceClient.auth.admin.updateUserById(userId, { user_metadata: metaPatch });
+  }
+
   return jsonResponse({
     user: {
       id: userId,
       email,
       display_name: display_name || null,
+      phone: phone || null,
       is_admin: is_admin === true,
     },
   });
@@ -244,9 +255,9 @@ async function handleSetAdmin(
 async function handleUpdateUser(
   serviceClient: ReturnType<typeof createClient>,
   callerId: string,
-  body: { user_id?: string; email?: string; display_name?: string; is_admin?: boolean; profile_id?: string | null; role_id?: string | null; active?: boolean }
+  body: { user_id?: string; email?: string; display_name?: string; phone?: string | null; is_admin?: boolean; profile_id?: string | null; role_id?: string | null; active?: boolean }
 ) {
-  const { user_id, email, display_name, is_admin, profile_id, role_id, active } = body;
+  const { user_id, email, display_name, phone, is_admin, profile_id, role_id, active } = body;
 
   if (!user_id || typeof user_id !== "string") {
     return jsonResponse({ error: "user_id is required" }, 400);
@@ -296,6 +307,7 @@ async function handleUpdateUser(
   // Profile-level changes
   const profileUpdate: Record<string, unknown> = { id: user_id };
   if (typeof display_name === "string") profileUpdate.display_name = display_name.trim();
+  if (phone !== undefined) profileUpdate.phone = phone || null;
   if (typeof is_admin === "boolean") profileUpdate.is_admin = is_admin;
   if (profile_id !== undefined) profileUpdate.profile_id = profile_id || null;
   if (role_id !== undefined) profileUpdate.role_id = role_id || null;
@@ -304,6 +316,14 @@ async function handleUpdateUser(
     if (profileErr) {
       return jsonResponse({ error: "Failed to update user profile" }, 500);
     }
+  }
+
+  // Mirror display_name and phone into auth.users.raw_user_meta_data
+  const metaPatch: Record<string, unknown> = {};
+  if (typeof display_name === "string") metaPatch.display_name = display_name.trim();
+  if (phone !== undefined) metaPatch.phone = phone || null;
+  if (Object.keys(metaPatch).length > 0) {
+    await serviceClient.auth.admin.updateUserById(user_id, { user_metadata: metaPatch });
   }
 
   return jsonResponse({ success: true, user_id });

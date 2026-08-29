@@ -1,7 +1,7 @@
 import type { ViewMode } from '../components/Sidebar';
 
 export type PermissionKey =
-  | 'module.quotes' | 'module.mass_update' | 'module.customers' | 'module.dashboards' | 'module.import'
+  | 'module.quotes' | 'module.mass_update' | 'module.customers' | 'module.dashboards' | 'module.import' | 'module.kpi_sets'
   | 'admin.partner_accounts' | 'admin.bill_to' | 'admin.shippers' | 'admin.cities' | 'admin.global_variables'
   | 'admin.border_crossings' | 'admin.accessorials' | 'admin.terms_conditions'
   | 'admin.account_lanes' | 'admin.cost_structure' | 'admin.market_information' | 'admin.sla' | 'admin.users' | 'admin.profiles' | 'admin.roles'
@@ -38,6 +38,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: 'module.customers', label: 'Customers', description: 'Customers module', levels: ['view', 'create', 'edit', 'delete'] },
       { key: 'module.dashboards', label: 'Dashboards', description: 'Dashboards module', levels: ['view', 'create', 'edit', 'delete'] },
       { key: 'module.import', label: 'Import', description: 'Import tool', levels: ['view', 'create', 'edit', 'delete'] },
+      { key: 'module.kpi_sets', label: 'KPI Sets', description: 'Manage shared KPI sets and tiles', levels: ['view', 'create', 'edit', 'delete'] },
     ],
   },
   {

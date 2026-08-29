@@ -10,9 +10,11 @@ interface KpiTileModalProps {
   tile: KpiTile | null;
   onSave: (input: KpiTileInput) => Promise<void>;
   onClose: () => void;
+  /** shared sets can only use system / public views */
+  sharedOnly?: boolean;
 }
 
-export function KpiTileModal({ object, tile, onSave, onClose }: KpiTileModalProps) {
+export function KpiTileModal({ object, tile, onSave, onClose, sharedOnly = false }: KpiTileModalProps) {
   const [title, setTitle] = useState(tile?.title ?? '');
   const [color, setColor] = useState<number>(tile?.color ?? 1);
   const [align, setAlign] = useState<KpiAlign>(tile?.align ?? 'left');
@@ -24,12 +26,12 @@ export function KpiTileModal({ object, tile, onSave, onClose }: KpiTileModalProp
 
   useEffect(() => {
     let cancelled = false;
-    fetchSelectableViews(object)
+    fetchSelectableViews(object, sharedOnly)
       .then(v => { if (!cancelled) setViews(v); })
       .catch(() => { if (!cancelled) setError("We couldn't load the list views."); })
       .finally(() => { if (!cancelled) setLoadingViews(false); });
     return () => { cancelled = true; };
-  }, [object]);
+  }, [object, sharedOnly]);
 
   function handleViewChange(id: string) {
     setViewId(id);
@@ -62,7 +64,7 @@ export function KpiTileModal({ object, tile, onSave, onClose }: KpiTileModalProp
       <div className="relative bg-white rounded-lg shadow-xl w-full max-w-md mx-4 p-6">
         <h3 className="text-base font-semibold text-gray-900 mb-4">{tile ? 'Edit KPI' : 'Add KPI'}</h3>
 
-        <label className="block text-xs font-medium text-gray-600 mb-1">List View</label>
+        <label className="block text-xs font-medium text-gray-600 mb-1">List View{sharedOnly && <span className="ml-1 font-normal text-gray-400">(system and public views only)</span>}</label>
         <select
           value={viewId}
           onChange={e => handleViewChange(e.target.value)}
@@ -138,5 +140,3 @@ export function KpiTileModal({ object, tile, onSave, onClose }: KpiTileModalProp
     </div>
   );
 }
-
-

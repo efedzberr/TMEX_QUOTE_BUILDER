@@ -17,11 +17,13 @@ interface KpiTileProps {
   onDragEnter: () => void;
   onDragEnd: () => void;
   onDrop: () => void;
+  /** shared set the user cannot edit: no menu, no drag */
+  readOnly?: boolean;
 }
 
 export function KpiTile({
   tile, count, active, onClick, onEdit, onDelete,
-  dragging, dropTarget, onDragStart, onDragEnter, onDragEnd, onDrop,
+  dragging, dropTarget, onDragStart, onDragEnter, onDragEnd, onDrop, readOnly = false,
 }: KpiTileProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -41,7 +43,7 @@ export function KpiTile({
 
   return (
     <div
-      draggable
+      draggable={!readOnly}
       onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', tile.id); onDragStart(); }}
       onDragEnter={e => { e.preventDefault(); onDragEnter(); }}
       onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
@@ -57,12 +59,12 @@ export function KpiTile({
     >
       <div className="px-3 pt-2 pb-2" style={{ textAlign: tile.align || 'left' }}>
         <div className="flex items-start gap-1">
-          <GripVertical className="w-3 h-3 -ml-1.5 mt-0.5 text-gray-300 opacity-0 group-hover:opacity-100 cursor-grab flex-shrink-0" />
+          {!readOnly && <GripVertical className="w-3 h-3 -ml-1.5 mt-0.5 text-gray-300 opacity-0 group-hover:opacity-100 cursor-grab flex-shrink-0" />}
           <p className={`flex-1 min-w-0 text-[11px] font-semibold uppercase tracking-wide truncate ${unavailable ? 'text-gray-400' : 'text-[#0F2A5C]'}`}>{tile.title}</p>
           <div className="relative -mr-1.5 -mt-1" ref={menuRef}>
             <button
               onClick={e => { e.stopPropagation(); setMenuOpen(o => !o); }}
-              className={`p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-opacity ${menuOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+              className={`p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-opacity ${readOnly ? 'hidden' : menuOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
               title="Options"
             >
               <MoreVertical className="w-3.5 h-3.5" />

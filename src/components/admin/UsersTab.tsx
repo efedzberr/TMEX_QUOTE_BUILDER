@@ -8,6 +8,7 @@ interface UserRow {
   id: string;
   email: string;
   display_name: string | null;
+  phone: string | null;
   is_admin: boolean;
   profile_id: string | null;
   role_id: string | null;
@@ -267,6 +268,7 @@ export function UsersTab({ onToast }: UsersTabProps) {
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Display Name</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Phone</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Email</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Access</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Profile</th>
@@ -284,6 +286,7 @@ export function UsersTab({ onToast }: UsersTabProps) {
                 return (
                   <tr key={user.id} className={`hover:bg-gray-50 ${!active ? 'opacity-60' : ''}`}>
                     <td className="px-4 py-3 font-medium text-gray-900">{user.display_name || '-'}</td>
+                    <td className="px-4 py-3 text-gray-500 text-sm">{user.phone || ''}</td>
                     <td className="px-4 py-3 text-gray-600">{user.email}</td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full ${user.is_admin ? 'bg-purple-50 text-purple-700 border border-purple-200' : 'bg-gray-100 text-gray-600 border border-gray-200'}`}>
@@ -452,6 +455,7 @@ function EditUserModal({ user, roles, hierarchyRoles, isSelf, onClose, onSaved }
   user: UserRow; roles: RoleOption[]; hierarchyRoles: HierarchyRole[]; isSelf: boolean; onClose: () => void; onSaved: (message: string) => void;
 }) {
   const [displayName, setDisplayName] = useState(user.display_name || '');
+  const [phone, setPhone] = useState(user.phone || '');
   const [email, setEmail] = useState(user.email || '');
   const [isAdmin, setIsAdmin] = useState(user.is_admin);
   const [profileId, setProfileId] = useState(user.profile_id || '');
@@ -461,7 +465,7 @@ function EditUserModal({ user, roles, hierarchyRoles, isSelf, onClose, onSaved }
   const [error, setError] = useState<string | null>(null);
 
   const emailChanged = email.trim().toLowerCase() !== (user.email || '').toLowerCase();
-  const dirty = displayName.trim() !== (user.display_name || '') || emailChanged || isAdmin !== user.is_admin
+  const dirty = displayName.trim() !== (user.display_name || '') || phone.trim() !== (user.phone || '') || emailChanged || isAdmin !== user.is_admin
     || profileId !== (user.profile_id || '') || roleId !== (user.role_id || '') || active !== (!user.banned_until || new Date(user.banned_until) < new Date());
 
   async function handleSave() {
@@ -475,6 +479,7 @@ function EditUserModal({ user, roles, hierarchyRoles, isSelf, onClose, onSaved }
       await callAdminUsers('update_user', {
         user_id: user.id,
         display_name: displayName.trim(),
+        phone: phone.trim() || null,
         email: email.trim(),
         is_admin: isAdmin,
         profile_id: profileId || null,
@@ -498,9 +503,13 @@ function EditUserModal({ user, roles, hierarchyRoles, isSelf, onClose, onSaved }
         <p className="text-sm text-gray-500 mb-5">{user.email}</p>
 
         <div className="grid grid-cols-2 gap-4">
-          <div className="col-span-2">
+          <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Display Name <span className="text-red-600">*</span></label>
             <input type="text" value={displayName} onChange={e => { setDisplayName(e.target.value); setError(null); }} className={field} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+            <input type="tel" value={phone} onChange={e => { setPhone(e.target.value); setError(null); }} placeholder="+1 555 123 4567" className={field} />
           </div>
           <div className="col-span-2">
             <label className="block text-sm font-medium text-gray-700 mb-1">Email <span className="text-red-600">*</span></label>
@@ -587,6 +596,7 @@ function ChangeRoleModal({ user, roles, onClose, onSave }: { user: UserRow; role
 function InviteModal({ roles, onClose, onSuccess }: { roles: RoleOption[]; onClose: () => void; onSuccess: (email: string) => void }) {
   const [email, setEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const [phone, setPhone] = useState('');
   const [isAdmin, setIsAdmin] = useState(false);
   const [roleId, setRoleId] = useState('');
   const [loading, setLoading] = useState(false);
@@ -601,7 +611,7 @@ function InviteModal({ roles, onClose, onSuccess }: { roles: RoleOption[]; onClo
     setLoading(true);
     setError(null);
     try {
-      await callAdminUsers('invite', { email: email.trim(), display_name: displayName.trim(), is_admin: isAdmin, profile_id: roleId });
+      await callAdminUsers('invite', { email: email.trim(), display_name: displayName.trim(), phone: phone.trim() || null, is_admin: isAdmin, profile_id: roleId });
       onSuccess(email.trim());
       onClose();
     } catch (e: any) {
@@ -638,6 +648,16 @@ function InviteModal({ roles, onClose, onSuccess }: { roles: RoleOption[]; onClo
               required
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="John Doe"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+            <input
+              type="tel"
+              value={phone}
+              onChange={e => setPhone(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="+1 555 123 4567"
             />
           </div>
           <div>
