@@ -140,8 +140,3 @@ export async function fetchSelectableViews(object: string): Promise<ListView[]> 
   return (data || []) as ListView[];
 }
 
-/** A view is countable server-side unless it filters on a client-computed field. */
-export function isViewCountable(view: ListView): boolean {
-  const filters = view.filters || [];
-  return !filters.some(f => f.field === 'customer_review_status');
-}
