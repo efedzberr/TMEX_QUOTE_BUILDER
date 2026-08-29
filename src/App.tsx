@@ -626,7 +626,44 @@ function App() {
       return;
     }
 
-    setQuote({ ...quote, ...updates });
+    // The DB trigger may recalculate due_date when opportunity_type / priority change: re-read those fields
+    let merged: Quote = { ...quote, ...updates };
+    const { data: fresh } = await supabase
+      .from('quotes')
+      .select('opportunity_type, priority, due_date, due_warning_days')
+      .eq('id', quote.id)
+      .maybeSingle();
+    if (fresh) merged = { ...merged, ...fresh };
+    setQuote(merged);
+
+    // History entries for control-field changes
+    const entries: { action: string; notes: string }[] = [];
+    if ('opportunity_type' in updates && (updates.opportunity_type || '') !== (quote.opportunity_type || '')) {
+      entries.push({ action: 'Opportunity Type Changed', notes: `${quote.opportunity_type || '—'} → ${merged.opportunity_type || '—'}` });
+    }
+    if ('priority' in updates && (updates.priority || '') !== (quote.priority || '')) {
+      entries.push({ action: 'Priority Changed', notes: `${quote.priority || '—'} → ${merged.priority || '—'}` });
+    }
+    if ((merged.due_date || null) !== (quote.due_date || null)) {
+      const recalculated = entries.length > 0;
+      const manual = !recalculated && 'due_date' in updates;
+      entries.push({
+        action: manual ? 'Due Date Changed' : 'Due Date Recalculated',
+        notes: `${quote.due_date || '—'} → ${merged.due_date || '—'}${manual ? ' (manual)' : ' (SLA)'}`,
+      });
+    }
+    if (entries.length > 0) {
+      const rows = entries.map(e => ({
+        quote_id: quote.id,
+        date: new Date().toISOString(),
+        user_name: quote.owner_name,
+        action: e.action,
+        notes: e.notes,
+      }));
+      const { data: inserted } = await supabase.from('quote_history').insert(rows).select();
+      if (inserted) setHistory(prev => [...prev, ...inserted]);
+    }
+
     setToastMessage('Quote updated successfully');
     setToastType('success');
   };

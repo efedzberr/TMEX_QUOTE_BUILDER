@@ -2,7 +2,9 @@ import { User, CheckCircle, X, Copy, Trash2, Calculator, Sigma, Globe as GlobeIc
 import { Quote, QuoteLane } from '../lib/supabase';
 import { useState, useEffect, useMemo } from 'react';
 import { LookupField } from './LookupField';
-import { OWNERS, MX_SALES_REPRESENTATIVES, US_SALES_REPRESENTATIVES, EQUIPMENT_TYPES, formatCurrency, CurrencyCode, buildQuoteName } from '../lib/constants';
+import { OWNERS, MX_SALES_REPRESENTATIVES, US_SALES_REPRESENTATIVES, EQUIPMENT_TYPES, formatCurrency, CurrencyCode, buildQuoteName, OPPORTUNITY_TYPES, QUOTE_PRIORITIES } from '../lib/constants';
+import { getDueStatus, formatLocalDate } from '../lib/dueStatus';
+import { DueStatusBadge } from './DueStatusBadge';
 import { supabase } from '../lib/supabase';
 
 interface QuoteHeaderProps {
@@ -48,6 +50,8 @@ export function QuoteHeader({
     quote_number: quote.quote_number,
     opportunity: quote.opportunity,
     opportunity_type: quote.opportunity_type || '',
+    priority: quote.priority || 'Standard',
+    due_date: quote.due_date || '',
     owner_name: quote.owner_name,
     mx_sales_rep: quote.mx_sales_rep,
     us_sales_rep: quote.us_sales_rep,
@@ -110,6 +114,8 @@ export function QuoteHeader({
       quote_number: quote.quote_number,
       opportunity: quote.opportunity,
       opportunity_type: quote.opportunity_type || '',
+      priority: quote.priority || 'Standard',
+      due_date: quote.due_date || '',
       owner_name: quote.owner_name,
       mx_sales_rep: quote.mx_sales_rep,
       us_sales_rep: quote.us_sales_rep,
@@ -202,6 +208,8 @@ export function QuoteHeader({
       shipper: 'Shipper',
       bill_to_customer: 'Bill To Customer',
       bco_partner: 'BCO',
+      opportunity_type: 'Opportunity Type',
+      priority: 'Priority',
     };
 
     const errors: Record<string, boolean> = {};
@@ -223,7 +231,7 @@ export function QuoteHeader({
     }
 
     setValidationErrors({});
-    const updates: Partial<typeof editedData & { generated_quote_name: string }> = {
+    const updates: Partial<Quote> = {
       partner_account: editedData.partner_account,
       bill_to_customer: editedData.bill_to_customer,
       shipper: editedData.shipper,
@@ -235,6 +243,8 @@ export function QuoteHeader({
       units: editedData.units,
       opportunity: editedData.opportunity,
       opportunity_type: editedData.opportunity_type,
+      priority: editedData.priority,
+      due_date: editedData.due_date || null,
       exchange_rate: editedData.exchange_rate,
       cad_exchange_rate: editedData.cad_exchange_rate,
       generated_quote_name: generatedQuoteName,
@@ -248,6 +258,8 @@ export function QuoteHeader({
       quote_number: quote.quote_number,
       opportunity: quote.opportunity,
       opportunity_type: quote.opportunity_type || '',
+      priority: quote.priority || 'Standard',
+      due_date: quote.due_date || '',
       owner_name: quote.owner_name,
       mx_sales_rep: quote.mx_sales_rep,
       us_sales_rep: quote.us_sales_rep,
@@ -605,6 +617,22 @@ export function QuoteHeader({
             )}
           </div>
           <div>
+            <div className="text-[10px] text-gray-500 uppercase tracking-wide mb-0.5">Due Date</div>
+            {!isEditing ? (
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="text-sm text-gray-900">{formatLocalDate(quote.due_date)}</div>
+                <DueStatusBadge status={getDueStatus(quote)} showDays />
+              </div>
+            ) : (
+              <input
+                type="date"
+                value={editedData.due_date}
+                onChange={(e) => handleChange('due_date', e.target.value)}
+                className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+              />
+            )}
+          </div>
+          <div>
             <div className="text-[10px] text-gray-500 uppercase tracking-wide mb-0.5">Equipment Type</div>
             {!isEditing ? (
               <div className="text-sm text-gray-900">{quote.type_of_service}</div>
@@ -634,12 +662,24 @@ export function QuoteHeader({
               <select
                 value={editedData.opportunity_type}
                 onChange={(e) => handleChange('opportunity_type', e.target.value)}
-                className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                className={`w-full px-2 py-1 text-sm border rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${validationErrors.opportunity_type ? 'border-red-500' : 'border-gray-300'}`}
               >
                 <option value="">Select Opportunity Type</option>
-                <option value="BID">BID</option>
-                <option value="CONTRACT">CONTRACT</option>
-                <option value="STANDARD PUBLISH">STANDARD PUBLISH</option>
+                {OPPORTUNITY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            )}
+          </div>
+          <div>
+            <div className="text-[10px] text-gray-500 uppercase tracking-wide mb-0.5">Priority</div>
+            {!isEditing ? (
+              <div className="text-sm text-gray-900">{quote.priority || '\u2014'}</div>
+            ) : (
+              <select
+                value={editedData.priority}
+                onChange={(e) => handleChange('priority', e.target.value)}
+                className={`w-full px-2 py-1 text-sm border rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${validationErrors.priority ? 'border-red-500' : 'border-gray-300'}`}
+              >
+                {QUOTE_PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
               </select>
             )}
           </div>
