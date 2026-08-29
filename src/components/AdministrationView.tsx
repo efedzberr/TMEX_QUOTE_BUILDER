@@ -8,12 +8,13 @@ import { CostStructureTab } from './admin/CostStructureTab';
 import { MarketInformationTab } from './admin/MarketInformationTab';
 import { UsersTab } from './admin/UsersTab';
 import { ProfilesTab } from './admin/ProfilesTab';
+import { RolesTab } from './admin/RolesTab';
 import { SlaTab } from './admin/SlaTab';
 import { usePermissions } from '../lib/permissions';
 import type { PermissionKey } from '../lib/permissionCatalog';
 
 
-type AdminTab = 'accounts' | 'bill_to' | 'shippers' | 'cities' | 'global_variables' | 'border_crossings' | 'accessorials' | 'terms_conditions' | 'account_lanes' | 'cost_structure' | 'market_information' | 'sla' | 'users' | 'profiles';
+type AdminTab = 'accounts' | 'bill_to' | 'shippers' | 'cities' | 'global_variables' | 'border_crossings' | 'accessorials' | 'terms_conditions' | 'account_lanes' | 'cost_structure' | 'market_information' | 'sla' | 'users' | 'profiles' | 'roles';
 
 
 interface BillTo {
@@ -1682,6 +1683,7 @@ const TABS: { id: AdminTab; label: string; permission: PermissionKey }[] = [
   { id: 'sla', label: 'SLA', permission: 'admin.sla' },
   { id: 'users', label: 'Users', permission: 'admin.users' },
   { id: 'profiles', label: 'Profiles', permission: 'admin.profiles' },
+  { id: 'roles', label: 'Roles', permission: 'admin.roles' },
 ];
 
 export function AdministrationView() {
@@ -1751,6 +1753,7 @@ export function AdministrationView() {
             {activeTab === 'market_information' && <MarketInformationTab onToast={handleToast} />}
             {activeTab === 'users' && <UsersTab onToast={handleToast} />}
             {activeTab === 'profiles' && <ProfilesTab onToast={handleToast} />}
+            {activeTab === 'roles' && <RolesTab onToast={handleToast} />}
             {activeTab === 'sla' && <SlaTab onToast={handleToast} />}
           </div>
         </div>
