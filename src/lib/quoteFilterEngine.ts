@@ -56,7 +56,8 @@ export function getOperatorsForType(dataType: FieldDataType) {
 export const STAGE_VALUES = ['New', 'In Progress', 'Completed', 'Branch Manager Approval', 'Sent to Customer', 'Published'];
 export const STATUS_VALUES = ['New', 'In Progress', 'Completed', 'Published'];
 export const CURRENCY_VALUES = ['USD', 'MXN', 'CAD'];
-export const OPPORTUNITY_TYPE_VALUES = ['New Business', 'Renewal', 'Expansion'];
+export const OPPORTUNITY_TYPE_VALUES = ['BID', 'CONTRACT', 'STANDARD PUBLISH'];
+export const PRIORITY_VALUES = ['Standard', 'Low', 'High'];
 
 export function getPicklistValues(field: string): string[] | null {
   switch (field) {
@@ -64,6 +65,7 @@ export function getPicklistValues(field: string): string[] | null {
     case 'status': return STATUS_VALUES;
     case 'currency': return CURRENCY_VALUES;
     case 'opportunity_type': return OPPORTUNITY_TYPE_VALUES;
+    case 'priority': return PRIORITY_VALUES;
     case 'customer_review_status': return ['pending', 'accepted', 'rejected', 'negotiate', 'mixed', 'expired'];
     default: return null;
   }

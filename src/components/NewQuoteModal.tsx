@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { LookupField } from './LookupField';
+import { OPPORTUNITY_TYPES, QUOTE_PRIORITIES } from '../lib/constants';
 
 interface NewQuoteModalProps {
   isOpen: boolean;
@@ -11,6 +12,8 @@ interface NewQuoteModalProps {
     bill_to_customer: string;
     shipper: string;
     bco_partner: string;
+    priority: string;
+    opportunity_type: string;
   }) => Promise<void>;
   isLoading: boolean;
 }
@@ -26,6 +29,8 @@ export function NewQuoteModal({
     bill_to_customer: '',
     shipper: '',
     bco_partner: '',
+    priority: 'Standard',
+    opportunity_type: '',
   });
   const [partnerAccountOptions, setPartnerAccountOptions] = useState<string[]>([]);
   const [billToOptions, setBillToOptions] = useState<string[]>([]);
@@ -41,6 +46,8 @@ export function NewQuoteModal({
         bill_to_customer: '',
         shipper: '',
         bco_partner: '',
+        priority: 'Standard',
+        opportunity_type: '',
       });
       setErrors({});
     }
@@ -108,6 +115,8 @@ export function NewQuoteModal({
     if (!formData.bill_to_customer) newErrors.bill_to_customer = true;
     if (!formData.shipper) newErrors.shipper = true;
     if (!formData.bco_partner) newErrors.bco_partner = true;
+    if (!formData.priority) newErrors.priority = true;
+    if (!formData.opportunity_type) newErrors.opportunity_type = true;
 
     setErrors(newErrors);
 
@@ -211,6 +220,46 @@ export function NewQuoteModal({
             {errors.bco_partner && (
               <div className="text-red-600 text-xs mt-1">Required</div>
             )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <div className="text-sm font-medium text-gray-700 mb-2">
+                Opportunity Type <span className="text-red-600">*</span>
+              </div>
+              <select
+                value={formData.opportunity_type}
+                onChange={(e) => {
+                  setFormData(prev => ({ ...prev, opportunity_type: e.target.value }));
+                  if (errors.opportunity_type) setErrors(prev => ({ ...prev, opportunity_type: false }));
+                }}
+                className={`w-full px-3 py-2 text-sm border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.opportunity_type ? 'border-red-500' : 'border-gray-300'}`}
+              >
+                <option value="">Select...</option>
+                {OPPORTUNITY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+              {errors.opportunity_type && (
+                <div className="text-red-600 text-xs mt-1">Required</div>
+              )}
+            </div>
+            <div>
+              <div className="text-sm font-medium text-gray-700 mb-2">
+                Priority <span className="text-red-600">*</span>
+              </div>
+              <select
+                value={formData.priority}
+                onChange={(e) => {
+                  setFormData(prev => ({ ...prev, priority: e.target.value }));
+                  if (errors.priority) setErrors(prev => ({ ...prev, priority: false }));
+                }}
+                className={`w-full px-3 py-2 text-sm border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.priority ? 'border-red-500' : 'border-gray-300'}`}
+              >
+                {QUOTE_PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
+              {errors.priority && (
+                <div className="text-red-600 text-xs mt-1">Required</div>
+              )}
+            </div>
           </div>
         </div>
 

@@ -132,6 +132,8 @@ function App() {
     bill_to_customer: string;
     shipper: string;
     bco_partner: string;
+    priority: string;
+    opportunity_type: string;
   }) => {
     setLoading(true);
     try {
@@ -229,6 +231,8 @@ function App() {
           units: 'Miles',
           type_of_service: 'Dry Van',
           partner_account: quoteData.partner_account,
+          priority: quoteData.priority,
+          opportunity_type: quoteData.opportunity_type,
           us_sales_rep: 'Connie Hills',
           mx_sales_rep: defaultMxRep,
           currency: 'USD',

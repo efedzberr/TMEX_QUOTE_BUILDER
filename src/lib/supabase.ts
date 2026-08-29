@@ -58,6 +58,9 @@ export interface Quote {
   negotiation_quote_id?: string;
   is_mass_update?: boolean;
   mass_update_log_id?: string;
+  priority?: string;
+  due_date?: string | null;
+  due_warning_days?: number;
   created_at: string;
   updated_at: string;
 }

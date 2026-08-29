@@ -243,3 +243,10 @@ export function buildQuoteName(params: {
 
   return `${mxInitials}${ownerInitials}${code}${dateStr}-${consecutive}${ver}`;
 }
+
+// ---- Quote control fields ----
+export const OPPORTUNITY_TYPES = ['BID', 'CONTRACT', 'STANDARD PUBLISH'] as const;
+export type OpportunityType = typeof OPPORTUNITY_TYPES[number];
+
+export const QUOTE_PRIORITIES = ['Standard', 'Low', 'High'] as const;
+export type QuotePriority = typeof QUOTE_PRIORITIES[number];
