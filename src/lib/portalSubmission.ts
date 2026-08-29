@@ -172,7 +172,7 @@ async function cloneQuoteForNonAccepted(
     .insert({
       quote_number: `${originalQuote.quote_number}-NEG`,
       owner_name: originalQuote.owner_name,
-      status: 'New',
+      status: 'Active',
       total_amount: 0,
       us_portion: 0,
       mx_rate: 0,

@@ -2,7 +2,7 @@ import { User, CheckCircle, X, Copy, Trash2, Calculator, Sigma, Globe as GlobeIc
 import { Quote, QuoteLane } from '../lib/supabase';
 import { useState, useEffect, useMemo } from 'react';
 import { LookupField } from './LookupField';
-import { OWNERS, MX_SALES_REPRESENTATIVES, US_SALES_REPRESENTATIVES, EQUIPMENT_TYPES, formatCurrency, CurrencyCode, buildQuoteName, OPPORTUNITY_TYPES, QUOTE_PRIORITIES } from '../lib/constants';
+import { MX_SALES_REPRESENTATIVES, US_SALES_REPRESENTATIVES, EQUIPMENT_TYPES, formatCurrency, CurrencyCode, buildQuoteName, OPPORTUNITY_TYPES, QUOTE_PRIORITIES } from '../lib/constants';
 import { getDueStatus, formatLocalDate } from '../lib/dueStatus';
 import { DueStatusBadge } from './DueStatusBadge';
 import { CollapsibleSection } from './CollapsibleSection';
@@ -18,6 +18,12 @@ interface QuoteHeaderProps {
   onUpdateQuote: (updates: Partial<Quote>) => void;
   onCloneQuote: () => void;
   onDeleteQuote: () => void;
+  /** profile allows creating quotes (Clone) */
+  canClone?: boolean;
+  /** profile allows deleting quotes and the record is editable by this user */
+  canDelete?: boolean;
+  /** owner, superiors in the role hierarchy, Modify All or admin */
+  canChangeOwner?: boolean;
   onToggleRateType: () => void;
   onShowToast?: (message: string, type: 'error' | 'success' | 'info') => void;
   onCustomerView?: () => void;
@@ -34,12 +40,20 @@ export function QuoteHeader({
   onUpdateQuote,
   onCloneQuote,
   onDeleteQuote,
+  canClone = true,
+  canDelete = true,
+  canChangeOwner = false,
   onToggleRateType,
   onShowToast,
   onCustomerView,
   onNavigateToOriginalQuote,
 }: QuoteHeaderProps) {
   const [isEditing, setIsEditing] = useState(false);
+  const [ownerOptions, setOwnerOptions] = useState<{ id: string; display_name: string }[]>([]);
+  useEffect(() => {
+    supabase.from('user_profiles').select('id,display_name').not('display_name', 'is', null).order('display_name')
+      .then(({ data }) => setOwnerOptions(((data || []) as { id: string; display_name: string | null }[]).filter(u => u.display_name && u.display_name.trim()).map(u => ({ id: u.id, display_name: u.display_name!.trim() }))));
+  }, []);
   const [opportunities, setOpportunities] = useState<string[]>([]);
   const [parentAccounts, setParentAccounts] = useState<string[]>([]);
   const [shippers, setShippers] = useState<string[]>([]);
@@ -54,6 +68,7 @@ export function QuoteHeader({
     priority: quote.priority || 'Standard',
     due_date: quote.due_date || '',
     owner_name: quote.owner_name,
+    owner_user_id: quote.owner_user_id || '',
     mx_sales_rep: quote.mx_sales_rep,
     us_sales_rep: quote.us_sales_rep,
     total_amount: quote.total_amount,
@@ -118,6 +133,7 @@ export function QuoteHeader({
       priority: quote.priority || 'Standard',
       due_date: quote.due_date || '',
       owner_name: quote.owner_name,
+      owner_user_id: quote.owner_user_id || '',
       mx_sales_rep: quote.mx_sales_rep,
       us_sales_rep: quote.us_sales_rep,
       total_amount: quote.total_amount,
@@ -238,6 +254,7 @@ export function QuoteHeader({
       shipper: editedData.shipper,
       bco_partner: editedData.bco_partner,
       owner_name: editedData.owner_name,
+      owner_user_id: editedData.owner_user_id || null,
       mx_sales_rep: editedData.mx_sales_rep,
       us_sales_rep: editedData.us_sales_rep,
       type_of_service: editedData.type_of_service,
@@ -262,6 +279,7 @@ export function QuoteHeader({
       priority: quote.priority || 'Standard',
       due_date: quote.due_date || '',
       owner_name: quote.owner_name,
+      owner_user_id: quote.owner_user_id || '',
       mx_sales_rep: quote.mx_sales_rep,
       us_sales_rep: quote.us_sales_rep,
       total_amount: quote.total_amount,
@@ -400,6 +418,7 @@ export function QuoteHeader({
               Quote Review Portal
             </button>
           )}
+          {canClone && (
           <button
             onClick={onCloneQuote}
             className="flex items-center gap-2 px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-colors text-sm font-medium"
@@ -407,11 +426,13 @@ export function QuoteHeader({
             <Copy className="w-4 h-4" />
             Clone Quote
           </button>
+          )}
           <button
-            onClick={locked ? undefined : onDeleteQuote}
-            disabled={locked}
+            onClick={locked || !canDelete ? undefined : onDeleteQuote}
+            disabled={locked || !canDelete}
+            title={!canDelete ? "Your profile doesn't allow deleting quotes" : locked ? "Locked quotes can't be deleted" : undefined}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors text-sm font-medium ${
-              locked
+              locked || !canDelete
                 ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
                 : 'bg-red-100 hover:bg-red-200 text-red-700'
             }`}
@@ -438,16 +459,23 @@ export function QuoteHeader({
                 <User className="w-3 h-3 text-blue-600" />
                 {quote.owner_name}
               </div>
+            ) : !canChangeOwner ? (
+              <div className="text-sm text-gray-500 flex items-center gap-1" title="Only the owner, their superiors in the role hierarchy, or an admin can change the owner">
+                <User className="w-3 h-3 text-gray-400" />
+                {quote.owner_name}
+              </div>
             ) : (
               <select
-                value={editedData.owner_name}
-                onChange={(e) => handleChange('owner_name', e.target.value)}
+                value={editedData.owner_user_id}
+                onChange={(e) => {
+                  const u = ownerOptions.find(o => o.id === e.target.value);
+                  setEditedData(prev => ({ ...prev, owner_user_id: e.target.value, owner_name: u ? u.display_name : prev.owner_name }));
+                }}
                 className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
               >
-                {OWNERS.map((owner) => (
-                  <option key={owner} value={owner}>
-                    {owner}
-                  </option>
+                {!editedData.owner_user_id && <option value="">{quote.owner_name || 'Unassigned'} (not a user)</option>}
+                {ownerOptions.map((u) => (
+                  <option key={u.id} value={u.id}>{u.display_name}</option>
                 ))}
               </select>
             )}

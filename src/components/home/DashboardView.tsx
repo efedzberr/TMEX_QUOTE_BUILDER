@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { FileText, DollarSign, Package, CheckCircle, Plus, ArrowRight } from 'lucide-react';
 import { supabase, Quote } from '../../lib/supabase';
 import type { ViewMode } from '../Sidebar';
+import { usePermissions } from '../../lib/permissions';
 
 async function fetchCurrentUserName(): Promise<string> {
   const { data: { user } } = await supabase.auth.getUser();
@@ -39,6 +40,8 @@ function formatDate(dateStr: string): string {
 }
 
 export function DashboardView({ onNavigate, onCreateQuote, onOpenQuote }: DashboardViewProps) {
+  const { can } = usePermissions();
+  const canCreateQuote = can('module.quotes', 'create');
   const [currentUserName, setCurrentUserName] = useState('');
   useEffect(() => { fetchCurrentUserName().then(setCurrentUserName); }, []);
 
@@ -131,6 +134,7 @@ export function DashboardView({ onNavigate, onCreateQuote, onOpenQuote }: Dashbo
             <p className="text-sm text-blue-200 mb-5">
               Aqu&iacute; tienes el resumen de tu actividad reciente y tus cotizaciones en curso.
             </p>
+            {canCreateQuote && (
             <button
               onClick={onCreateQuote}
               className="inline-flex items-center gap-2 bg-white text-blue-700 font-semibold text-sm px-5 py-2.5 rounded-lg hover:bg-blue-50 transition-colors shadow-sm"
@@ -138,6 +142,7 @@ export function DashboardView({ onNavigate, onCreateQuote, onOpenQuote }: Dashbo
               <Plus className="w-4 h-4" />
               Nueva cotizaci&oacute;n
             </button>
+            )}
           </div>
           <div className="absolute top-0 right-0 w-72 h-72 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/3" />
           <div className="absolute bottom-0 left-1/2 w-48 h-48 bg-white/5 rounded-full translate-y-1/2" />

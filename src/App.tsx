@@ -50,7 +50,35 @@ function App() {
   const [showViewResponse, setShowViewResponse] = useState(false);
   const [showViewSignature, setShowViewSignature] = useState(false);
   const [appIsAdmin, setAppIsAdmin] = useState(false);
-  const { can, canView, loading: permissionsLoading } = usePermissions();
+  const { can, canView, isAdmin: permIsAdmin, objectAccess, loading: permissionsLoading } = usePermissions();
+  const [recordAccess, setRecordAccess] = useState<{ quoteId: string | null; canEdit: boolean; canChangeOwner: boolean; userId: string | null }>({ quoteId: null, canEdit: true, canChangeOwner: false, userId: null });
+
+  // Record-level access for the open quote (sharing rules: owner, hierarchy, View All / Modify All, sharing default)
+  useEffect(() => {
+    let cancelled = false;
+    async function evaluate() {
+      if (!quote) return;
+      const { data: { user } } = await supabase.auth.getUser();
+      const me = user?.id || null;
+      const owner = quote.owner_user_id || null;
+      const { data: canEditData } = await supabase.rpc('user_can_edit_owner', { p_owner: owner, p_object: 'quote' });
+      let canChangeOwner = permIsAdmin || objectAccess('quote').modifyAll || !owner || owner === me;
+      if (!canChangeOwner && me && owner) {
+        const [{ data: mine }, { data: theirs }] = await Promise.all([
+          supabase.from('user_profiles').select('role_id').eq('id', me).maybeSingle(),
+          supabase.from('user_profiles').select('role_id').eq('id', owner).maybeSingle(),
+        ]);
+        if (mine?.role_id && theirs?.role_id) {
+          const { data: below } = await supabase.rpc('role_is_descendant', { p_child: theirs.role_id, p_ancestor: mine.role_id });
+          canChangeOwner = below === true;
+        }
+      }
+      if (!cancelled) setRecordAccess({ quoteId: quote.id, canEdit: canEditData !== false, canChangeOwner, userId: me });
+    }
+    evaluate();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quote?.id, quote?.owner_user_id, permIsAdmin]);
 
   // Permission guard: if the current view is not allowed, go Home
   useEffect(() => {
@@ -201,7 +229,12 @@ function App() {
       const defaultRatePerMile = globalVarsData?.rate_per_mile || 0;
 
       const accountCode = accountCodeResult.data?.account_code || 'XXXXXX';
-      const defaultOwner = 'Susana Guajardo';
+      const { data: { user: creatingUser } } = await supabase.auth.getUser();
+      let defaultOwner = creatingUser?.email?.split('@')[0] || 'Unassigned';
+      if (creatingUser) {
+        const { data: creatorProfile } = await supabase.from('user_profiles').select('display_name').eq('id', creatingUser.id).maybeSingle();
+        if (creatorProfile?.display_name?.trim()) defaultOwner = creatorProfile.display_name.trim();
+      }
       const defaultMxRep = 'Alberto Paz';
       const now = new Date().toISOString();
       const generatedQuoteName = buildQuoteName({
@@ -223,7 +256,7 @@ function App() {
           quote_name_version: 1,
           owner_name: defaultOwner,
           owner_user_id: currentUser?.id || null,
-          status: 'New',
+          status: 'Active',
           stage: 'New',
           rate_type: 'Flat Rate',
           total_amount: 0,
@@ -351,7 +384,7 @@ function App() {
           quote_name_sequence: quote.quote_name_sequence,
           quote_name_version: nextVersion,
           owner_name: quote.owner_name,
-          status: 'New',
+          status: 'Active',
           stage: 'New',
           rate_type: quote.rate_type || 'Flat Rate',
           total_amount: quote.total_amount,
@@ -510,6 +543,13 @@ function App() {
   };
 
   const handleCloneQuoteFromList = async (sourceQuote: Quote) => {
+    const { data: { user: cloningUser } } = await supabase.auth.getUser();
+    const cloneOwnerId = cloningUser?.id || null;
+    let cloneOwnerName = cloningUser?.email?.split('@')[0] || 'Unassigned';
+    if (cloningUser) {
+      const { data: cloningProfile } = await supabase.from('user_profiles').select('display_name').eq('id', cloningUser.id).maybeSingle();
+      if (cloningProfile?.display_name?.trim()) cloneOwnerName = cloningProfile.display_name.trim();
+    }
     try {
       const { data: existingQuotes } = await supabase
         .from('quotes')
@@ -531,8 +571,9 @@ function App() {
           quote_number: quoteNumber,
           quote_name_sequence: sourceQuote.quote_name_sequence,
           quote_name_version: nextVersion,
-          owner_name: sourceQuote.owner_name,
-          status: 'New',
+          owner_name: cloneOwnerName,
+          owner_user_id: cloneOwnerId,
+          status: 'Active',
           stage: 'New',
           rate_type: sourceQuote.rate_type || 'Flat Rate',
           total_amount: sourceQuote.total_amount,
@@ -644,6 +685,9 @@ function App() {
     const entries: { action: string; notes: string }[] = [];
     if ('opportunity_type' in updates && (updates.opportunity_type || '') !== (quote.opportunity_type || '')) {
       entries.push({ action: 'Opportunity Type Changed', notes: `${quote.opportunity_type || '—'} → ${merged.opportunity_type || '—'}` });
+    }
+    if ('owner_user_id' in updates && (updates.owner_user_id || null) !== (quote.owner_user_id || null)) {
+      entries.push({ action: 'Owner Changed', notes: `${quote.owner_name || '—'} → ${updates.owner_name || merged.owner_name || '—'}` });
     }
     if ('priority' in updates && (updates.priority || '') !== (quote.priority || '')) {
       entries.push({ action: 'Priority Changed', notes: `${quote.priority || '—'} → ${merged.priority || '—'}` });
@@ -1674,7 +1718,14 @@ function App() {
     );
   }
 
-  const locked = isQuoteLocked(quote.stage);
+  const stageLocked = isQuoteLocked(quote.stage);
+  const recordReady = recordAccess.quoteId === quote.id;
+  const canEditThisQuote = recordReady && recordAccess.canEdit && can('module.quotes', 'edit');
+  const permissionLocked = recordReady && !canEditThisQuote;
+  const locked = stageLocked || !canEditThisQuote;
+  const canCloneQuote = can('module.quotes', 'create');
+  const canDeleteQuote = can('module.quotes', 'delete') && recordReady && recordAccess.canEdit;
+  const lanesLocked = locked || !can('quote.tab_lanes', 'edit');
 
   if (benchmarkLane) {
     const bmIndex = lanes.findIndex(l => l.id === benchmarkLane.id);
@@ -1713,7 +1764,16 @@ function App() {
         onStageChange={handleStageChange}
       />
 
-      {locked && (
+      {permissionLocked && !stageLocked && (
+        <div className="bg-gray-100 border-b border-gray-300">
+          <div className="max-w-[1280px] mx-auto px-6 py-3 flex items-center gap-2 text-sm text-gray-700">
+            <span className="text-base">&#128065;&#65039;</span>
+            <span>Read only — {recordAccess.canEdit ? 'your profile does not allow editing quotes.' : 'this quote is owned by another user and is not in your role hierarchy.'}</span>
+          </div>
+        </div>
+      )}
+
+      {stageLocked && (
         <div className="bg-[#FEF3C7] border-b border-amber-300">
           <div className="max-w-[1280px] mx-auto px-6 py-3 flex items-center justify-between">
             <div className="flex items-center gap-2 text-sm text-amber-900">
@@ -1770,6 +1830,9 @@ function App() {
             quote={quote}
             lanes={lanes}
             locked={locked}
+            canClone={canCloneQuote}
+            canDelete={canDeleteQuote}
+            canChangeOwner={recordAccess.canChangeOwner}
             onToggleUnits={handleGlobalToggleUnits}
             onToggleCurrency={handleGlobalToggleCurrency}
             onToggleLanguage={handleGlobalToggleLanguage}
@@ -1825,7 +1888,7 @@ function App() {
           <QuoteTabs
             lanes={lanes}
             quote={quote}
-            locked={locked}
+            locked={lanesLocked}
             currency={quote.currency}
             onUpdateLane={handleUpdateLane}
             onAddLane={handleAddLane}

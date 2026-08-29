@@ -61,6 +61,7 @@ export interface Quote {
   priority?: string;
   due_date?: string | null;
   due_warning_days?: number;
+  owner_user_id?: string | null;
   closed_at?: string | null;
   clock_state?: 'effective' | 'paused' | 'closed';
   clock_since?: string;

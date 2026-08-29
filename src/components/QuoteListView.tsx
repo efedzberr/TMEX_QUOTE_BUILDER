@@ -10,6 +10,7 @@ import { isQuoteLocked } from '../lib/constants';
 import { calculateQuoteReviewStatus } from '../lib/customerPortalHelpers';
 import { getDueStatus, formatLocalDate } from '../lib/dueStatus';
 import { getTimeMetrics, formatDuration } from '../lib/timeTracking';
+import { usePermissions } from '../lib/permissions';
 import { DueStatusBadge } from './DueStatusBadge';
 import { QuotesHomeHeader, ListView, ListViewFilter, ListViewColumn, ListViewSort } from './QuotesHomeHeader';
 import { SelectFieldsModal } from './SelectFieldsModal';
@@ -33,6 +34,9 @@ const PAGE_SIZE = 50;
 const SELECTION_CAP = 200;
 
 export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onCloneQuote }: QuoteListViewProps) {
+  const { can } = usePermissions();
+  const canCreateQuote = can('module.quotes', 'create');
+  const canDeleteQuotes = can('module.quotes', 'delete');
   const [allQuotes, setAllQuotes] = useState<Quote[]>([]);
   const [quoteLanes, setQuoteLanes] = useState<Record<string, QuoteLane[]>>({});
   const [loading, setLoading] = useState(true);
@@ -828,6 +832,7 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
                     {selectedIds.size} selected
                     <button onClick={clearSelection} className="hover:text-blue-900"><X className="w-3 h-3" /></button>
                   </span>
+                  {canDeleteQuotes && (
                   <button
                     onClick={() => setBulkDeleteOpen(true)}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors"
@@ -835,6 +840,7 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
                     <Trash2 className="w-3.5 h-3.5" />
                     Delete selected
                   </button>
+                  )}
                 </div>
               )}
 
@@ -842,6 +848,7 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
                 <span className="text-[10px] text-amber-600">Max {SELECTION_CAP} rows</span>
               )}
 
+              {canCreateQuote && (
               <button
                 onClick={onCreateNew}
                 className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
@@ -849,6 +856,7 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
                 <Plus className="w-4 h-4" />
                 New Quote
               </button>
+              )}
             </div>
 
             {/* Second row: list controls */}
@@ -1044,6 +1052,7 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
                             Clear Filters
                           </button>
                         )}
+                        {canCreateQuote && (
                         <button
                           onClick={onCreateNew}
                           className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
@@ -1051,6 +1060,7 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
                           <Plus className="w-4 h-4" />
                           New Quote
                         </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -1143,6 +1153,7 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
                 >
                   <Eye className="w-4 h-4 text-gray-400" /> View
                 </button>
+                {canCreateQuote && (
                 <button
                   onClick={() => { setRowMenuId(null); handleClone(quote); }}
                   disabled={cloningId === quote.id}
@@ -1150,11 +1161,12 @@ export function QuoteListView({ onCreateNew, onSelectQuote, onDeleteQuote, onClo
                 >
                   <Copy className="w-4 h-4 text-gray-400" /> Clone
                 </button>
+                )}
                 <button
-                  onClick={() => { if (!locked) { setRowMenuId(null); setDeleteConfirmId(quote.id); } }}
-                  disabled={locked}
-                  title={locked ? "Locked quotes can't be deleted" : undefined}
-                  className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left ${locked ? 'text-gray-300 cursor-not-allowed' : 'text-red-600 hover:bg-red-50'}`}
+                  onClick={() => { if (!locked && canDeleteQuotes) { setRowMenuId(null); setDeleteConfirmId(quote.id); } }}
+                  disabled={locked || !canDeleteQuotes}
+                  title={!canDeleteQuotes ? "Your profile doesn't allow deleting quotes" : locked ? "Locked quotes can't be deleted" : undefined}
+                  className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left ${locked || !canDeleteQuotes ? 'text-gray-300 cursor-not-allowed' : 'text-red-600 hover:bg-red-50'}`}
                 >
                   <Trash2 className="w-4 h-4" /> Delete
                 </button>
