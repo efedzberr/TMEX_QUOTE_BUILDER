@@ -48,7 +48,7 @@ function App() {
   const [showViewResponse, setShowViewResponse] = useState(false);
   const [showViewSignature, setShowViewSignature] = useState(false);
   const [appIsAdmin, setAppIsAdmin] = useState(false);
-  const { canView, loading: permissionsLoading } = usePermissions();
+  const { can, canView, loading: permissionsLoading } = usePermissions();
 
   // Permission guard: if the current view is not allowed, go Home
   useEffect(() => {
@@ -1651,6 +1651,7 @@ function App() {
 
       <main className="max-w-[1280px] mx-auto px-6 py-6">
         <div className="space-y-6">
+          {can('quote.header') && (
           <QuoteHeader
             quote={quote}
             lanes={lanes}
@@ -1699,8 +1700,9 @@ function App() {
               }
             }}
           />
+          )}
 
-          <QuoteHistory history={history} />
+          {can('quote.history') && <QuoteHistory history={history} />}
 
           <QuoteTabs
             lanes={lanes}

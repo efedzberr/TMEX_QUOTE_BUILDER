@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { usePermissions } from '../lib/permissions';
 import { Plus, ChevronDown, ChevronRight, X, Search, Check, DollarSign, Globe } from 'lucide-react';
 import { QuoteLanes } from './QuoteLanes';
 import { TermsConditionsTab } from './TermsConditionsTab';
@@ -567,14 +568,24 @@ export function QuoteTabs({
   onToast,
   onViewResponse,
 }: QuoteTabsProps) {
-  const [activeTab, setActiveTab] = useState<'lanes' | 'accessorials' | 'terms' | 'pdf'>('lanes');
+  const { can } = usePermissions();
 
   const tabs = [
-    { id: 'lanes' as const, label: 'Quote Lanes' },
-    { id: 'accessorials' as const, label: 'Accessorials' },
-    { id: 'terms' as const, label: 'Terms & Conditions' },
-    { id: 'pdf' as const, label: 'PDF Quote' },
-  ];
+    { id: 'lanes' as const, label: 'Quote Lanes', permission: 'quote.tab_lanes' as const },
+    { id: 'accessorials' as const, label: 'Accessorials', permission: 'quote.tab_accessorials' as const },
+    { id: 'terms' as const, label: 'Terms & Conditions', permission: 'quote.tab_terms' as const },
+    { id: 'pdf' as const, label: 'PDF Quote', permission: 'quote.tab_pdf' as const },
+  ].filter(t => can(t.permission));
+
+  const [activeTab, setActiveTab] = useState<'lanes' | 'accessorials' | 'terms' | 'pdf'>(tabs[0]?.id ?? 'lanes');
+
+  // Keep the active tab valid when permissions load or change
+  useEffect(() => {
+    if (tabs.length > 0 && !tabs.some(t => t.id === activeTab)) setActiveTab(tabs[0].id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabs.map(t => t.id).join(',')]);
+
+  if (tabs.length === 0) return null;
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200">
