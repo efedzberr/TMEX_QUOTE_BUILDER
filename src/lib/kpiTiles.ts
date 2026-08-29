@@ -222,6 +222,38 @@ export async function setProfileKpiDefault(profileId: string, setId: string | nu
   if (error) throw error;
 }
 
+/** Copy tiles into a target strip (personal or set). Returns how many were copied and how many were skipped
+ *  (tiles whose view is private cannot go into a shared set; tiles without a view are skipped everywhere). */
+export async function copyTilesTo(
+  object: string,
+  tiles: KpiTile[],
+  target: { userId?: string; setId?: string },
+  options: { replacePersonal?: boolean } = {},
+): Promise<{ copied: number; skipped: number }> {
+  const toShared = !!target.setId;
+  const eligible = tiles.filter(t => t.list_view && (!toShared || t.list_view.is_system || t.list_view.visibility === 'public'));
+  const skipped = tiles.length - eligible.length;
+  if (options.replacePersonal && target.userId) {
+    const { error } = await supabase.from('kpi_tiles').delete().eq('object', object).eq('owner_user_id', target.userId);
+    if (error) throw error;
+  }
+  const rows = eligible.slice(0, KPI_MAX_TILES).map((t, i) => ({
+    object,
+    owner_user_id: toShared ? null : target.userId,
+    set_id: target.setId || null,
+    list_view_id: t.list_view_id,
+    title: t.title,
+    color: t.color,
+    align: t.align || 'left',
+    position: i,
+  }));
+  if (rows.length > 0) {
+    const { error } = await supabase.from('kpi_tiles').insert(rows);
+    if (error) throw error;
+  }
+  return { copied: rows.length, skipped };
+}
+
 /** Which strip to show: saved choice -> profile default -> system default -> 'personal'. */
 export async function resolveKpiSource(object: string, userId: string, sets: KpiSet[]): Promise<KpiSource> {
   const prefs = await loadKpiPrefs(object, userId);
