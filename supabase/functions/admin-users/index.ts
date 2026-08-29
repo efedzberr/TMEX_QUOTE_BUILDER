@@ -241,6 +241,75 @@ async function handleSetAdmin(
   return jsonResponse({ success: true, user_id, is_admin });
 }
 
+async function handleUpdateUser(
+  serviceClient: ReturnType<typeof createClient>,
+  callerId: string,
+  body: { user_id?: string; email?: string; display_name?: string; is_admin?: boolean; profile_id?: string | null; role_id?: string | null; active?: boolean }
+) {
+  const { user_id, email, display_name, is_admin, profile_id, role_id, active } = body;
+
+  if (!user_id || typeof user_id !== "string") {
+    return jsonResponse({ error: "user_id is required" }, 400);
+  }
+  const { data: { user }, error: userErr } = await serviceClient.auth.admin.getUserById(user_id);
+  if (userErr || !user) {
+    return jsonResponse({ error: "Target user not found" }, 404);
+  }
+  if (user_id === callerId && (typeof is_admin === "boolean" && is_admin === false)) {
+    return jsonResponse({ error: "Cannot remove your own admin access" }, 400);
+  }
+  if (user_id === callerId && active === false) {
+    return jsonResponse({ error: "Cannot deactivate your own account" }, 400);
+  }
+  if (typeof display_name === "string" && !display_name.trim()) {
+    return jsonResponse({ error: "Display name is required" }, 400);
+  }
+  if (typeof email === "string" && (!email.trim() || !email.includes("@"))) {
+    return jsonResponse({ error: "A valid email is required" }, 400);
+  }
+  if (typeof profile_id === "string" && profile_id) {
+    const { data: profileRow } = await serviceClient.from("profiles").select("id").eq("id", profile_id).maybeSingle();
+    if (!profileRow) return jsonResponse({ error: "The selected profile does not exist" }, 400);
+  }
+  if (typeof role_id === "string" && role_id) {
+    const { data: roleRow } = await serviceClient.from("roles").select("id").eq("id", role_id).maybeSingle();
+    if (!roleRow) return jsonResponse({ error: "The selected role does not exist" }, 400);
+  }
+
+  // Auth-level changes (email, active)
+  const authUpdate: Record<string, unknown> = {};
+  if (typeof email === "string" && email.trim().toLowerCase() !== (user.email || "").toLowerCase()) {
+    authUpdate.email = email.trim();
+    authUpdate.email_confirm = true;
+  }
+  if (typeof active === "boolean") {
+    authUpdate.ban_duration = active ? "none" : "876600h";
+  }
+  if (Object.keys(authUpdate).length > 0) {
+    const { error: authErr } = await serviceClient.auth.admin.updateUserById(user_id, authUpdate);
+    if (authErr) {
+      const msg = authErr.message || "";
+      return jsonResponse({ error: msg.includes("already") ? "A user with this email already exists" : (msg || "Failed to update user") }, 400);
+    }
+  }
+
+  // Profile-level changes
+  const profileUpdate: Record<string, unknown> = { id: user_id };
+  if (typeof display_name === "string") profileUpdate.display_name = display_name.trim();
+  if (typeof is_admin === "boolean") profileUpdate.is_admin = is_admin;
+  if (profile_id !== undefined) profileUpdate.profile_id = profile_id || null;
+  if (role_id !== undefined) profileUpdate.role_id = role_id || null;
+  if (Object.keys(profileUpdate).length > 1) {
+    const { error: profileErr } = await serviceClient.from("user_profiles").upsert(profileUpdate, { onConflict: "id" });
+    if (profileErr) {
+      return jsonResponse({ error: "Failed to update user profile" }, 500);
+    }
+  }
+
+  return jsonResponse({ success: true, user_id });
+}
+
+
 async function handleSetActive(
   serviceClient: ReturnType<typeof createClient>,
   callerId: string,
@@ -382,6 +451,8 @@ Deno.serve(async (req: Request) => {
         return await handleSetAdmin(serviceClient, callerId, body);
       case "set_active":
         return await handleSetActive(serviceClient, callerId, body);
+      case "update_user":
+        return await handleUpdateUser(serviceClient, callerId, body);
       case "reset_mfa":
         return await handleResetMfa(serviceClient, body);
       case "delete":

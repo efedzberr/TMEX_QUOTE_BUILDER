@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase as supabaseClient } from '../../lib/supabase';
-import { Search, X, UserPlus, Shield, ShieldOff, Ban, CheckCircle, KeyRound, MoreHorizontal, Users, Trash2 } from 'lucide-react';
+import { Search, X, UserPlus, Shield, ShieldOff, Ban, CheckCircle, KeyRound, MoreHorizontal, Users, Trash2, Pencil } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/AuthContext';
 
@@ -21,6 +21,26 @@ interface RoleOption {
   id: string;
   name: string;
   is_system: boolean;
+}
+
+interface HierarchyRole {
+  id: string;
+  name: string;
+  parent_id: string | null;
+}
+
+async function fetchHierarchyRoles(): Promise<HierarchyRole[]> {
+  const { data, error } = await supabaseClient.from('roles').select('id,name,parent_id').order('name');
+  if (error) throw error;
+  return (data || []) as HierarchyRole[];
+}
+
+function rolePath(roles: HierarchyRole[], id: string | null): string {
+  const parts: string[] = [];
+  let cur = roles.find(r => r.id === id);
+  let guard = 0;
+  while (cur && guard++ < 100) { parts.unshift(cur.name); cur = roles.find(r => r.id === cur!.parent_id); }
+  return parts.join(' \u203A ');
 }
 
 async function fetchRoles(): Promise<RoleOption[]> {
@@ -64,6 +84,8 @@ export function UsersTab({ onToast }: UsersTabProps) {
   const [confirmAction, setConfirmAction] = useState<{ type: string; user: UserRow } | null>(null);
   const [roles, setRoles] = useState<RoleOption[]>([]);
   const [changeRoleUser, setChangeRoleUser] = useState<UserRow | null>(null);
+  const [hierarchyRoles, setHierarchyRoles] = useState<HierarchyRole[]>([]);
+  const [editUser, setEditUser] = useState<UserRow | null>(null);
   const roleName = (id: string | null) => roles.find(r => r.id === id)?.name || null;
   const [actionMenuId, setActionMenuId] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
@@ -84,7 +106,8 @@ export function UsersTab({ onToast }: UsersTabProps) {
 
   useEffect(() => {
     loadUsers();
-    fetchRoles().then(setRoles).catch(err => console.error('Error loading roles:', err));
+    fetchRoles().then(setRoles).catch(err => console.error('Error loading profiles:', err));
+    fetchHierarchyRoles().then(setHierarchyRoles).catch(err => console.error('Error loading roles:', err));
   }, []);
 
   async function handleChangeRole(user: UserRow, newRoleId: string) {
@@ -247,6 +270,7 @@ export function UsersTab({ onToast }: UsersTabProps) {
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Email</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Access</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Profile</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Role</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Status</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">2FA</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Last Sign-in</th>
@@ -273,6 +297,13 @@ export function UsersTab({ onToast }: UsersTabProps) {
                         <span className="text-sm text-gray-900">{roleName(user.profile_id)}</span>
                       ) : (
                         <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-amber-50 text-amber-700 border border-amber-200">No profile — Home only</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {user.role_id ? (
+                        <span className="text-sm text-gray-900">{rolePath(hierarchyRoles, user.role_id) || '—'}</span>
+                      ) : (
+                        <span className="text-xs text-gray-400 italic">No role</span>
                       )}
                     </td>
                     <td className="px-4 py-3">
@@ -329,6 +360,11 @@ export function UsersTab({ onToast }: UsersTabProps) {
             onClick={() => { closeMenu(); setConfirmAction({ type: 'toggle_active', user: menuUser }); }}
           />
           <MenuButton
+            icon={<Pencil className="w-4 h-4 text-gray-400" />}
+            label="Edit User"
+            onClick={() => { closeMenu(); setEditUser(menuUser); }}
+          />
+          <MenuButton
             icon={<Shield className="w-4 h-4 text-gray-400" />}
             label="Change Profile"
             onClick={() => { closeMenu(); setChangeRoleUser(menuUser); }}
@@ -352,6 +388,17 @@ export function UsersTab({ onToast }: UsersTabProps) {
 
       {/* Invite Modal */}
       {showInvite && <InviteModal roles={roles} onClose={() => setShowInvite(false)} onSuccess={(email) => { onToast(`Invitation sent to ${email}`, 'success'); loadUsers(); }} />}
+
+      {editUser && (
+        <EditUserModal
+          user={editUser}
+          roles={roles}
+          hierarchyRoles={hierarchyRoles}
+          isSelf={editUser.id === currentUserId}
+          onClose={() => setEditUser(null)}
+          onSaved={(msg) => { onToast(msg, 'success'); setEditUser(null); loadUsers(); }}
+        />
+      )}
 
       {changeRoleUser && (
         <ChangeRoleModal
@@ -400,6 +447,109 @@ function MenuButton({ icon, label, disabled, tooltip, destructive, onClick }: {
     </button>
   );
 }
+
+function EditUserModal({ user, roles, hierarchyRoles, isSelf, onClose, onSaved }: {
+  user: UserRow; roles: RoleOption[]; hierarchyRoles: HierarchyRole[]; isSelf: boolean; onClose: () => void; onSaved: (message: string) => void;
+}) {
+  const [displayName, setDisplayName] = useState(user.display_name || '');
+  const [email, setEmail] = useState(user.email || '');
+  const [isAdmin, setIsAdmin] = useState(user.is_admin);
+  const [profileId, setProfileId] = useState(user.profile_id || '');
+  const [roleId, setRoleId] = useState(user.role_id || '');
+  const [active, setActive] = useState(!user.banned_until || new Date(user.banned_until) < new Date());
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const emailChanged = email.trim().toLowerCase() !== (user.email || '').toLowerCase();
+  const dirty = displayName.trim() !== (user.display_name || '') || emailChanged || isAdmin !== user.is_admin
+    || profileId !== (user.profile_id || '') || roleId !== (user.role_id || '') || active !== (!user.banned_until || new Date(user.banned_until) < new Date());
+
+  async function handleSave() {
+    if (!displayName.trim()) { setError('Display name is required'); return; }
+    if (!email.trim() || !email.includes('@')) { setError('Enter a valid email'); return; }
+    if (!isAdmin && !profileId) { setError('Profile is required for non-admin users'); return; }
+    if (emailChanged && !window.confirm(`Change the sign-in email to ${email.trim()}? The user will sign in with the new address from now on.`)) return;
+    setLoading(true);
+    setError(null);
+    try {
+      await callAdminUsers('update_user', {
+        user_id: user.id,
+        display_name: displayName.trim(),
+        email: email.trim(),
+        is_admin: isAdmin,
+        profile_id: profileId || null,
+        role_id: roleId || null,
+        active,
+      });
+      onSaved(`${displayName.trim()} updated`);
+    } catch (e: any) {
+      setError(e.message || "We couldn't update the user.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const field = 'w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500';
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-lg p-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-1">Edit User</h2>
+        <p className="text-sm text-gray-500 mb-5">{user.email}</p>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div className="col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Display Name <span className="text-red-600">*</span></label>
+            <input type="text" value={displayName} onChange={e => { setDisplayName(e.target.value); setError(null); }} className={field} />
+          </div>
+          <div className="col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Email <span className="text-red-600">*</span></label>
+            <input type="email" value={email} onChange={e => { setEmail(e.target.value); setError(null); }} className={field} />
+            {emailChanged && <p className="mt-1 text-xs text-amber-700">The sign-in email will change immediately.</p>}
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Profile {!isAdmin && <span className="text-red-600">*</span>}</label>
+            <select value={profileId} onChange={e => { setProfileId(e.target.value); setError(null); }} className={field}>
+              <option value="">{isAdmin ? '— Not needed (admin) —' : 'Select a profile...'}</option>
+              {roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Role <span className="text-gray-400 font-normal">(hierarchy)</span></label>
+            <select value={roleId} onChange={e => setRoleId(e.target.value)} className={field}>
+              <option value="">— No role —</option>
+              {hierarchyRoles.map(r => <option key={r.id} value={r.id}>{rolePath(hierarchyRoles, r.id)}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Access</label>
+            <label className={`flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg ${isSelf ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`} title={isSelf ? "You can't change your own access" : ''}>
+              <input type="checkbox" checked={isAdmin} disabled={isSelf} onChange={e => setIsAdmin(e.target.checked)} className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+              <span className="text-sm text-gray-700">Administrator</span>
+            </label>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+            <select value={active ? 'active' : 'inactive'} disabled={isSelf} onChange={e => setActive(e.target.value === 'active')} className={`${field} disabled:opacity-60 disabled:cursor-not-allowed`} title={isSelf ? "You can't deactivate your own account" : ''}>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </div>
+        </div>
+
+        {error && <div className="mt-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">{error}</div>}
+
+        <div className="flex justify-end gap-3 pt-5">
+          <button type="button" onClick={onClose} disabled={loading} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Cancel</button>
+          <button type="button" onClick={handleSave} disabled={loading || !dirty} className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
+            {loading ? 'Saving...' : 'Save Changes'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 function ChangeRoleModal({ user, roles, onClose, onSave }: { user: UserRow; roles: RoleOption[]; onClose: () => void; onSave: (roleId: string) => void }) {
   const [roleId, setRoleId] = useState(user.profile_id || '');
