@@ -10,12 +10,12 @@ import { UsersTab } from './admin/UsersTab';
 import { ProfilesTab } from './admin/ProfilesTab';
 import { RolesTab } from './admin/RolesTab';
 import { SlaTab } from './admin/SlaTab';
-import { QuotesAdminTab } from './admin/QuotesAdminTab';
+import { QuotesTab } from './admin/QuotesTab';
 import { usePermissions } from '../lib/permissions';
 import type { PermissionKey } from '../lib/permissionCatalog';
 
 
-type AdminTab = 'accounts' | 'bill_to' | 'shippers' | 'cities' | 'global_variables' | 'border_crossings' | 'accessorials' | 'terms_conditions' | 'account_lanes' | 'cost_structure' | 'market_information' | 'sla' | 'users' | 'profiles' | 'roles' | 'quotes_admin';
+type AdminTab = 'accounts' | 'bill_to' | 'shippers' | 'cities' | 'global_variables' | 'border_crossings' | 'accessorials' | 'terms_conditions' | 'account_lanes' | 'cost_structure' | 'market_information' | 'sla' | 'users' | 'profiles' | 'roles' | 'wolke';
 
 
 interface BillTo {
@@ -1691,7 +1691,7 @@ export function AdministrationView() {
   const { can, isAdmin } = usePermissions();
   const visibleTabs: { id: AdminTab; label: string }[] = [
     ...TABS.filter(t => can(t.permission)),
-    ...(isAdmin ? [{ id: 'quotes_admin' as AdminTab, label: 'Quotes' }] : []),
+    ...(isAdmin ? [{ id: 'wolke' as AdminTab, label: 'Quotes' }] : []),
   ];
   const [activeTab, setActiveTab] = useState<AdminTab>(visibleTabs[0]?.id ?? 'accounts');
 
@@ -1759,7 +1759,7 @@ export function AdministrationView() {
             {activeTab === 'profiles' && <ProfilesTab onToast={handleToast} />}
             {activeTab === 'roles' && <RolesTab onToast={handleToast} />}
             {activeTab === 'sla' && <SlaTab onToast={handleToast} />}
-            {activeTab === 'quotes_admin' && <QuotesAdminTab onToast={handleToast} />}
+            {activeTab === 'wolke' && <QuotesTab onToast={handleToast} />}
           </div>
         </div>
       </div>
