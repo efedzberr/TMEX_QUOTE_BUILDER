@@ -11,12 +11,11 @@ import { ProfilesTab } from './admin/ProfilesTab';
 import { RolesTab } from './admin/RolesTab';
 import { SlaTab } from './admin/SlaTab';
 import { QuotesTab } from './admin/QuotesTab';
-import { ObjectPage } from './admin/ObjectPage';
 import { usePermissions } from '../lib/permissions';
 import type { PermissionKey } from '../lib/permissionCatalog';
 
 
-type AdminTab = 'accounts' | 'bill_to' | 'shippers' | 'cities' | 'global_variables' | 'border_crossings' | 'accessorials' | 'terms_conditions' | 'account_lanes' | 'cost_structure' | 'market_information' | 'sla' | 'users' | 'profiles' | 'roles' | 'wolke' | 'quotes_object';
+type AdminTab = 'accounts' | 'bill_to' | 'shippers' | 'cities' | 'global_variables' | 'border_crossings' | 'accessorials' | 'terms_conditions' | 'account_lanes' | 'cost_structure' | 'market_information' | 'sla' | 'users' | 'profiles' | 'roles' | 'wolke';
 
 
 interface BillTo {
@@ -1680,7 +1679,6 @@ const TABS: { id: AdminTab; label: string; permission: PermissionKey }[] = [
   { id: 'accessorials', label: 'Accessorials', permission: 'admin.accessorials' },
   { id: 'terms_conditions', label: 'Terms & Conditions', permission: 'admin.terms_conditions' },
   { id: 'account_lanes', label: 'Account Lanes', permission: 'admin.account_lanes' },
-  { id: 'quotes_object', label: 'Quotes' },
   { id: 'cost_structure', label: 'Cost Structure', permission: 'admin.cost_structure' },
   { id: 'market_information', label: 'Market Information', permission: 'admin.market_information' },
   { id: 'sla', label: 'SLA', permission: 'admin.sla' },
@@ -1746,29 +1744,22 @@ export function AdministrationView() {
           </div>
 
           <div className="p-6">
-            {(['accounts','bill_to','shippers','cities','border_crossings','account_lanes','quotes_object'] as AdminTab[]).includes(activeTab) ? (
-              <ObjectPage objectId={activeTab}>
-                {activeTab === 'accounts' && <CustomersTable />}
-                {activeTab === 'bill_to' && <ManageBillTo />}
-                {activeTab === 'shippers' && <ManageShippers />}
-                {activeTab === 'cities' && <ManageCities />}
-                {activeTab === 'border_crossings' && <ManageBorderCrossings />}
-                {activeTab === 'account_lanes' && <AccountLanesTab onToast={handleToast} />}
-              </ObjectPage>
-            ) : (
-              <>
-                {activeTab === 'global_variables' && <ManageGlobalVariables />}
-                {activeTab === 'accessorials' && <ManageAccessorials />}
-                {activeTab === 'terms_conditions' && <ManageTermsConditions />}
-                {activeTab === 'cost_structure' && <CostStructureTab onToast={handleToast} />}
-                {activeTab === 'market_information' && <MarketInformationTab onToast={handleToast} />}
-                {activeTab === 'users' && <UsersTab onToast={handleToast} />}
-                {activeTab === 'profiles' && <ProfilesTab onToast={handleToast} />}
-                {activeTab === 'roles' && <RolesTab onToast={handleToast} />}
-                {activeTab === 'sla' && <SlaTab onToast={handleToast} />}
-                {activeTab === 'wolke' && <QuotesTab onToast={handleToast} />}
-              </>
-            )}
+            {activeTab === 'accounts' && <CustomersTable />}
+            {activeTab === 'bill_to' && <ManageBillTo />}
+            {activeTab === 'shippers' && <ManageShippers />}
+            {activeTab === 'cities' && <ManageCities />}
+            {activeTab === 'global_variables' && <ManageGlobalVariables />}
+            {activeTab === 'border_crossings' && <ManageBorderCrossings />}
+            {activeTab === 'accessorials' && <ManageAccessorials />}
+            {activeTab === 'terms_conditions' && <ManageTermsConditions />}
+            {activeTab === 'account_lanes' && <AccountLanesTab onToast={handleToast} />}
+            {activeTab === 'cost_structure' && <CostStructureTab onToast={handleToast} />}
+            {activeTab === 'market_information' && <MarketInformationTab onToast={handleToast} />}
+            {activeTab === 'users' && <UsersTab onToast={handleToast} />}
+            {activeTab === 'profiles' && <ProfilesTab onToast={handleToast} />}
+            {activeTab === 'roles' && <RolesTab onToast={handleToast} />}
+            {activeTab === 'sla' && <SlaTab onToast={handleToast} />}
+            {activeTab === 'wolke' && <QuotesTab onToast={handleToast} />}
           </div>
         </div>
       </div>
