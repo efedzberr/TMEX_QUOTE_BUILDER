@@ -252,6 +252,53 @@ async function handleSetAdmin(
   return jsonResponse({ success: true, user_id, is_admin });
 }
 
+async function handleResendInvite(
+  serviceClient: ReturnType<typeof createClient>,
+  body: { user_id?: string }
+) {
+  const { user_id } = body;
+  if (!user_id || typeof user_id !== "string") {
+    return jsonResponse({ error: "user_id is required" }, 400);
+  }
+  const { data: { user }, error: userErr } = await serviceClient.auth.admin.getUserById(user_id);
+  if (userErr || !user || !user.email) {
+    return jsonResponse({ error: "Target user not found" }, 404);
+  }
+  const email = user.email;
+  const neverSignedIn = !user.last_sign_in_at;
+
+  let sent = false;
+  let sendError: string | null = null;
+
+  // 1) Try to send the email through Supabase's mailer
+  if (neverSignedIn && !user.email_confirmed_at) {
+    const { error: invErr } = await serviceClient.auth.admin.inviteUserByEmail(email, {
+      data: user.user_metadata || {},
+    });
+    if (!invErr) sent = true; else sendError = invErr.message || "invite failed";
+  }
+  if (!sent) {
+    const { error: rpErr } = await serviceClient.auth.resetPasswordForEmail(email);
+    if (!rpErr) { sent = true; sendError = null; } else if (!sendError) sendError = rpErr.message || "send failed";
+  }
+
+  // 2) Always generate a copyable sign-in link for the admin (valid 24h, single use)
+  let link: string | null = null;
+  const { data: linkData, error: linkErr } = await serviceClient.auth.admin.generateLink({ type: "recovery", email });
+  if (!linkErr) {
+    link = (linkData?.properties?.action_link as string | undefined) || null;
+  }
+
+  return jsonResponse({
+    success: true,
+    email,
+    mode: neverSignedIn ? "invite" : "recovery",
+    sent,
+    send_error: sent ? null : sendError,
+    link,
+  });
+}
+
 async function handleUpdateUser(
   serviceClient: ReturnType<typeof createClient>,
   callerId: string,
@@ -473,6 +520,8 @@ Deno.serve(async (req: Request) => {
         return await handleSetActive(serviceClient, callerId, body);
       case "update_user":
         return await handleUpdateUser(serviceClient, callerId, body);
+      case "resend_invite":
+        return await handleResendInvite(serviceClient, body);
       case "reset_mfa":
         return await handleResetMfa(serviceClient, body);
       case "delete":

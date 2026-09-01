@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase as supabaseClient } from '../../lib/supabase';
-import { Search, X, UserPlus, Shield, ShieldOff, Ban, CheckCircle, KeyRound, MoreHorizontal, Users, Trash2, Pencil } from 'lucide-react';
+import { Search, X, UserPlus, Shield, ShieldOff, Ban, CheckCircle, KeyRound, MoreHorizontal, Users, Trash2, Pencil, Mail, Copy } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/AuthContext';
 
@@ -112,6 +112,8 @@ export function UsersTab({ onToast }: UsersTabProps) {
   const [hierarchyRoles, setHierarchyRoles] = useState<HierarchyRole[]>([]);
   const [expandedRolePaths, setExpandedRolePaths] = useState<Set<string>>(new Set());
   const [editUser, setEditUser] = useState<UserRow | null>(null);
+  const [resendResult, setResendResult] = useState<{ email: string; mode: string; sent: boolean; send_error: string | null; link: string | null } | null>(null);
+  const [resendBusy, setResendBusy] = useState(false);
   const roleName = (id: string | null) => roles.find(r => r.id === id)?.name || null;
   const [actionMenuId, setActionMenuId] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
@@ -410,6 +412,23 @@ export function UsersTab({ onToast }: UsersTabProps) {
             onClick={() => { closeMenu(); setEditUser(menuUser); }}
           />
           <MenuButton
+            icon={<Mail className="w-4 h-4 text-gray-400" />}
+            label={(!menuUser.last_sign_in_at) ? 'Resend Invitation' : 'Send Password Reset'}
+            onClick={async () => {
+              const target = menuUser;
+              closeMenu();
+              setResendBusy(true);
+              try {
+                const res = await callAdminUsers('resend_invite', { user_id: target.id });
+                setResendResult(res as { email: string; mode: string; sent: boolean; send_error: string | null; link: string | null });
+              } catch (e: any) {
+                onToast(e.message || "We couldn't resend the invitation.", 'error');
+              } finally {
+                setResendBusy(false);
+              }
+            }}
+          />
+          <MenuButton
             icon={<Shield className="w-4 h-4 text-gray-400" />}
             label="Change Profile"
             onClick={() => { closeMenu(); setChangeRoleUser(menuUser); }}
@@ -433,6 +452,50 @@ export function UsersTab({ onToast }: UsersTabProps) {
 
       {/* Invite Modal */}
       {showInvite && <InviteModal roles={roles} hierarchyRoles={hierarchyRoles} onClose={() => setShowInvite(false)} onSuccess={(email) => { onToast(`Invitation sent to ${email}`, 'success'); loadUsers(); }} />}
+
+      {resendBusy && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/30" />
+          <div className="relative bg-white rounded-lg shadow-xl px-6 py-4 text-sm text-gray-700">Sending...</div>
+        </div>
+      )}
+
+      {resendResult && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setResendResult(null)} />
+          <div className="relative bg-white rounded-lg shadow-xl w-full max-w-lg mx-4 p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-1">{resendResult.mode === 'invite' ? 'Invitation' : 'Password Reset'}</h2>
+            <p className="text-sm text-gray-500 mb-4">{resendResult.email}</p>
+            {resendResult.sent ? (
+              <div className="flex items-start gap-2 text-sm text-green-800 bg-green-50 border border-green-200 rounded-md px-3 py-2 mb-4">
+                <CheckCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                <span>The email was handed to Supabase for delivery. If it doesn't arrive within a few minutes, use the link below (Supabase's built-in mailer only sends a few emails per hour).</span>
+              </div>
+            ) : (
+              <div className="flex items-start gap-2 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 mb-4">
+                <Ban className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                <span>The email could not be sent{resendResult.send_error ? ` (${resendResult.send_error})` : ''}. Share the link below with the user instead.</span>
+              </div>
+            )}
+            {resendResult.link && (
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Sign-in link <span className="text-gray-400 font-normal">(valid 24 hours, single use — lets the user set their password)</span></label>
+                <div className="flex gap-2">
+                  <input type="text" readOnly value={resendResult.link} onFocus={e => e.target.select()} className="flex-1 px-3 py-2 text-xs font-mono border border-gray-300 rounded-md bg-gray-50 text-gray-700" />
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(resendResult.link || '').then(() => onToast('Link copied', 'success')); }}
+                    className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
+                  ><Copy className="w-4 h-4" /> Copy</button>
+                </div>
+                <p className="mt-2 text-xs text-gray-500">Send it to the user through your own email or messaging. Anyone with the link can access the account, so share it only with the user.</p>
+              </div>
+            )}
+            <div className="flex justify-end mt-5">
+              <button onClick={() => setResendResult(null)} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {editUser && (
         <EditUserModal
