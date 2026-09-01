@@ -36,6 +36,30 @@ async function fetchHierarchyRoles(): Promise<HierarchyRole[]> {
   return (data || []) as HierarchyRole[];
 }
 
+/** Roles as a depth-first tree for indented dropdowns. */
+function roleTreeOptions(roles: HierarchyRole[]): { id: string; label: string }[] {
+  const byParent = new Map<string | null, HierarchyRole[]>();
+  for (const r of roles) {
+    const list = byParent.get(r.parent_id) || [];
+    list.push(r);
+    byParent.set(r.parent_id, list);
+  }
+  for (const list of byParent.values()) list.sort((a, b) => a.name.localeCompare(b.name));
+  const out: { id: string; label: string }[] = [];
+  const walk = (parent: string | null, depth: number) => {
+    for (const r of byParent.get(parent) || []) {
+      out.push({ id: r.id, label: `${'\u2003'.repeat(depth)}${depth > 0 ? '\u2514 ' : ''}${r.name}` });
+      walk(r.id, depth + 1);
+    }
+  };
+  walk(null, 0);
+  return out;
+}
+
+function hierRoleName(roles: HierarchyRole[], id: string | null): string {
+  return roles.find(r => r.id === id)?.name || '';
+}
+
 function rolePath(roles: HierarchyRole[], id: string | null): string {
   const parts: string[] = [];
   let cur = roles.find(r => r.id === id);
@@ -86,6 +110,7 @@ export function UsersTab({ onToast }: UsersTabProps) {
   const [roles, setRoles] = useState<RoleOption[]>([]);
   const [changeRoleUser, setChangeRoleUser] = useState<UserRow | null>(null);
   const [hierarchyRoles, setHierarchyRoles] = useState<HierarchyRole[]>([]);
+  const [expandedRolePaths, setExpandedRolePaths] = useState<Set<string>>(new Set());
   const [editUser, setEditUser] = useState<UserRow | null>(null);
   const roleName = (id: string | null) => roles.find(r => r.id === id)?.name || null;
   const [actionMenuId, setActionMenuId] = useState<string | null>(null);
@@ -304,7 +329,24 @@ export function UsersTab({ onToast }: UsersTabProps) {
                     </td>
                     <td className="px-4 py-3">
                       {user.role_id ? (
-                        <span className="text-sm text-gray-900">{rolePath(hierarchyRoles, user.role_id) || '—'}</span>
+                        expandedRolePaths.has(user.id) ? (
+                          <button
+                            onClick={() => setExpandedRolePaths(prev => { const n = new Set(prev); n.delete(user.id); return n; })}
+                            title="Hide hierarchy"
+                            className="text-sm text-gray-900 text-left hover:text-gray-700"
+                          >
+                            {rolePath(hierarchyRoles, user.role_id) || '—'}
+                          </button>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5">
+                            <span className="text-sm text-gray-900" title={rolePath(hierarchyRoles, user.role_id)}>{hierRoleName(hierarchyRoles, user.role_id) || '—'}</span>
+                            <button
+                              onClick={() => setExpandedRolePaths(prev => { const n = new Set(prev); n.add(user.id); return n; })}
+                              title="Show hierarchy"
+                              className="w-4 h-4 flex items-center justify-center rounded-full text-[10px] font-semibold text-gray-400 border border-gray-300 hover:text-blue-600 hover:border-blue-400"
+                            >i</button>
+                          </span>
+                        )
                       ) : (
                         <span className="text-xs text-gray-400 italic">No role</span>
                       )}
@@ -390,7 +432,7 @@ export function UsersTab({ onToast }: UsersTabProps) {
       )}
 
       {/* Invite Modal */}
-      {showInvite && <InviteModal roles={roles} onClose={() => setShowInvite(false)} onSuccess={(email) => { onToast(`Invitation sent to ${email}`, 'success'); loadUsers(); }} />}
+      {showInvite && <InviteModal roles={roles} hierarchyRoles={hierarchyRoles} onClose={() => setShowInvite(false)} onSuccess={(email) => { onToast(`Invitation sent to ${email}`, 'success'); loadUsers(); }} />}
 
       {editUser && (
         <EditUserModal
@@ -527,7 +569,7 @@ function EditUserModal({ user, roles, hierarchyRoles, isSelf, onClose, onSaved }
             <label className="block text-sm font-medium text-gray-700 mb-1">Role <span className="text-gray-400 font-normal">(hierarchy)</span></label>
             <select value={roleId} onChange={e => setRoleId(e.target.value)} className={field}>
               <option value="">— No role —</option>
-              {hierarchyRoles.map(r => <option key={r.id} value={r.id}>{rolePath(hierarchyRoles, r.id)}</option>)}
+              {roleTreeOptions(hierarchyRoles).map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
             </select>
           </div>
           <div>
@@ -593,12 +635,13 @@ function ChangeRoleModal({ user, roles, onClose, onSave }: { user: UserRow; role
   );
 }
 
-function InviteModal({ roles, onClose, onSuccess }: { roles: RoleOption[]; onClose: () => void; onSuccess: (email: string) => void }) {
+function InviteModal({ roles, hierarchyRoles, onClose, onSuccess }: { roles: RoleOption[]; hierarchyRoles: HierarchyRole[]; onClose: () => void; onSuccess: (email: string) => void }) {
   const [email, setEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [phone, setPhone] = useState('');
   const [isAdmin, setIsAdmin] = useState(false);
   const [roleId, setRoleId] = useState('');
+  const [hierRoleId, setHierRoleId] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -611,7 +654,7 @@ function InviteModal({ roles, onClose, onSuccess }: { roles: RoleOption[]; onClo
     setLoading(true);
     setError(null);
     try {
-      await callAdminUsers('invite', { email: email.trim(), display_name: displayName.trim(), phone: phone.trim() || null, is_admin: isAdmin, profile_id: roleId });
+      await callAdminUsers('invite', { email: email.trim(), display_name: displayName.trim(), is_admin: isAdmin, profile_id: roleId, role_id: hierRoleId || null, phone: phone.trim() || null });
       onSuccess(email.trim());
       onClose();
     } catch (e: any) {
@@ -669,6 +712,17 @@ function InviteModal({ roles, onClose, onSuccess }: { roles: RoleOption[]; onClo
             >
               <option value="">Select a profile...</option>
               {roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Role <span className="text-gray-400 font-normal">(hierarchy, optional)</span></label>
+            <select
+              value={hierRoleId}
+              onChange={e => setHierRoleId(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">— No role —</option>
+              {roleTreeOptions(hierarchyRoles).map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
             </select>
           </div>
           <label className="flex items-center gap-2 cursor-pointer">
