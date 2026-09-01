@@ -11,11 +11,13 @@ import { ProfilesTab } from './admin/ProfilesTab';
 import { RolesTab } from './admin/RolesTab';
 import { SlaTab } from './admin/SlaTab';
 import { QuotesTab } from './admin/QuotesTab';
+import { UpdateLogTab } from './admin/UpdateLogTab';
+import { ObjectPage } from './admin/ObjectPage';
 import { usePermissions } from '../lib/permissions';
 import type { PermissionKey } from '../lib/permissionCatalog';
 
 
-type AdminTab = 'accounts' | 'bill_to' | 'shippers' | 'cities' | 'global_variables' | 'border_crossings' | 'accessorials' | 'terms_conditions' | 'account_lanes' | 'cost_structure' | 'market_information' | 'sla' | 'users' | 'profiles' | 'roles' | 'wolke';
+type AdminTab = 'accounts' | 'bill_to' | 'shippers' | 'cities' | 'global_variables' | 'border_crossings' | 'accessorials' | 'terms_conditions' | 'account_lanes' | 'cost_structure' | 'market_information' | 'sla' | 'users' | 'profiles' | 'roles' | 'wolke' | 'update_log' | 'quotes_object';
 
 
 interface BillTo {
@@ -1669,37 +1671,97 @@ function ManageTermsConditions() {
   );
 }
 
-const TABS: { id: AdminTab; label: string; permission: PermissionKey }[] = [
-  { id: 'accounts', label: 'Partner Accounts', permission: 'admin.partner_accounts' },
-  { id: 'bill_to', label: 'Bill To', permission: 'admin.bill_to' },
-  { id: 'shippers', label: 'Shippers', permission: 'admin.shippers' },
-  { id: 'cities', label: 'Cities', permission: 'admin.cities' },
-  { id: 'global_variables', label: 'Global Variables', permission: 'admin.global_variables' },
-  { id: 'border_crossings', label: 'Border Crossing Cities', permission: 'admin.border_crossings' },
-  { id: 'accessorials', label: 'Accessorials', permission: 'admin.accessorials' },
-  { id: 'terms_conditions', label: 'Terms & Conditions', permission: 'admin.terms_conditions' },
-  { id: 'account_lanes', label: 'Account Lanes', permission: 'admin.account_lanes' },
-  { id: 'cost_structure', label: 'Cost Structure', permission: 'admin.cost_structure' },
-  { id: 'market_information', label: 'Market Information', permission: 'admin.market_information' },
-  { id: 'sla', label: 'SLA', permission: 'admin.sla' },
-  { id: 'users', label: 'Users', permission: 'admin.users' },
-  { id: 'profiles', label: 'Profiles', permission: 'admin.profiles' },
-  { id: 'roles', label: 'Roles', permission: 'admin.roles' },
+interface MenuItem {
+  id: AdminTab;
+  label: string;
+  permission?: PermissionKey;
+  adminOnly?: boolean;
+}
+
+interface MenuSection {
+  id: string;
+  label: string;
+  items: MenuItem[];
+}
+
+const MENU: MenuSection[] = [
+  {
+    id: 'users_permissions', label: 'Users & Permissions', items: [
+      { id: 'users', label: 'Users', permission: 'admin.users' },
+      { id: 'profiles', label: 'Profiles', permission: 'admin.profiles' },
+      { id: 'roles', label: 'Roles & Sharing', permission: 'admin.roles' },
+    ],
+  },
+  {
+    id: 'pricing_configuration', label: 'Pricing Configuration', items: [
+      { id: 'global_variables', label: 'Global Variables', permission: 'admin.global_variables' },
+      { id: 'cost_structure', label: 'Cost Structure', permission: 'admin.cost_structure' },
+      { id: 'market_information', label: 'Market Information', permission: 'admin.market_information' },
+      { id: 'accessorials', label: 'Accessorials', permission: 'admin.accessorials' },
+      { id: 'terms_conditions', label: 'Terms & Conditions', permission: 'admin.terms_conditions' },
+      { id: 'sla', label: 'SLA', permission: 'admin.sla' },
+    ],
+  },
+  {
+    id: 'operations', label: 'Operations', items: [
+      { id: 'wolke', label: 'Quotes Mass Update', adminOnly: true },
+      { id: 'update_log', label: 'Update Log', adminOnly: true },
+    ],
+  },
+  {
+    id: 'objects_fields', label: 'Objects & Fields', items: [
+      { id: 'accounts', label: 'Partner Accounts', permission: 'admin.partner_accounts' },
+      { id: 'bill_to', label: 'Bill To Customers', permission: 'admin.bill_to' },
+      { id: 'shippers', label: 'Shippers', permission: 'admin.shippers' },
+      { id: 'cities', label: 'Cities', permission: 'admin.cities' },
+      { id: 'border_crossings', label: 'Border Crossing Cities', permission: 'admin.border_crossings' },
+      { id: 'account_lanes', label: 'Account Lanes', permission: 'admin.account_lanes' },
+      { id: 'quotes_object', label: 'Quotes' },
+    ],
+  },
 ];
+
+const OBJECT_ITEM_IDS: AdminTab[] = ['accounts', 'bill_to', 'shippers', 'cities', 'border_crossings', 'account_lanes', 'quotes_object'];
+
+const MENU_STORAGE_KEY = 'sph_admin_menu_state';
+
+function loadMenuState(): { collapsed: string[]; last: string | null } {
+  try {
+    const raw = window.localStorage.getItem(MENU_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return { collapsed: Array.isArray(parsed.collapsed) ? parsed.collapsed : [], last: typeof parsed.last === 'string' ? parsed.last : null };
+    }
+  } catch { /* ignore */ }
+  return { collapsed: [], last: null };
+}
+
+function saveMenuState(collapsed: Set<string>, last: string) {
+  try { window.localStorage.setItem(MENU_STORAGE_KEY, JSON.stringify({ collapsed: [...collapsed], last })); } catch { /* ignore */ }
+}
 
 export function AdministrationView() {
   const { can, isAdmin } = usePermissions();
-  const visibleTabs: { id: AdminTab; label: string }[] = [
-    ...TABS.filter(t => can(t.permission)),
-    ...(isAdmin ? [{ id: 'wolke' as AdminTab, label: 'Quotes' }] : []),
-  ];
-  const [activeTab, setActiveTab] = useState<AdminTab>(visibleTabs[0]?.id ?? 'accounts');
 
-  // Keep the active tab valid when permissions load or change
+  const itemVisible = (item: MenuItem) => item.adminOnly ? isAdmin : item.permission ? can(item.permission) : true;
+  const visibleSections = MENU
+    .map(sec => ({ ...sec, items: sec.items.filter(itemVisible) }))
+    .filter(sec => sec.items.length > 0);
+  const visibleItems = visibleSections.flatMap(sec => sec.items);
+
+  const initial = loadMenuState();
+  const [activeTab, setActiveTab] = useState<AdminTab>(() => {
+    const last = initial.last as AdminTab | null;
+    return last && visibleItems.some(i => i.id === last) ? last : (visibleItems[0]?.id ?? 'users');
+  });
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set(initial.collapsed));
+  const [quickFind, setQuickFind] = useState('');
+
   useEffect(() => {
-    if (visibleTabs.length > 0 && !visibleTabs.some(t => t.id === activeTab)) setActiveTab(visibleTabs[0].id);
+    if (visibleItems.length > 0 && !visibleItems.some(i => i.id === activeTab)) setActiveTab(visibleItems[0].id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visibleTabs.map(t => t.id).join(',')]);
+  }, [visibleItems.map(i => i.id).join(',')]);
+
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error'>('success');
 
@@ -1715,51 +1777,122 @@ export function AdministrationView() {
     setToastType(type);
   }
 
+  function selectItem(id: AdminTab) {
+    setActiveTab(id);
+    saveMenuState(collapsed, id);
+  }
+
+  function toggleSection(id: string) {
+    setCollapsed(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      saveMenuState(next, activeTab);
+      return next;
+    });
+  }
+
+  const find = quickFind.trim().toLowerCase();
+  const filteredSections = find
+    ? visibleSections
+        .map(sec => ({ ...sec, items: sec.items.filter(i => i.label.toLowerCase().includes(find)) }))
+        .filter(sec => sec.items.length > 0)
+    : visibleSections;
+
+  const activeSection = visibleSections.find(sec => sec.items.some(i => i.id === activeTab));
+  const activeItem = visibleItems.find(i => i.id === activeTab);
+
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-[1400px] mx-auto px-8 py-10">
+      <div className="max-w-[1500px] mx-auto px-8 py-10">
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900">Administration</h1>
           <p className="mt-1 text-sm text-gray-500">Manage system configuration and reference data.</p>
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-          <div className="px-6 pt-5 pb-0 border-b border-gray-200">
-            <h1 className="text-xl font-semibold text-gray-900 mb-4">Administration</h1>
-            <nav className="flex gap-0 overflow-x-auto">
-              {visibleTabs.map(tab => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-                    activeTab === tab.id
-                      ? 'border-blue-600 text-blue-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
+        <div className="flex gap-6 items-start">
+          {/* Vertical menu */}
+          <aside className="w-[272px] flex-shrink-0 bg-white rounded-lg shadow-sm border border-gray-200 py-3 sticky top-6">
+            <div className="px-3 pb-3">
+              <div className="relative">
+                <Search className="w-4 h-4 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={quickFind}
+                  onChange={e => setQuickFind(e.target.value)}
+                  placeholder="Quick Find..."
+                  className="w-full pl-8 pr-7 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                {quickFind && (
+                  <button onClick={() => setQuickFind('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"><X className="w-3.5 h-3.5" /></button>
+                )}
+              </div>
+            </div>
+            <nav className="max-h-[calc(100vh-220px)] overflow-y-auto">
+              {filteredSections.map(sec => {
+                const isCollapsed = !find && collapsed.has(sec.id);
+                return (
+                  <div key={sec.id}>
+                    <button
+                      onClick={() => toggleSection(sec.id)}
+                      className="w-full flex items-center justify-between px-4 pt-4 pb-1 text-[10.5px] font-bold tracking-[0.12em] text-slate-500 uppercase hover:text-slate-700"
+                    >
+                      {sec.label}
+                      <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform ${isCollapsed ? '-rotate-90' : ''}`} />
+                    </button>
+                    {!isCollapsed && sec.items.map(item => (
+                      <button
+                        key={item.id}
+                        onClick={() => selectItem(item.id)}
+                        className={`w-full text-left flex items-center gap-2 py-1.5 text-[13.5px] transition-colors ${
+                          activeTab === item.id
+                            ? 'bg-blue-50 text-blue-700 font-semibold border-l-[3px] border-blue-600 pl-[23px] pr-3'
+                            : 'text-slate-700 hover:bg-gray-50 pl-[26px] pr-3'
+                        }`}
+                      >
+                        {item.label}
+                        {item.adminOnly && <span className="ml-auto text-[10px] px-1.5 py-px rounded-full border border-gray-200 bg-gray-50 text-gray-500">Admin</span>}
+                      </button>
+                    ))}
+                  </div>
+                );
+              })}
+              {filteredSections.length === 0 && (
+                <p className="px-4 py-6 text-sm text-gray-400">No options match "{quickFind}".</p>
+              )}
             </nav>
-          </div>
+          </aside>
 
-          <div className="p-6">
-            {activeTab === 'accounts' && <CustomersTable />}
-            {activeTab === 'bill_to' && <ManageBillTo />}
-            {activeTab === 'shippers' && <ManageShippers />}
-            {activeTab === 'cities' && <ManageCities />}
-            {activeTab === 'global_variables' && <ManageGlobalVariables />}
-            {activeTab === 'border_crossings' && <ManageBorderCrossings />}
-            {activeTab === 'accessorials' && <ManageAccessorials />}
-            {activeTab === 'terms_conditions' && <ManageTermsConditions />}
-            {activeTab === 'account_lanes' && <AccountLanesTab onToast={handleToast} />}
-            {activeTab === 'cost_structure' && <CostStructureTab onToast={handleToast} />}
-            {activeTab === 'market_information' && <MarketInformationTab onToast={handleToast} />}
-            {activeTab === 'users' && <UsersTab onToast={handleToast} />}
-            {activeTab === 'profiles' && <ProfilesTab onToast={handleToast} />}
-            {activeTab === 'roles' && <RolesTab onToast={handleToast} />}
-            {activeTab === 'sla' && <SlaTab onToast={handleToast} />}
-            {activeTab === 'wolke' && <QuotesTab onToast={handleToast} />}
+          {/* Content */}
+          <div className="flex-1 min-w-0">
+            <div className="mb-2 text-xs text-gray-400">
+              Administration {activeSection ? <>&rsaquo; {activeSection.label}</> : null} {activeItem ? <>&rsaquo; <span className="text-gray-500">{activeItem.label}</span></> : null}
+            </div>
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              {OBJECT_ITEM_IDS.includes(activeTab) ? (
+                <ObjectPage objectId={activeTab}>
+                  {activeTab === 'accounts' && <CustomersTable />}
+                  {activeTab === 'bill_to' && <ManageBillTo />}
+                  {activeTab === 'shippers' && <ManageShippers />}
+                  {activeTab === 'cities' && <ManageCities />}
+                  {activeTab === 'border_crossings' && <ManageBorderCrossings />}
+                  {activeTab === 'account_lanes' && <AccountLanesTab onToast={handleToast} />}
+                </ObjectPage>
+              ) : (
+                <>
+                  {activeTab === 'global_variables' && <ManageGlobalVariables />}
+                  {activeTab === 'accessorials' && <ManageAccessorials />}
+                  {activeTab === 'terms_conditions' && <ManageTermsConditions />}
+                  {activeTab === 'cost_structure' && <CostStructureTab onToast={handleToast} />}
+                  {activeTab === 'market_information' && <MarketInformationTab onToast={handleToast} />}
+                  {activeTab === 'users' && <UsersTab onToast={handleToast} />}
+                  {activeTab === 'profiles' && <ProfilesTab onToast={handleToast} />}
+                  {activeTab === 'roles' && <RolesTab onToast={handleToast} />}
+                  {activeTab === 'wolke' && <QuotesTab onToast={handleToast} />}
+                  {activeTab === 'update_log' && <UpdateLogTab onToast={handleToast} />}
+                  {activeTab === 'sla' && <SlaTab onToast={handleToast} />}
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>
