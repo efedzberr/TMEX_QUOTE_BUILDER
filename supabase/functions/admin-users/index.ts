@@ -282,11 +282,19 @@ async function handleResendInvite(
     if (!rpErr) { sent = true; sendError = null; } else if (!sendError) sendError = rpErr.message || "send failed";
   }
 
-  // 2) Always generate a copyable sign-in link for the admin (valid 24h, single use)
+  // 2) Always generate a copyable sign-in link for the admin (valid 24h, single use).
+  //    Built as a link to the app's /auth/confirm page (verified on button click), so email
+  //    scanners that pre-open links cannot consume the token.
   let link: string | null = null;
   const { data: linkData, error: linkErr } = await serviceClient.auth.admin.generateLink({ type: "recovery", email });
   if (!linkErr) {
-    link = (linkData?.properties?.action_link as string | undefined) || null;
+    const hashedToken = (linkData?.properties?.hashed_token as string | undefined) || null;
+    const redirectTo = ((linkData?.properties?.redirect_to as string | undefined) || "").replace(/\/+$/, "");
+    if (hashedToken && redirectTo) {
+      link = `${redirectTo}/#/auth/confirm?token_hash=${hashedToken}&type=recovery`;
+    } else {
+      link = (linkData?.properties?.action_link as string | undefined) || null;
+    }
   }
 
   return jsonResponse({

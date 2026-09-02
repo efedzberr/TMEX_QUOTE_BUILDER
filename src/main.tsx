@@ -5,6 +5,7 @@ import App from './App.tsx';
 import { CustomerReviewPortal } from './components/portal/CustomerReviewPortal.tsx';
 import { CustomerReviewPreview } from './components/portal/CustomerReviewPreview.tsx';
 import { SetPasswordPage } from './components/auth/SetPasswordPage.tsx';
+import { ConfirmLinkPage } from './components/auth/ConfirmLinkPage.tsx';
 import { AuthProvider } from './lib/AuthContext.tsx';
 import { AuthGate } from './components/auth/LoginFlow.tsx';
 import { PermissionsProvider } from './lib/permissions.tsx';
@@ -18,6 +19,7 @@ createRoot(document.getElementById('root')!).render(
           {/* Public routes: customer portal + invitation set-password */}
           <Route path="/review/:token" element={<CustomerReviewPortal />} />
           <Route path="/set-password" element={<SetPasswordPage />} />
+          <Route path="/auth/confirm" element={<ConfirmLinkPage />} />
 
           {/* El preview es de uso interno -> protegido */}
           <Route
