@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback, useRef, ReactNode } from 'react';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 
@@ -26,20 +26,24 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 function detectInviteOrRecoveryInHash(): boolean {
   const hash = window.location.hash;
-  // Supabase appends auth params like #access_token=...&type=invite or type=recovery
-  // With HashRouter the hash is normally /#/route, but invite links override it
-  if (hash.includes('type=invite') || hash.includes('type=recovery') || hash.includes('type=signup')) {
-    return true;
-  }
-  return false;
+  // Supabase appends auth params like #access_token=...&type=invite or type=recovery,
+  // and the /auth/confirm landing page uses #/auth/confirm?token_hash=...&type=invite
+  return hash.includes('type=invite') || hash.includes('type=recovery') || hash.includes('type=signup');
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>('loading');
   const [session, setSession] = useState<Session | null>(null);
-  const [passwordNeeded, setPasswordNeeded] = useState(false);
 
-  const evaluateSession = useCallback(async (s: Session | null, forcePasswordCheck = false) => {
+  /**
+   * True while the user arrived through an invite / recovery link and has not yet set
+   * their password. A ref (not state) so every evaluation reads the CURRENT value —
+   * with state, stale closures kept re-forcing the password screen after it was cleared,
+   * which made the app ask for the password twice during onboarding.
+   */
+  const passwordFlowRef = useRef(false);
+
+  const evaluateSession = useCallback(async (s: Session | null) => {
     if (!s) {
       setSession(null);
       setStatus('signed_out');
@@ -47,9 +51,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     setSession(s);
 
-    // If we detected this is an invite/recovery flow, force password setup first
-    if (forcePasswordCheck || passwordNeeded) {
-      setPasswordNeeded(true);
+    // Invite / recovery in progress: force password setup first (until cleared)
+    if (passwordFlowRef.current) {
       setStatus('needs_password');
       return;
     }
@@ -76,7 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // No tiene ningún factor enrolado → forzar enrolamiento (2FA obligatorio)
       setStatus('needs_enroll');
     }
-  }, [passwordNeeded]);
+  }, []);
 
   const refreshAuthState = useCallback(async () => {
     const { data } = await supabase.auth.getSession();
@@ -85,26 +88,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
+    passwordFlowRef.current = false;
     setSession(null);
-    setPasswordNeeded(false);
     setStatus('signed_out');
   }, []);
 
   const clearPasswordNeeded = useCallback(() => {
-    setPasswordNeeded(false);
+    // Synchronous: the very next evaluation already sees the flow as finished
+    passwordFlowRef.current = false;
   }, []);
 
   useEffect(() => {
     // On initial load, check if the URL contains invite/recovery tokens
-    const isInviteFlow = detectInviteOrRecoveryInHash();
+    if (detectInviteOrRecoveryInHash()) {
+      passwordFlowRef.current = true;
+    }
 
     const { data: listener } = supabase.auth.onAuthStateChange((event, s) => {
-      if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') {
-        // If this is an invite/recovery event, or we detected it from the URL
-        if (isInviteFlow || event === 'PASSWORD_RECOVERY') {
-          (async () => { await evaluateSession(s, true); })();
-          return;
-        }
+      if (event === 'PASSWORD_RECOVERY') {
+        passwordFlowRef.current = true;
       }
       (async () => { await evaluateSession(s); })();
     });
@@ -112,11 +114,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Initial session check
     (async () => {
       const { data } = await supabase.auth.getSession();
-      if (isInviteFlow && data.session) {
-        await evaluateSession(data.session, true);
-      } else {
-        await evaluateSession(data.session);
-      }
+      await evaluateSession(data.session);
     })();
 
     return () => listener.subscription.unsubscribe();
