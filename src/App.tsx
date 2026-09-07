@@ -30,6 +30,7 @@ import { getPortalUrl, getPreviewUrl } from './lib/customerPortalHelpers';
 import { usePermissions } from './lib/permissions';
 import { QuoteStatusTimeTracking } from './components/QuoteStatusTimeTracking';
 import { formatDuration, getTimeMetrics } from './lib/timeTracking';
+import { allocateQuoteIdentifiers } from './lib/quoteNumbering';
 
 function App() {
   const [viewMode, setViewMode] = useState<ViewMode>('home');
@@ -167,45 +168,8 @@ function App() {
   }) => {
     setLoading(true);
     try {
-      const { data: existingQuotes, error: fetchError } = await supabase
-        .from('quotes')
-        .select('quote_number')
-        .order('quote_number', { ascending: false })
-        .limit(1);
-
-      if (fetchError) {
-        console.error('Error fetching quotes:', fetchError);
-        setToastMessage(`Error fetching quotes: ${fetchError.message}`);
-        setToastType('error');
-        return;
-      }
-
-      let nextNumber = 1;
-      if (existingQuotes && existingQuotes.length > 0) {
-        const lastQuoteNumber = existingQuotes[0].quote_number;
-        const lastNumber = parseInt(lastQuoteNumber.replace('TMQ-', ''));
-        nextNumber = lastNumber + 1;
-      }
-
-      const quoteNumber = `TMQ-${String(nextNumber).padStart(8, '0')}`;
-
-      const { data: sequenceData, error: sequenceError } = await supabase
-        .from('quotes')
-        .select('quote_name_sequence')
-        .order('quote_name_sequence', { ascending: false })
-        .limit(1);
-
-      if (sequenceError) {
-        console.error('Error fetching sequences:', sequenceError);
-        setToastMessage(`Error fetching sequences: ${sequenceError.message}`);
-        setToastType('error');
-        return;
-      }
-
-      let nextSequence = 1;
-      if (sequenceData && sequenceData.length > 0) {
-        nextSequence = (sequenceData[0].quote_name_sequence || 0) + 1;
-      }
+      const { quoteNumber, quoteNameSequence } = await allocateQuoteIdentifiers(true);
+      const nextSequence = quoteNameSequence || 1;
 
       const [globalVarsResult, accountCodeResult] = await Promise.all([
         supabase
@@ -360,20 +324,7 @@ function App() {
     if (!quote) return;
 
     try {
-      const { data: existingQuotes } = await supabase
-        .from('quotes')
-        .select('quote_number')
-        .order('quote_number', { ascending: false })
-        .limit(1);
-
-      let nextNumber = 1;
-      if (existingQuotes && existingQuotes.length > 0) {
-        const lastQuoteNumber = existingQuotes[0].quote_number;
-        const lastNumber = parseInt(lastQuoteNumber.replace('TMQ-', ''));
-        nextNumber = lastNumber + 1;
-      }
-
-      const quoteNumber = `TMQ-${String(nextNumber).padStart(8, '0')}`;
+      const { quoteNumber } = await allocateQuoteIdentifiers(false);
 
       const nextVersion = (quote.quote_name_version || 1) + 1;
 
@@ -551,18 +502,7 @@ function App() {
       if (cloningProfile?.display_name?.trim()) cloneOwnerName = cloningProfile.display_name.trim();
     }
     try {
-      const { data: existingQuotes } = await supabase
-        .from('quotes')
-        .select('quote_number')
-        .order('quote_number', { ascending: false })
-        .limit(1);
-
-      let nextNumber = 1;
-      if (existingQuotes && existingQuotes.length > 0) {
-        const lastNumber = parseInt(existingQuotes[0].quote_number.replace('TMQ-', ''));
-        nextNumber = lastNumber + 1;
-      }
-      const quoteNumber = `TMQ-${String(nextNumber).padStart(8, '0')}`;
+      const { quoteNumber } = await allocateQuoteIdentifiers(false);
       const nextVersion = (sourceQuote.quote_name_version || 1) + 1;
 
       const { data: clonedQuote, error: quoteError } = await supabase

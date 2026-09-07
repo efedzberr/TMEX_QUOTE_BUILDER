@@ -4,6 +4,7 @@ import { supabase, Quote, QuoteLane } from '../lib/supabase';
 import { EQUIPMENT_TYPES, OWNERS, formatCurrencyOrDash, buildQuoteName, CurrencyCode } from '../lib/constants';
 import { generateReviewToken } from '../lib/customerPortalHelpers';
 import { LaneBadge } from './LaneBadge';
+import { allocateQuoteIdentifiers } from '../lib/quoteNumbering';
 
 interface MassUpdateViewProps {
   onViewLog: () => void;
@@ -957,12 +958,8 @@ async function runMassUpdate(
 }
 
 async function createMassUpdateQuote(group: AccountGroup): Promise<string> {
-  const { data: lastQuote } = await supabase.from('quotes').select('quote_number').order('quote_number', { ascending: false }).limit(1).maybeSingle();
-  const lastNum = lastQuote ? parseInt(lastQuote.quote_number?.replace('TMQ-', '') || '0') : 0;
-  const quoteNumber = `TMQ-${String(lastNum + 1).padStart(8, '0')}`;
-
-  const { data: lastSeq } = await supabase.from('quotes').select('quote_name_sequence').order('quote_name_sequence', { ascending: false }).limit(1).maybeSingle();
-  const nextSequence = (lastSeq?.quote_name_sequence || 0) + 1;
+  const { quoteNumber, quoteNameSequence } = await allocateQuoteIdentifiers(true);
+  const nextSequence = quoteNameSequence || 1;
 
   const { data: accountData } = await supabase.from('accounts').select('account_code').eq('account_name', group.partnerAccount).maybeSingle();
   const accountCode = accountData?.account_code || 'XXXXXX';
