@@ -101,6 +101,21 @@ export interface City {
   created_at: string;
 }
 
+export interface QuoteFieldHistory {
+  id: number;
+  quote_id: string;
+  object: 'quote' | 'quote_lane';
+  record_id: string;
+  lane_label: string | null;
+  field: string;
+  old_value: string | null;
+  new_value: string | null;
+  changed_by: string | null;
+  changed_by_name: string;
+  changed_via: 'app' | 'customer_portal' | 'system';
+  changed_at: string;
+}
+
 export interface QuoteLane {
   id: string;
   quote_id: string;
