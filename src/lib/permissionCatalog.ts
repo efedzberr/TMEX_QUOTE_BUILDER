@@ -5,7 +5,8 @@ export type PermissionKey =
   | 'admin.partner_accounts' | 'admin.bill_to' | 'admin.shippers' | 'admin.cities' | 'admin.global_variables'
   | 'admin.border_crossings' | 'admin.accessorials' | 'admin.terms_conditions'
   | 'admin.account_lanes' | 'admin.cost_structure' | 'admin.market_information' | 'admin.sla' | 'admin.users' | 'admin.profiles' | 'admin.roles'
-  | 'quote.header' | 'quote.history' | 'quote.tab_lanes' | 'quote.tab_accessorials' | 'quote.tab_terms' | 'quote.tab_pdf';
+  | 'quote.header' | 'quote.history' | 'quote.tab_lanes' | 'quote.tab_accessorials' | 'quote.tab_terms' | 'quote.tab_pdf'
+  | 'quote.field_history_config';
 
 export type PermissionLevel = 'view' | 'create' | 'edit' | 'delete';
 
@@ -72,6 +73,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: 'quote.tab_accessorials', label: 'Accessorials', description: 'Accessorials tab', levels: ['view', 'edit'] },
       { key: 'quote.tab_terms', label: 'Terms & Conditions', description: 'Terms & Conditions tab', levels: ['view', 'edit'] },
       { key: 'quote.tab_pdf', label: 'PDF', description: 'PDF tab', levels: ['view'] },
+      { key: 'quote.field_history_config', label: 'Quote Field History', description: 'Configure which Quote / Quote Lane fields are tracked (Objects & Fields → History Tracking)', levels: ['view', 'edit'] },
     ],
   },
 ];

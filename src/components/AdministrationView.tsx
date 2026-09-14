@@ -17,7 +17,7 @@ import { usePermissions } from '../lib/permissions';
 import type { PermissionKey } from '../lib/permissionCatalog';
 
 
-type AdminTab = 'accounts' | 'bill_to' | 'shippers' | 'cities' | 'global_variables' | 'border_crossings' | 'accessorials' | 'terms_conditions' | 'account_lanes' | 'cost_structure' | 'market_information' | 'sla' | 'users' | 'profiles' | 'roles' | 'wolke' | 'update_log' | 'quotes_object';
+type AdminTab = 'accounts' | 'bill_to' | 'shippers' | 'cities' | 'global_variables' | 'border_crossings' | 'accessorials' | 'terms_conditions' | 'account_lanes' | 'cost_structure' | 'market_information' | 'sla' | 'users' | 'profiles' | 'roles' | 'wolke' | 'update_log' | 'quotes_object' | 'quote_lanes_object';
 
 
 interface BillTo {
@@ -1717,11 +1717,12 @@ const MENU: MenuSection[] = [
       { id: 'border_crossings', label: 'Border Crossing Cities', permission: 'admin.border_crossings' },
       { id: 'account_lanes', label: 'Account Lanes', permission: 'admin.account_lanes' },
       { id: 'quotes_object', label: 'Quotes' },
+      { id: 'quote_lanes_object', label: 'Quote Lanes' },
     ],
   },
 ];
 
-const OBJECT_ITEM_IDS: AdminTab[] = ['accounts', 'bill_to', 'shippers', 'cities', 'border_crossings', 'account_lanes', 'quotes_object'];
+const OBJECT_ITEM_IDS: AdminTab[] = ['accounts', 'bill_to', 'shippers', 'cities', 'border_crossings', 'account_lanes', 'quotes_object', 'quote_lanes_object'];
 
 const MENU_STORAGE_KEY = 'sph_admin_menu_state';
 

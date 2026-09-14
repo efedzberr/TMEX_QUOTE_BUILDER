@@ -2,15 +2,21 @@ import { useEffect, useState } from 'react';
 import { Database } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { adminObjectFor } from '../../lib/adminObjectCatalog';
+import { usePermissions } from '../../lib/permissions';
+import { HistoryTrackingTab } from './HistoryTrackingTab';
 
 interface ObjectPageProps {
   objectId: string;
   children?: React.ReactNode;
 }
 
+type ObjectTab = 'content' | 'fields' | 'history';
+
 export function ObjectPage({ objectId, children }: ObjectPageProps) {
   const def = adminObjectFor(objectId);
-  const [tab, setTab] = useState<'content' | 'fields'>(def?.fieldsOnly ? 'fields' : 'content');
+  const { can } = usePermissions();
+  const showHistoryTab = !!def?.historyTracking && can('quote.field_history_config');
+  const [tab, setTab] = useState<ObjectTab>(def?.fieldsOnly ? 'fields' : 'content');
   const [count, setCount] = useState<number | null>(null);
 
   useEffect(() => {
@@ -26,6 +32,9 @@ export function ObjectPage({ objectId, children }: ObjectPageProps) {
   }, [objectId]);
 
   if (!def) return <>{children}</>;
+
+  const tabClass = (t: ObjectTab) =>
+    `pb-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === t ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`;
 
   return (
     <div>
@@ -43,17 +52,24 @@ export function ObjectPage({ objectId, children }: ObjectPageProps) {
 
       <div className="flex gap-6 border-b border-gray-200 mb-5">
         {!def.fieldsOnly && (
-          <button onClick={() => setTab('content')} className={`pb-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'content' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+          <button onClick={() => setTab('content')} className={tabClass('content')}>
             Content
           </button>
         )}
-        <button onClick={() => setTab('fields')} className={`pb-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'fields' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+        <button onClick={() => setTab('fields')} className={tabClass('fields')}>
           Fields <span className="ml-1 text-xs text-gray-400">({def.fields.length})</span>
         </button>
+        {showHistoryTab && (
+          <button onClick={() => setTab('history')} className={tabClass('history')}>
+            History Tracking
+          </button>
+        )}
       </div>
 
       {tab === 'content' && !def.fieldsOnly ? (
         <div>{children}</div>
+      ) : tab === 'history' && showHistoryTab && def.historyTracking ? (
+        <HistoryTrackingTab object={def.historyTracking} fields={def.fields} />
       ) : (
         <div className="border border-gray-200 rounded-lg overflow-hidden">
           <table className="w-full text-sm">

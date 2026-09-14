@@ -8,7 +8,11 @@ export interface ObjectFieldDef {
   type: ObjectFieldType;
   required: boolean;
   notes?: string;
+  /** false when the value is derived at runtime (not a stored column) and cannot be history-tracked */
+  trackable?: boolean;
 }
+
+export type HistoryTrackingObject = 'quote' | 'quote_lane';
 
 export interface AdminObjectDef {
   id: string;
@@ -17,8 +21,72 @@ export interface AdminObjectDef {
   countFlag?: string;
   fieldsOnly?: boolean;
   note?: string;
+  /** when set, the object gets a "History Tracking" tab keyed by this object name */
+  historyTracking?: HistoryTrackingObject;
   fields: ObjectFieldDef[];
 }
+
+/** Quote fields that are derived from the clock at read time; they have no stored value. */
+const CLOCK_DERIVED_QUOTE_FIELDS = new Set(['due_status', 'age_days', 'total_hours', 'effective_hours', 'hold_hours']);
+
+const QUOTE_LANE_FIELDS: ObjectFieldDef[] = [
+  { label: 'Origin City', column: 'origin_city', type: 'Text', required: true },
+  { label: 'Destination City', column: 'destination_city', type: 'Text', required: true },
+  { label: 'Border Crossing City', column: 'border_crossing', type: 'Text', required: true },
+  { label: 'Border Crossing Fee', column: 'border_crossing_fee', type: 'Currency', required: false },
+  { label: 'Service Type', column: 'service_type', type: 'Picklist', required: false },
+  { label: 'Trip Type', column: 'trip_type', type: 'Picklist', required: false },
+  { label: 'Lane Type', column: 'lane_type', type: 'Picklist', required: false },
+  { label: 'Lane Status', column: 'lane_status', type: 'Picklist', required: false },
+  { label: 'Equipment Type', column: 'equipment_type', type: 'Picklist', required: false },
+  { label: 'Border Crossing Only', column: 'border_crossing_only', type: 'Checkbox', required: false },
+  { label: 'US Miles', column: 'us_miles', type: 'Number', required: false },
+  { label: 'US Rate Type', column: 'us_rate_type', type: 'Picklist', required: false },
+  { label: 'US Rate Per Mile', column: 'us_rate_per_mile', type: 'Currency', required: false },
+  { label: 'US Line Haul', column: 'us_rate', type: 'Currency', required: false },
+  { label: 'US Fuel Rate Per Mile', column: 'us_fuel_rate', type: 'Currency', required: false },
+  { label: 'US Fuel Difference', column: 'us_fuel_difference', type: 'Currency', required: false },
+  { label: 'US Accessorials Amount', column: 'us_accessorials_amount', type: 'Currency', required: false },
+  { label: 'Estimated Total US Section', column: 'estimated_total_us_section', type: 'Currency', required: false },
+  { label: 'MX Miles', column: 'mx_miles', type: 'Number', required: false },
+  { label: 'MX Rate Type', column: 'mx_rate_type', type: 'Picklist', required: false },
+  { label: 'MX Rate Per Mile', column: 'mx_rate_per_mile', type: 'Currency', required: false },
+  { label: 'MX Line Haul', column: 'mx_rate', type: 'Currency', required: false },
+  { label: 'MX Fuel Rate Per Mile', column: 'mx_fuel_rate', type: 'Currency', required: false },
+  { label: 'MX Fuel Difference', column: 'mx_fuel_difference', type: 'Currency', required: false },
+  { label: 'MX Accessorials Amount', column: 'mx_accessorials_amount', type: 'Currency', required: false },
+  { label: 'Estimated Total MX Section', column: 'estimated_total_mx_section', type: 'Currency', required: false },
+  { label: 'Toll Rate', column: 'toll_rate', type: 'Currency', required: false },
+  { label: 'Accessorials Amount', column: 'accessorials_amount', type: 'Currency', required: false },
+  { label: 'Requested Price', column: 'requested_price', type: 'Currency', required: false },
+  { label: 'Requested Discount %', column: 'requested_discount_percent', type: 'Number', required: false },
+  { label: 'Target', column: 'target', type: 'Text', required: false },
+  { label: 'Currency', column: 'currency_code', type: 'Picklist', required: false },
+  { label: 'Units', column: 'units_code', type: 'Picklist', required: false },
+  { label: 'Effective From', column: 'effective_from_date', type: 'Date', required: false },
+  { label: 'Effective To', column: 'effective_to_date', type: 'Date', required: false },
+  { label: 'Commitment Type', column: 'commitment_type', type: 'Picklist', required: false },
+  { label: 'Frequency', column: 'frequency', type: 'Picklist', required: false },
+  { label: 'Load Frequency', column: 'load_frequency', type: 'Text', required: false },
+  { label: 'Load Volume', column: 'load_volume', type: 'Text', required: false },
+  { label: 'Volume', column: 'volume', type: 'Text', required: false },
+  { label: 'Weight', column: 'weight', type: 'Text', required: false },
+  { label: 'Dimensions', column: 'dimensions', type: 'Text', required: false },
+  { label: 'Product', column: 'product', type: 'Text', required: false },
+  { label: 'Packaging', column: 'packaging', type: 'Text', required: false },
+  { label: 'Temperature', column: 'temperature', type: 'Text', required: false },
+  { label: 'Temperature Unit', column: 'temperature_unit', type: 'Picklist', required: false },
+  { label: 'Tarps', column: 'tarps', type: 'Text', required: false },
+  { label: 'Live Load or Drop', column: 'live_load_or_drop', type: 'Picklist', required: false },
+  { label: 'UN Number', column: 'un_number', type: 'Text', required: false },
+  { label: 'MSDS', column: 'msds', type: 'Checkbox', required: false },
+  { label: 'Invoice Value', column: 'invoice_value', type: 'Currency', required: false },
+  { label: 'Number of VINs', column: 'number_of_vins', type: 'Number', required: false },
+  { label: 'VIN Dimensions', column: 'vin_dimensions', type: 'Text', required: false },
+  { label: 'Priority', column: 'priority', type: 'Picklist', required: false },
+  { label: 'Comments', column: 'comments', type: 'Text', required: false },
+  { label: 'Additional Accessories', column: 'additional_accessories', type: 'Text', required: false },
+];
 
 const CITY_FIELDS: ObjectFieldDef[] = [
   { label: 'City', column: 'city_name', type: 'Text', required: true, notes: 'Shown in origin / destination dropdowns' },
@@ -93,7 +161,7 @@ export const ADMIN_OBJECTS: AdminObjectDef[] = [
     ],
   },
   {
-    id: 'quotes_object', label: 'Quotes', table: 'quotes', fieldsOnly: true,
+    id: 'quotes_object', label: 'Quotes', table: 'quotes', fieldsOnly: true, historyTracking: 'quote',
     note: 'Quote records are managed in the Quotes module; this page documents the object\'s fields.',
     fields: QUOTE_FIELD_CATALOG.map(f => ({
       label: f.label,
@@ -106,8 +174,14 @@ export const ADMIN_OBJECTS: AdminObjectDef[] = [
         : f.dataType === 'datetime' ? 'Datetime'
         : f.dataType === 'user' ? 'User' : 'Text') as ObjectFieldType,
       required: ['quote_number', 'stage', 'status'].includes(f.key),
-      notes: f.computed ? 'Computed \u2014 calculated live, not stored' : undefined,
+      notes: CLOCK_DERIVED_QUOTE_FIELDS.has(f.key) ? 'Computed \u2014 calculated live, not stored' : undefined,
+      trackable: !CLOCK_DERIVED_QUOTE_FIELDS.has(f.key),
     })),
+  },
+  {
+    id: 'quote_lanes_object', label: 'Quote Lanes', table: 'quote_lanes', fieldsOnly: true, historyTracking: 'quote_lane',
+    note: 'Lane records are managed inside each quote; this page documents the object\'s main fields.',
+    fields: QUOTE_LANE_FIELDS,
   },
 ];
 
