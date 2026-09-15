@@ -158,6 +158,16 @@ function App() {
     }
   }
 
+  /** Re-read quote_history after a change so trigger-written rows show up immediately. */
+  async function reloadHistory(quoteId: string) {
+    const { data } = await supabase
+      .from('quote_history')
+      .select('*')
+      .eq('quote_id', quoteId)
+      .order('date', { ascending: false });
+    if (data) setHistory(data);
+  }
+
   const handleCreateNewQuote = async (quoteData: {
     partner_account: string;
     bill_to_customer: string;
@@ -621,36 +631,9 @@ function App() {
     if (fresh) merged = { ...merged, ...fresh };
     setQuote(merged);
 
-    // History entries for control-field changes
-    const entries: { action: string; notes: string }[] = [];
-    if ('opportunity_type' in updates && (updates.opportunity_type || '') !== (quote.opportunity_type || '')) {
-      entries.push({ action: 'Opportunity Type Changed', notes: `${quote.opportunity_type || '—'} → ${merged.opportunity_type || '—'}` });
-    }
-    if ('owner_user_id' in updates && (updates.owner_user_id || null) !== (quote.owner_user_id || null)) {
-      entries.push({ action: 'Owner Changed', notes: `${quote.owner_name || '—'} → ${updates.owner_name || merged.owner_name || '—'}` });
-    }
-    if ('priority' in updates && (updates.priority || '') !== (quote.priority || '')) {
-      entries.push({ action: 'Priority Changed', notes: `${quote.priority || '—'} → ${merged.priority || '—'}` });
-    }
-    if ((merged.due_date || null) !== (quote.due_date || null)) {
-      const recalculated = entries.length > 0;
-      const manual = !recalculated && 'due_date' in updates;
-      entries.push({
-        action: manual ? 'Due Date Changed' : 'Due Date Recalculated',
-        notes: `${quote.due_date || '—'} → ${merged.due_date || '—'}${manual ? ' (manual)' : ' (SLA)'}`,
-      });
-    }
-    if (entries.length > 0) {
-      const rows = entries.map(e => ({
-        quote_id: quote.id,
-        date: new Date().toISOString(),
-        user_name: quote.owner_name,
-        action: e.action,
-        notes: e.notes,
-      }));
-      const { data: inserted } = await supabase.from('quote_history').insert(rows).select();
-      if (inserted) setHistory(prev => [...prev, ...inserted]);
-    }
+    // Field changes (owner, priority, opportunity type, due date, ...) are recorded by the
+    // quotes_field_history trigger; re-read the history so the new rows show up.
+    await reloadHistory(quote.id);
 
     setToastMessage('Quote updated successfully');
     setToastType('success');
@@ -710,7 +693,6 @@ function App() {
     if (!error) {
       const wasLocked = isQuoteLocked(quote.stage);
       const nowLocked = isQuoteLocked(newStage);
-      const before = getTimeMetrics(quote);
       const { data: clock } = await supabase
         .from('quotes')
         .select('status, closed_at, clock_state, clock_since, effective_seconds, paused_seconds')
@@ -718,14 +700,8 @@ function App() {
         .maybeSingle();
       setQuote({ ...quote, stage: newStage, ...(clock || {}) });
 
-      const { data: inserted } = await supabase.from('quote_history').insert({
-        quote_id: quote.id,
-        date: new Date().toISOString(),
-        user_name: quote.owner_name,
-        action: 'Stage Changed',
-        notes: `${quote.stage || 'New'} \u2192 ${newStage} (after ${formatDuration(before.currentStateSeconds)} in ${quote.stage || 'New'})`,
-      }).select();
-      if (inserted) setHistory(prev => [...prev, ...inserted]);
+      // Stage is always tracked: the trigger writes the history row.
+      await reloadHistory(quote.id);
 
       if (wasLocked && !nowLocked) {
         setToastMessage('Quote unlocked. You can now edit this quote.');
@@ -754,7 +730,6 @@ function App() {
       return;
     }
 
-    const before = getTimeMetrics(quote);
     const { data: clock } = await supabase
       .from('quotes')
       .select('status, closed_at, clock_state, clock_since, effective_seconds, paused_seconds')
@@ -762,19 +737,8 @@ function App() {
       .maybeSingle();
     setQuote({ ...quote, status: newStatus, ...(clock || {}) });
 
-    const prevStatus = quote.status || 'Active';
-    const action = newStatus === 'Cancelled' ? 'Quote Cancelled'
-      : prevStatus === 'Cancelled' ? 'Quote Reopened'
-      : newStatus === 'Active' ? 'Quote Resumed'
-      : 'Quote Paused';
-    const { data: inserted } = await supabase.from('quote_history').insert({
-      quote_id: quote.id,
-      date: new Date().toISOString(),
-      user_name: quote.owner_name,
-      action,
-      notes: `${prevStatus} \u2192 ${newStatus} (after ${formatDuration(before.currentStateSeconds)} as ${prevStatus})`,
-    }).select();
-    if (inserted) setHistory(prev => [...prev, ...inserted]);
+    // Status is always tracked: the trigger writes the history row.
+    await reloadHistory(quote.id);
 
     setToastMessage(`Status updated to ${newStatus}`);
     setToastType('success');

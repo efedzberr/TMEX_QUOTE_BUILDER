@@ -159,7 +159,7 @@ export function QuoteHistory({ history }: QuoteHistoryProps) {
                 type="text"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder="Search action, field, value or user\u2026"
+                placeholder="Search action, field, value or user…"
                 className="w-full pl-8 pr-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
               />
             </div>

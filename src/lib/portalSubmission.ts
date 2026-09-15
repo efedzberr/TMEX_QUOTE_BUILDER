@@ -43,14 +43,6 @@ async function writeHistoryEntries(
     notes: `Status: ${overallStatus}. ${summary}.`,
   });
 
-  entries.push({
-    quote_id: quoteId,
-    date: now,
-    user_name: 'System',
-    action: 'Stage Changed',
-    notes: 'Stage changed to Published',
-  });
-
   if (negotiationQuoteId) {
     entries.push({
       quote_id: quoteId,

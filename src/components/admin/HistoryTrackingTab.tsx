@@ -18,6 +18,7 @@ export function HistoryTrackingTab({ object, fields, onToast }: HistoryTrackingT
 
   const [saved, setSaved] = useState<Set<string>>(new Set());
   const [draft, setDraft] = useState<Set<string>>(new Set());
+  const [systemFields, setSystemFields] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,15 +31,17 @@ export function HistoryTrackingTab({ object, fields, onToast }: HistoryTrackingT
     setError(null);
     supabase
       .from('field_history_tracking')
-      .select('column_name')
+      .select('column_name, is_system')
       .eq('object', object)
       .eq('enabled', true)
       .then(({ data, error: e }) => {
         if (cancelled) return;
         if (e) { setError(e.message); setLoading(false); return; }
-        const s = new Set<string>((data || []).map(r => r.column_name as string));
+        const rows = (data || []) as { column_name: string; is_system: boolean }[];
+        const s = new Set<string>(rows.map(r => r.column_name));
         setSaved(s);
         setDraft(new Set(s));
+        setSystemFields(new Set(rows.filter(r => r.is_system).map(r => r.column_name)));
         setLoading(false);
       });
     return () => { cancelled = true; };
@@ -51,7 +54,7 @@ export function HistoryTrackingTab({ object, fields, onToast }: HistoryTrackingT
   }, [saved, draft]);
 
   const toggle = (column: string) => {
-    if (!canEdit) return;
+    if (!canEdit || systemFields.has(column)) return;
     setDraft(prev => {
       const next = new Set(prev);
       if (next.has(column)) next.delete(column);
@@ -87,7 +90,7 @@ export function HistoryTrackingTab({ object, fields, onToast }: HistoryTrackingT
           </div>
           <p className="mt-0.5 text-xs text-gray-500">
             Select the fields to track. Every change to a tracked field records the old value, the new value, who changed it and when.
-            {' '}Up to {MAX_TRACKED} fields per object.
+            {' '}Up to {MAX_TRACKED} fields per object. Fields marked "Always tracked" are required by the system and cannot be turned off.
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -141,8 +144,9 @@ export function HistoryTrackingTab({ object, fields, onToast }: HistoryTrackingT
               <tr><td colSpan={5} className="px-4 py-6 text-center text-xs text-gray-400">Loading\u2026</td></tr>
             ) : fields.map(f => {
               const isTrackable = f.trackable !== false;
+              const isSystem = systemFields.has(f.column);
               const checked = draft.has(f.column);
-              const disabled = !canEdit || !isTrackable || (!checked && atLimit);
+              const disabled = !canEdit || !isTrackable || isSystem || (!checked && atLimit);
               return (
                 <tr
                   key={f.column}
@@ -150,20 +154,27 @@ export function HistoryTrackingTab({ object, fields, onToast }: HistoryTrackingT
                   className={`border-b border-gray-100 last:border-b-0 ${isTrackable ? 'hover:bg-gray-50' : 'bg-gray-50/60 text-gray-400'} ${disabled ? '' : 'cursor-pointer'}`}
                 >
                   <td className="px-4 py-2.5">
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      disabled={disabled}
-                      onChange={() => toggle(f.column)}
-                      onClick={e => e.stopPropagation()}
-                      className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-40"
-                    />
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={disabled}
+                        onChange={() => toggle(f.column)}
+                        onClick={e => e.stopPropagation()}
+                        className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-40"
+                      />
+                      {isSystem && <Lock className="w-3 h-3 text-gray-400" />}
+                    </div>
                   </td>
                   <td className={`px-4 py-2.5 ${isTrackable ? 'text-gray-900' : ''}`}>{f.label}</td>
                   <td className="px-4 py-2.5 font-mono text-xs text-gray-500">{f.column}</td>
                   <td className="px-4 py-2.5"><span className="inline-block px-2 py-0.5 text-xs rounded-full bg-gray-50 border border-gray-200 text-gray-600">{f.type}</span></td>
                   <td className="px-4 py-2.5 text-xs text-gray-500">
-                    {isTrackable ? (f.notes || '') : 'Not trackable \u2014 derived from the clock, no stored value'}
+                    {!isTrackable
+                      ? 'Not trackable \u2014 derived from the clock, no stored value'
+                      : isSystem
+                        ? <span className="inline-block px-2 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-blue-700">Always tracked</span>
+                        : (f.notes || '')}
                   </td>
                 </tr>
               );
