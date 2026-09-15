@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { QuoteListView } from './components/QuoteListView';
 import { QuoteHeader } from './components/QuoteHeader';
 import { QuoteHistory } from './components/QuoteHistory';
+import { logActivity } from './lib/activityLog';
 import { QuoteTabs } from './components/QuoteTabs';
 import { StageProgressBar } from './components/StageProgressBar';
 import { LaneDetailsPanel } from './components/LaneDetailsPanel';
@@ -122,6 +123,7 @@ function App() {
         setViewMode('list');
         return;
       }
+      logActivity('Quote Opened', { object: 'quote', recordId: quoteData.id, recordLabel: quoteData.quote_number });
 
       if (
         quoteData.customer_review_status === 'pending' &&
@@ -634,6 +636,7 @@ function App() {
     // Field changes (owner, priority, opportunity type, due date, ...) are recorded by the
     // quotes_field_history trigger; re-read the history so the new rows show up.
     await reloadHistory(quote.id);
+    logActivity('Quote Saved', { object: 'quote', recordId: quote.id, recordLabel: quote.quote_number });
 
     setToastMessage('Quote updated successfully');
     setToastType('success');

@@ -3,6 +3,7 @@ import { supabase as supabaseClient } from '../../lib/supabase';
 import { Search, X, UserPlus, Shield, ShieldOff, Ban, CheckCircle, KeyRound, MoreHorizontal, Users, Trash2, Pencil, Mail, Copy } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/AuthContext';
+import { logActivity } from '../../lib/activityLog';
 
 interface UserRow {
   id: string;
@@ -94,6 +95,21 @@ async function callAdminUsers(action: string, payload: Record<string, unknown> =
 
   const data = await res.json();
   if (!res.ok) throw new Error(data.message || data.error || `Error ${res.status}`);
+
+  if (action !== 'list') {
+    const labels: Record<string, string> = {
+      invite: 'User Invited',
+      update_user: 'User Updated',
+      set_admin: 'User Admin Flag Changed',
+      set_active: 'User Active Flag Changed',
+      reset_mfa: 'User MFA Reset',
+      delete: 'User Deleted',
+      resend_invite: 'User Invite Resent',
+    };
+    const target = typeof payload.user_id === 'string' ? payload.user_id : null;
+    const email = typeof payload.email === 'string' ? payload.email : null;
+    logActivity(labels[action] || `User ${action}`, { object: 'user', recordId: target, recordLabel: email });
+  }
   return data;
 }
 
