@@ -23,7 +23,7 @@ import { DashboardView } from './components/home/DashboardView';
 import { DashboardsView } from './components/home/DashboardsView';
 import { CustomersView } from './components/customers/CustomersView';
 import { ImportView } from './components/import/ImportView';
-import { supabase, Quote, QuoteHistory as QuoteHistoryType, QuoteLane, QuoteFieldHistory } from './lib/supabase';
+import { supabase, Quote, QuoteHistory as QuoteHistoryType, QuoteLane } from './lib/supabase';
 import { CurrencyCode, convertLaneValues, buildQuoteName, isQuoteLocked } from './lib/constants';
 import { validateCompletedStage, CompletedStageValidationResult } from './lib/completedStageValidation';
 import { getPortalUrl, getPreviewUrl } from './lib/customerPortalHelpers';
@@ -37,7 +37,6 @@ function App() {
   const [currentQuoteId, setCurrentQuoteId] = useState<string | null>(null);
   const [quote, setQuote] = useState<Quote | null>(null);
   const [history, setHistory] = useState<QuoteHistoryType[]>([]);
-  const [fieldHistory, setFieldHistory] = useState<QuoteFieldHistory[]>([]);
   const [lanes, setLanes] = useState<QuoteLane[]>([]);
   const [loading, setLoading] = useState(false);
   const [showDetails, setShowDetails] = useState<QuoteLane | null>(null);
@@ -141,13 +140,7 @@ function App() {
         .from('quote_history')
         .select('*')
         .eq('quote_id', quoteId)
-        .order('date', { ascending: true });
-
-      const { data: fieldHistoryData } = await supabase
-        .from('quote_field_history')
-        .select('*')
-        .eq('quote_id', quoteId)
-        .order('changed_at', { ascending: false });
+        .order('date', { ascending: false });
 
       const { data: lanesData } = await supabase
         .from('quote_lanes')
@@ -156,7 +149,6 @@ function App() {
         .order('sort_order', { ascending: true });
 
       if (historyData) setHistory(historyData);
-      setFieldHistory((fieldHistoryData || []) as QuoteFieldHistory[]);
       if (lanesData) setLanes(lanesData);
     } catch (error) {
       console.error('Error loading quote:', error);
@@ -1831,7 +1823,7 @@ function App() {
             <QuoteStatusTimeTracking quote={quote} onStatusChange={handleStatusChange} />
           )}
 
-          {can('quote.history') && <QuoteHistory history={history} fieldHistory={fieldHistory} />}
+          {can('quote.history') && <QuoteHistory history={history} />}
 
           <QuoteTabs
             lanes={lanes}
