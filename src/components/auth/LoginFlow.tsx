@@ -2,6 +2,8 @@ import { useState, useEffect, FormEvent } from 'react';
 import { Lock, ShieldCheck, LogOut, KeyRound, Eye, EyeOff } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/AuthContext';
+import { DEFAULT_POLICY, evaluatePassword, fetchPasswordPolicy, changePassword, type PasswordPolicy } from '../../lib/passwordPolicy';
+import { PasswordRules } from './PasswordRules';
 
 /* ============================================================
    Shell visual compartido (consistente con la app: fondo gris,
@@ -417,29 +419,35 @@ function MfaEnrollStep() {
    Paso intermedio: establecer contraseña (invite/recovery flow)
    ============================================================ */
 function InvitePasswordStep() {
-  const { refreshAuthState, signOut, clearPasswordNeeded } = useAuth();
+  const { refreshAuthState, signOut, clearPasswordNeeded, userEmail } = useAuth();
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [policy, setPolicy] = useState<PasswordPolicy>(DEFAULT_POLICY);
 
-  const passwordValid = password.length >= 8;
+  useEffect(() => { fetchPasswordPolicy().then(setPolicy); }, []);
+
+  const rules = evaluatePassword(password, policy, userEmail);
+  const passwordValid = rules.every(r => r.ok);
   const passwordsMatch = password === confirm;
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!passwordValid) { setError('La contraseña debe tener al menos 8 caracteres'); return; }
-    if (!passwordsMatch) { setError('Las contraseñas no coinciden'); return; }
+    if (!passwordValid) { setError('La contrase\u00f1a no cumple las reglas'); return; }
+    if (!passwordsMatch) { setError('Las contrase\u00f1as no coinciden'); return; }
 
     setLoading(true);
     setError(null);
 
-    const { error: updateErr } = await supabase.auth.updateUser({ password });
+    const res = await changePassword(password);
     setLoading(false);
 
-    if (updateErr) {
-      setError(updateErr.message);
+    if (!res.ok) {
+      setError(res.failed_rules?.includes('history')
+        ? `No puedes reutilizar ninguna de tus \u00faltimas ${policy.history_count} contrase\u00f1as.`
+        : (res.error || 'No fue posible establecer la contrase\u00f1a.'));
       return;
     }
 
@@ -471,16 +479,13 @@ function InvitePasswordStep() {
               required
               minLength={8}
               className="w-full px-3 py-2.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 pr-10"
-              placeholder="Mínimo 8 caracteres"
+              placeholder="Nueva contrase\u00f1a"
             />
             <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
               {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
           </div>
-          <div className="mt-1.5 flex items-center gap-2">
-            <div className={`h-1 flex-1 rounded-full ${password.length === 0 ? 'bg-gray-200' : password.length < 8 ? 'bg-red-300' : password.length < 12 ? 'bg-amber-300' : 'bg-green-400'}`} />
-            <span className="text-xs text-gray-400">{password.length < 8 ? 'Min 8 chars' : password.length < 12 ? 'Buena' : 'Fuerte'}</span>
-          </div>
+          <div className="mt-2"><PasswordRules rules={rules} touched={password.length > 0} /></div>
         </div>
 
         <div>

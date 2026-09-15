@@ -1,6 +1,8 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { Lock, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { DEFAULT_POLICY, evaluatePassword, fetchPasswordPolicy, changePassword, type PasswordPolicy } from '../../lib/passwordPolicy';
+import { PasswordRules } from './PasswordRules';
 
 export function SetPasswordPage() {
   const [password, setPassword] = useState('');
@@ -40,22 +42,32 @@ export function SetPasswordPage() {
     };
   }, []);
 
-  const passwordValid = password.length >= 8;
+  const [policy, setPolicy] = useState<PasswordPolicy>(DEFAULT_POLICY);
+  const [email, setEmail] = useState<string | null>(null);
+  useEffect(() => {
+    fetchPasswordPolicy().then(setPolicy);
+    supabase.auth.getUser().then(({ data }) => setEmail(data.user?.email ?? null));
+  }, [sessionReady]);
+
+  const rules = evaluatePassword(password, policy, email);
+  const passwordValid = rules.every(r => r.ok);
   const passwordsMatch = password === confirm;
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!passwordValid) { setError('Password must be at least 8 characters'); return; }
+    if (!passwordValid) { setError('Password does not meet the policy'); return; }
     if (!passwordsMatch) { setError('Passwords do not match'); return; }
 
     setLoading(true);
     setError(null);
 
-    const { error: updateErr } = await supabase.auth.updateUser({ password });
+    const res = await changePassword(password);
     setLoading(false);
 
-    if (updateErr) {
-      setError(updateErr.message);
+    if (!res.ok) {
+      setError(res.failed_rules?.includes('history')
+        ? `You cannot reuse any of your last ${policy.history_count} passwords`
+        : (res.error || 'Could not set the password'));
       return;
     }
 
@@ -127,16 +139,13 @@ export function SetPasswordPage() {
               required
               minLength={8}
               className="w-full px-3 py-2.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 pr-10"
-              placeholder="Minimum 8 characters"
+              placeholder="New password"
             />
             <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
               {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
           </div>
-          <div className="mt-1.5 flex items-center gap-2">
-            <div className={`h-1 flex-1 rounded-full ${password.length === 0 ? 'bg-gray-200' : password.length < 8 ? 'bg-red-300' : password.length < 12 ? 'bg-amber-300' : 'bg-green-400'}`} />
-            <span className="text-xs text-gray-400">{password.length < 8 ? 'Min 8 chars' : password.length < 12 ? 'Good' : 'Strong'}</span>
-          </div>
+          <div className="mt-2"><PasswordRules rules={rules} touched={password.length > 0} /></div>
         </div>
 
         <div>

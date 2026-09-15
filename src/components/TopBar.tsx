@@ -1,11 +1,14 @@
 import { useState } from 'react';
-import { LogOut, UserCircle2, Activity, X } from 'lucide-react';
+import { LogOut, UserCircle2, Activity, X, KeyRound } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import { SecurityLogPanel } from './admin/SecurityLogPanel';
+import { ChangePasswordModal } from './auth/ChangePasswordModal';
 
 export function TopBar() {
   const { userEmail, session, signOut } = useAuth();
   const [showActivity, setShowActivity] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [passwordChanged, setPasswordChanged] = useState(false);
   const userId = session?.user?.id;
 
   return (
@@ -33,6 +36,16 @@ export function TopBar() {
             <span className="hidden sm:inline">Mi actividad</span>
           </button>
         )}
+        {userId && (
+          <button
+            onClick={() => setShowChangePassword(true)}
+            className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-blue-600 transition-colors"
+            title="Cambiar contraseña"
+          >
+            <KeyRound className="w-4 h-4" />
+            <span className="hidden sm:inline">Contraseña</span>
+          </button>
+        )}
         <button
           onClick={signOut}
           className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-red-600 transition-colors"
@@ -43,6 +56,15 @@ export function TopBar() {
         </button>
       </div>
 
+      {showChangePassword && (
+        <ChangePasswordModal
+          onClose={() => setShowChangePassword(false)}
+          onChanged={() => { setShowChangePassword(false); setPasswordChanged(true); window.setTimeout(() => setPasswordChanged(false), 4000); }}
+        />
+      )}
+      {passwordChanged && (
+        <div className="fixed bottom-6 right-6 z-[70] bg-emerald-600 text-white text-sm px-4 py-2.5 rounded-md shadow-lg">Contraseña actualizada</div>
+      )}
       {showActivity && userId && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center p-4 overflow-y-auto" onClick={() => setShowActivity(false)}>
           <div className="bg-white rounded-lg shadow-xl w-full max-w-5xl mt-8" onClick={e => e.stopPropagation()}>

@@ -13,12 +13,13 @@ import { SlaTab } from './admin/SlaTab';
 import { QuotesTab } from './admin/QuotesTab';
 import { UpdateLogTab } from './admin/UpdateLogTab';
 import { SecurityTab } from './admin/SecurityTab';
+import { PasswordPoliciesTab } from './admin/PasswordPoliciesTab';
 import { ObjectPage } from './admin/ObjectPage';
 import { usePermissions } from '../lib/permissions';
 import type { PermissionKey } from '../lib/permissionCatalog';
 
 
-type AdminTab = 'accounts' | 'bill_to' | 'shippers' | 'cities' | 'global_variables' | 'border_crossings' | 'accessorials' | 'terms_conditions' | 'account_lanes' | 'cost_structure' | 'market_information' | 'sla' | 'users' | 'profiles' | 'roles' | 'wolke' | 'update_log' | 'quotes_object' | 'quote_lanes_object' | 'security_logs';
+type AdminTab = 'accounts' | 'bill_to' | 'shippers' | 'cities' | 'global_variables' | 'border_crossings' | 'accessorials' | 'terms_conditions' | 'account_lanes' | 'cost_structure' | 'market_information' | 'sla' | 'users' | 'profiles' | 'roles' | 'wolke' | 'update_log' | 'quotes_object' | 'quote_lanes_object' | 'security_logs' | 'password_policies';
 
 
 interface BillTo {
@@ -1711,6 +1712,7 @@ const MENU: MenuSection[] = [
   },
   {
     id: 'security', label: 'Security', items: [
+      { id: 'password_policies', label: 'Password Policies', adminOnly: true },
       { id: 'security_logs', label: 'Login History & Activity', adminOnly: true },
     ],
   },
@@ -1897,6 +1899,7 @@ export function AdministrationView() {
                   {activeTab === 'wolke' && <QuotesTab onToast={handleToast} />}
                   {activeTab === 'update_log' && <UpdateLogTab onToast={handleToast} />}
                   {activeTab === 'security_logs' && <SecurityTab />}
+                  {activeTab === 'password_policies' && <PasswordPoliciesTab onToast={handleToast} />}
                   {activeTab === 'sla' && <SlaTab onToast={handleToast} />}
                 </>
               )}
