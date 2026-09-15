@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Pencil, Trash2, Lock, Users, Save, X, Eye, Wrench } from 'lucide-react';
+import { Plus, Pencil, Trash2, Lock, Users, Save, X, Eye, Wrench, Clock } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { usePermissions } from '../../lib/permissions';
 import { ALL_PERMISSION_KEYS, OWNED_OBJECTS, PERMISSION_GROUPS, PermissionKey, PermissionLevel } from '../../lib/permissionCatalog';
@@ -13,8 +13,17 @@ interface Profile {
   name: string;
   description: string | null;
   is_system: boolean;
+  session_timeout_minutes: number;
   user_count: number;
 }
+
+const SESSION_TIMEOUT_OPTIONS: { value: number; label: string }[] = [
+  { value: 15, label: '15 minutes' },
+  { value: 30, label: '30 minutes' },
+  { value: 60, label: '1 hour' },
+  { value: 120, label: '2 hours' },
+  { value: 240, label: '4 hours' },
+];
 
 type Grants = Record<string, Set<PermissionLevel>>;           // key -> levels
 type ObjectAccessMap = Record<string, { viewAll: boolean; modifyAll: boolean }>;
@@ -44,7 +53,8 @@ function grantsEqual(a: Grants, b: Grants): boolean {
 }
 
 export function ProfilesTab({ onToast }: ProfilesTabProps) {
-  const { reload: reloadPermissions } = usePermissions();
+  const { reload: reloadPermissions, isAdmin } = usePermissions();
+  const [savingTimeout, setSavingTimeout] = useState(false);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -67,7 +77,7 @@ export function ProfilesTab({ onToast }: ProfilesTabProps) {
     setLoading(true);
     try {
       const [{ data: rows, error }, { data: users }] = await Promise.all([
-        supabase.from('profiles').select('id,name,description,is_system').order('is_system', { ascending: false }).order('name'),
+        supabase.from('profiles').select('id,name,description,is_system,session_timeout_minutes').order('is_system', { ascending: false }).order('name'),
         supabase.from('user_profiles').select('profile_id'),
       ]);
       if (error) throw error;
@@ -123,6 +133,22 @@ export function ProfilesTab({ onToast }: ProfilesTabProps) {
   }
 
   const readOnly = !selected || selected.is_system;
+
+  async function handleTimeoutChange(minutes: number) {
+    if (!selected || !isAdmin) return;
+    setSavingTimeout(true);
+    try {
+      const { error } = await supabase.rpc('set_profile_session_timeout', { p_profile_id: selected.id, p_minutes: minutes });
+      if (error) throw error;
+      setProfiles(prev => prev.map(p => (p.id === selected.id ? { ...p, session_timeout_minutes: minutes } : p)));
+      onToast(`Session timeout updated for "${selected.name}"`, 'success');
+    } catch (err) {
+      console.error('Error updating session timeout:', err);
+      onToast('Could not update session timeout', 'error');
+    } finally {
+      setSavingTimeout(false);
+    }
+  }
 
   function toggle(key: PermissionKey, level: PermissionLevel) {
     if (readOnly) return;
@@ -314,6 +340,31 @@ export function ProfilesTab({ onToast }: ProfilesTabProps) {
               <p className="text-sm text-gray-400">Loading permissions...</p>
             ) : (
               <div className="space-y-6">
+                {/* Session settings */}
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-200">
+                    <span className="text-sm font-semibold text-gray-800">Session settings</span>
+                    <span className="ml-2 text-xs text-gray-500">Applies to every user with this profile</span>
+                  </div>
+                  <div className="px-4 py-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+                    <div className="flex items-center gap-2 min-w-[180px]">
+                      <Clock className="w-4 h-4 text-gray-400" />
+                      <span className="text-sm text-gray-800">Session timeout</span>
+                    </div>
+                    <select
+                      value={selected.session_timeout_minutes}
+                      onChange={e => handleTimeoutChange(Number(e.target.value))}
+                      disabled={!isAdmin || savingTimeout}
+                      className="px-3 py-1.5 text-sm border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500"
+                    >
+                      {SESSION_TIMEOUT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                    <span className="text-xs text-gray-500">
+                      Inactivity time before the user is signed out. A warning is shown 2 minutes before.
+                    </span>
+                  </div>
+                </div>
+
                 {/* Object access */}
                 <div className="border border-gray-200 rounded-lg overflow-hidden">
                   <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-200">

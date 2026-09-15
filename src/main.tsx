@@ -9,6 +9,7 @@ import { ConfirmLinkPage } from './components/auth/ConfirmLinkPage.tsx';
 import { AuthProvider } from './lib/AuthContext.tsx';
 import { AuthGate } from './components/auth/LoginFlow.tsx';
 import { PermissionsProvider } from './lib/permissions.tsx';
+import { SessionGuard } from './components/auth/SessionGuard.tsx';
 import './index.css';
 
 createRoot(document.getElementById('root')!).render(
@@ -37,7 +38,9 @@ createRoot(document.getElementById('root')!).render(
             element={
               <AuthGate>
                 <PermissionsProvider>
-                  <App />
+                  <SessionGuard>
+                    <App />
+                  </SessionGuard>
                 </PermissionsProvider>
               </AuthGate>
             }

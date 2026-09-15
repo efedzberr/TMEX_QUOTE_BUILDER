@@ -34,6 +34,11 @@ function AuthShell({ children }: { children: React.ReactNode }) {
    ============================================================ */
 function PasswordStep() {
   const { refreshAuthState } = useAuth();
+  const [logoutReason] = useState<string | null>(() => {
+    const r = sessionStorage.getItem('sph.logout_reason');
+    sessionStorage.removeItem('sph.logout_reason');
+    return r;
+  });
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -67,6 +72,13 @@ function PasswordStep() {
           <p className="text-sm text-gray-500">Ingresa tus credenciales</p>
         </div>
       </div>
+
+      {logoutReason === 'timeout' && (
+        <div className="mb-4 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          <Lock className="w-4 h-4 mt-0.5 flex-shrink-0" />
+          <span>Tu sesión expiró por inactividad. Vuelve a iniciar sesión.</span>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>

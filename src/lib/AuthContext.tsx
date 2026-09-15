@@ -87,6 +87,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [evaluateSession]);
 
   const signOut = useCallback(async () => {
+    // Close the app session row (if any) before dropping the auth session.
+    // SessionGuard removes the key first when it already ended the session itself.
+    const sid = sessionStorage.getItem('sph.session_id');
+    if (sid) {
+      sessionStorage.removeItem('sph.session_id');
+      try { await supabase.rpc('end_session', { p_session_id: sid, p_reason: 'logout' }); } catch { /* ignore */ }
+    }
     await supabase.auth.signOut();
     passwordFlowRef.current = false;
     setSession(null);
