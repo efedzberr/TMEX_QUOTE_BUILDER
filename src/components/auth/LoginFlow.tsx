@@ -49,16 +49,48 @@ function PasswordStep() {
     e.preventDefault();
     setError(null);
     setLoading(true);
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password,
-    });
-    setLoading(false);
-    if (signInError) {
-      setError('Correo o contraseña incorrectos.');
-      return;
+    try {
+      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/secure-login`;
+      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${anonKey}`,
+          'apikey': anonKey,
+        },
+        body: JSON.stringify({ email: email.trim(), password }),
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (res.status === 423) {
+        setError(data.forever
+          ? 'Tu cuenta está bloqueada. Contacta a tu administrador.'
+          : `Cuenta bloqueada temporalmente por intentos fallidos. Intenta de nuevo en ${data.minutes || 15} minutos.`);
+        return;
+      }
+      if (!res.ok || !data.session) {
+        setError('Correo o contraseña incorrectos.');
+        return;
+      }
+
+      const { error: sessionError } = await supabase.auth.setSession({
+        access_token: data.session.access_token,
+        refresh_token: data.session.refresh_token,
+      });
+      if (sessionError) {
+        setError('No fue posible iniciar sesión. Intenta de nuevo.');
+        return;
+      }
+      if (data.login_id) sessionStorage.setItem('sph.login_id', String(data.login_id));
+      if (data.must_change_password) sessionStorage.setItem('sph.must_change_password', '1');
+      await refreshAuthState();
+    } catch (err) {
+      console.error('Login error:', err);
+      setError('No fue posible iniciar sesión. Intenta de nuevo.');
+    } finally {
+      setLoading(false);
     }
-    await refreshAuthState();
   }
 
   return (

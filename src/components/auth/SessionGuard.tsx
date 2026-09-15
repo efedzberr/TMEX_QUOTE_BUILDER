@@ -87,7 +87,11 @@ export function SessionGuard({ children }: { children: ReactNode }) {
         if (r && !r.valid) { await expire(); return; } // expired while the tab was away
         sessionStorage.removeItem(SESSION_STORAGE_KEY);
       }
-      const { data: sid, error } = await supabase.rpc('start_session');
+      const loginIdRaw = sessionStorage.getItem('sph.login_id');
+      sessionStorage.removeItem('sph.login_id');
+      const { data: sid, error } = await supabase.rpc('start_session', {
+        p_login_id: loginIdRaw ? Number(loginIdRaw) : null,
+      });
       if (cancelled || error || !sid) return;
       sessionIdRef.current = sid as string;
       sessionStorage.setItem(SESSION_STORAGE_KEY, sid as string);
