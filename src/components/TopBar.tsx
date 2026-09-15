@@ -1,8 +1,12 @@
-import { LogOut, UserCircle2 } from 'lucide-react';
+import { useState } from 'react';
+import { LogOut, UserCircle2, Activity, X } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
+import { SecurityLogPanel } from './admin/SecurityLogPanel';
 
 export function TopBar() {
-  const { userEmail, signOut } = useAuth();
+  const { userEmail, session, signOut } = useAuth();
+  const [showActivity, setShowActivity] = useState(false);
+  const userId = session?.user?.id;
 
   return (
     <header className="sticky top-0 z-30 h-14 bg-white border-b border-gray-200 flex items-center justify-between px-6">
@@ -19,15 +23,42 @@ export function TopBar() {
             <span className="hidden sm:inline">{userEmail}</span>
           </div>
         )}
+        {userId && (
+          <button
+            onClick={() => setShowActivity(true)}
+            className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-blue-600 transition-colors"
+            title="Mi actividad"
+          >
+            <Activity className="w-4 h-4" />
+            <span className="hidden sm:inline">Mi actividad</span>
+          </button>
+        )}
         <button
           onClick={signOut}
           className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-red-600 transition-colors"
-          title="Cerrar sesiĂłn"
+          title="Cerrar sesión"
         >
           <LogOut className="w-4 h-4" />
           <span className="hidden sm:inline">Salir</span>
         </button>
       </div>
+
+      {showActivity && userId && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center p-4 overflow-y-auto" onClick={() => setShowActivity(false)}>
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-5xl mt-8" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+              <div>
+                <h3 className="text-base font-semibold text-gray-900">Mi actividad</h3>
+                <p className="text-sm text-gray-500 mt-0.5">Tus inicios de sesión, sesiones y acciones recientes.</p>
+              </div>
+              <button onClick={() => setShowActivity(false)} className="p-1.5 rounded hover:bg-gray-100 text-gray-500"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="px-6 py-4">
+              <SecurityLogPanel userId={userId} />
+            </div>
+          </div>
+        </div>
+      )}
     </header>
   );
 }

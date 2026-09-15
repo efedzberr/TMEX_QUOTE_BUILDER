@@ -12,12 +12,13 @@ import { RolesTab } from './admin/RolesTab';
 import { SlaTab } from './admin/SlaTab';
 import { QuotesTab } from './admin/QuotesTab';
 import { UpdateLogTab } from './admin/UpdateLogTab';
+import { SecurityTab } from './admin/SecurityTab';
 import { ObjectPage } from './admin/ObjectPage';
 import { usePermissions } from '../lib/permissions';
 import type { PermissionKey } from '../lib/permissionCatalog';
 
 
-type AdminTab = 'accounts' | 'bill_to' | 'shippers' | 'cities' | 'global_variables' | 'border_crossings' | 'accessorials' | 'terms_conditions' | 'account_lanes' | 'cost_structure' | 'market_information' | 'sla' | 'users' | 'profiles' | 'roles' | 'wolke' | 'update_log' | 'quotes_object' | 'quote_lanes_object';
+type AdminTab = 'accounts' | 'bill_to' | 'shippers' | 'cities' | 'global_variables' | 'border_crossings' | 'accessorials' | 'terms_conditions' | 'account_lanes' | 'cost_structure' | 'market_information' | 'sla' | 'users' | 'profiles' | 'roles' | 'wolke' | 'update_log' | 'quotes_object' | 'quote_lanes_object' | 'security_logs';
 
 
 interface BillTo {
@@ -1709,6 +1710,11 @@ const MENU: MenuSection[] = [
     ],
   },
   {
+    id: 'security', label: 'Security', items: [
+      { id: 'security_logs', label: 'Login History & Activity', adminOnly: true },
+    ],
+  },
+  {
     id: 'objects_fields', label: 'Objects & Fields', items: [
       { id: 'accounts', label: 'Partner Accounts', permission: 'admin.partner_accounts' },
       { id: 'bill_to', label: 'Bill To Customers', permission: 'admin.bill_to' },
@@ -1890,6 +1896,7 @@ export function AdministrationView() {
                   {activeTab === 'roles' && <RolesTab onToast={handleToast} />}
                   {activeTab === 'wolke' && <QuotesTab onToast={handleToast} />}
                   {activeTab === 'update_log' && <UpdateLogTab onToast={handleToast} />}
+                  {activeTab === 'security_logs' && <SecurityTab />}
                   {activeTab === 'sla' && <SlaTab onToast={handleToast} />}
                 </>
               )}

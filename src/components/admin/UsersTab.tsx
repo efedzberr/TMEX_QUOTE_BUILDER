@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase as supabaseClient } from '../../lib/supabase';
-import { Search, X, UserPlus, Shield, ShieldOff, Ban, CheckCircle, KeyRound, MoreHorizontal, Users, Trash2, Pencil, Mail, Copy } from 'lucide-react';
+import { Search, X, UserPlus, Shield, ShieldOff, Ban, CheckCircle, KeyRound, MoreHorizontal, Users, Trash2, Pencil, Mail, Copy, Activity } from 'lucide-react';
+import { UserSecurityModal } from './UserSecurityModal';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/AuthContext';
 import { logActivity } from '../../lib/activityLog';
@@ -123,6 +124,7 @@ export function UsersTab({ onToast }: UsersTabProps) {
   const [search, setSearch] = useState('');
   const [showInvite, setShowInvite] = useState(false);
   const [confirmAction, setConfirmAction] = useState<{ type: string; user: UserRow } | null>(null);
+  const [securityUser, setSecurityUser] = useState<UserRow | null>(null);
   const [roles, setRoles] = useState<RoleOption[]>([]);
   const [changeRoleUser, setChangeRoleUser] = useState<UserRow | null>(null);
   const [hierarchyRoles, setHierarchyRoles] = useState<HierarchyRole[]>([]);
@@ -428,6 +430,11 @@ export function UsersTab({ onToast }: UsersTabProps) {
             onClick={() => { closeMenu(); setEditUser(menuUser); }}
           />
           <MenuButton
+            icon={<Activity className="w-4 h-4 text-gray-400" />}
+            label="Security & Activity"
+            onClick={() => { closeMenu(); setSecurityUser(menuUser); }}
+          />
+          <MenuButton
             icon={<Mail className="w-4 h-4 text-gray-400" />}
             label={(!menuUser.last_sign_in_at) ? 'Resend Invitation' : 'Send Password Reset'}
             onClick={async () => {
@@ -511,6 +518,15 @@ export function UsersTab({ onToast }: UsersTabProps) {
             </div>
           </div>
         </div>
+      )}
+
+      {securityUser && (
+        <UserSecurityModal
+          userId={securityUser.id}
+          userLabel={securityUser.display_name ? `${securityUser.display_name} · ${securityUser.email}` : securityUser.email}
+          onClose={() => setSecurityUser(null)}
+          onToast={onToast}
+        />
       )}
 
       {editUser && (
