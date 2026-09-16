@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { X, ShieldAlert, Unlock, Power, Activity } from 'lucide-react';
+import { X, ShieldAlert, Unlock, Power, Activity, KeyRound } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { SecurityLogPanel, formatDateTime } from './SecurityLogPanel';
 
@@ -25,7 +25,7 @@ interface ActiveSession { started_at: string; last_activity_at: string }
 export function UserSecurityModal({ userId, userLabel, onClose, onToast }: UserSecurityModalProps) {
   const [info, setInfo] = useState<SecurityInfo | null>(null);
   const [active, setActive] = useState<ActiveSession | null>(null);
-  const [busy, setBusy] = useState<'unlock' | 'end' | null>(null);
+  const [busy, setBusy] = useState<'unlock' | 'end' | 'force' | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
   const load = async () => {
@@ -49,6 +49,16 @@ export function UserSecurityModal({ userId, userLabel, onClose, onToast }: UserS
     setBusy(null);
     if (error) { onToast(error.message, 'error'); return; }
     onToast('User unlocked', 'success');
+    setRefreshKey(k => k + 1);
+  };
+
+  const forceChange = async () => {
+    if (!window.confirm('Require this user to change their password at the next login?')) return;
+    setBusy('force');
+    const { error } = await supabase.rpc('admin_force_password_change', { p_user_id: userId });
+    setBusy(null);
+    if (error) { onToast(error.message, 'error'); return; }
+    onToast('The user must change their password at the next login', 'success');
     setRefreshKey(k => k + 1);
   };
 
@@ -103,12 +113,21 @@ export function UserSecurityModal({ userId, userLabel, onClose, onToast }: UserS
                 <span className="text-xs text-gray-500">Failed attempts: {info.failed_login_attempts}</span>
               )}
               {info.password_changed_at && <span className="text-xs text-gray-500">· Password changed {formatDateTime(info.password_changed_at)}</span>}
+              {info.must_change_password && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full border bg-blue-50 text-blue-700 border-blue-200">
+                  <KeyRound className="w-3.5 h-3.5" /> Must change password at next login
+                </span>
+              )}
             </div>
           )}
           <div className="ml-auto flex items-center gap-2">
             <button onClick={unlock} disabled={!isLocked || busy !== null}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border border-gray-300 text-gray-700 hover:bg-white disabled:opacity-50">
               <Unlock className="w-3.5 h-3.5" /> {busy === 'unlock' ? 'Unlocking…' : 'Unlock'}
+            </button>
+            <button onClick={forceChange} disabled={!!info?.must_change_password || busy !== null}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border border-gray-300 text-gray-700 hover:bg-white disabled:opacity-50">
+              <KeyRound className="w-3.5 h-3.5" /> {busy === 'force' ? 'Saving…' : 'Force password change'}
             </button>
             <button onClick={endSessions} disabled={!active || busy !== null}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border border-red-200 text-red-700 hover:bg-red-50 disabled:opacity-50">

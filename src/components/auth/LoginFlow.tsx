@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/AuthContext';
 import { DEFAULT_POLICY, evaluatePassword, fetchPasswordPolicy, changePassword, type PasswordPolicy } from '../../lib/passwordPolicy';
 import { PasswordRules } from './PasswordRules';
+import { ChangePasswordModal } from './ChangePasswordModal';
 
 /* ============================================================
    Shell visual compartido (consistente con la app: fondo gris,
@@ -41,7 +42,21 @@ function PasswordStep() {
     sessionStorage.removeItem('sph.logout_reason');
     return r;
   });
+  const [forgotMode, setForgotMode] = useState(false);
+  const [forgotSent, setForgotSent] = useState(false);
+  const [forgotLoading, setForgotLoading] = useState(false);
   const [email, setEmail] = useState('');
+
+  async function handleForgot(e: FormEvent) {
+    e.preventDefault();
+    if (!email.trim()) return;
+    setForgotLoading(true);
+    setError(null);
+    // Always show the same confirmation, whether or not the email exists.
+    await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: `${window.location.origin}/` }).catch(() => null);
+    setForgotLoading(false);
+    setForgotSent(true);
+  }
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -107,13 +122,51 @@ function PasswordStep() {
         </div>
       </div>
 
-      {logoutReason === 'timeout' && (
+      {logoutReason === 'timeout' && !forgotMode && (
         <div className="mb-4 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
           <Lock className="w-4 h-4 mt-0.5 flex-shrink-0" />
           <span>Tu sesión expiró por inactividad. Vuelve a iniciar sesión.</span>
         </div>
       )}
 
+      {forgotMode ? (
+        forgotSent ? (
+          <div className="space-y-4">
+            <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm text-emerald-800">
+              Si el correo está registrado, recibirás un mensaje con un enlace para restablecer tu contraseña. Revisa también tu carpeta de spam.
+            </div>
+            <button type="button" onClick={() => { setForgotMode(false); setForgotSent(false); }} className="w-full text-sm text-blue-600 hover:text-blue-700">
+              Volver a iniciar sesión
+            </button>
+          </div>
+        ) : (
+          <form onSubmit={handleForgot} className="space-y-4">
+            <p className="text-sm text-gray-600">Ingresa tu correo y te enviaremos un enlace para crear una nueva contraseña.</p>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Correo electrónico</label>
+              <input
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                required
+                autoComplete="email"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="tu@empresa.com"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={forgotLoading}
+              className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium py-2.5 rounded-md transition-colors"
+            >
+              {forgotLoading ? 'Enviando…' : 'Enviar enlace'}
+            </button>
+            <button type="button" onClick={() => setForgotMode(false)} className="w-full text-sm text-gray-500 hover:text-gray-700">
+              Cancelar
+            </button>
+          </form>
+        )
+      ) : (
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -167,7 +220,11 @@ function PasswordStep() {
         >
           {loading ? 'Verificando…' : 'Continuar'}
         </button>
+        <button type="button" onClick={() => { setForgotMode(true); setError(null); }} className="w-full text-sm text-blue-600 hover:text-blue-700">
+          ¿Olvidaste tu contraseña?
+        </button>
       </form>
+      )}
     </AuthShell>
   );
 }
@@ -533,6 +590,19 @@ function InvitePasswordStep() {
    ============================================================ */
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const { status } = useAuth();
+  const [passwordCheck, setPasswordCheck] = useState<'pending' | 'ok' | 'must_change'>('pending');
+
+  useEffect(() => {
+    if (status !== 'authenticated') { setPasswordCheck('pending'); return; }
+    let cancelled = false;
+    supabase.rpc('my_password_status').then(({ data, error }) => {
+      if (cancelled) return;
+      if (error) { setPasswordCheck('ok'); return; }
+      const s = (data || {}) as { must_change?: boolean; expired?: boolean };
+      setPasswordCheck(s.must_change || s.expired ? 'must_change' : 'ok');
+    });
+    return () => { cancelled = true; };
+  }, [status]);
 
   if (status === 'loading') {
     return (
@@ -545,5 +615,19 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   if (status === 'needs_password') return <InvitePasswordStep />;
   if (status === 'needs_mfa') return <MfaChallengeStep />;
   if (status === 'needs_enroll') return <MfaEnrollStep />;
+  if (passwordCheck === 'pending') {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-sm text-gray-400">Cargando…</div>
+      </div>
+    );
+  }
+  if (passwordCheck === 'must_change') {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <ChangePasswordModal forced onClose={() => undefined} onChanged={() => setPasswordCheck('ok')} />
+      </div>
+    );
+  }
   return <>{children}</>;
 }
