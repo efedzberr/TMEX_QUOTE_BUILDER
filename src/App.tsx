@@ -1509,7 +1509,7 @@ function App() {
   };
 
   if (viewMode === 'admin') {
-    if (!appIsAdmin) {
+    if (!appIsAdmin && !canView('admin')) {
       setViewMode('list');
       return null;
     }
