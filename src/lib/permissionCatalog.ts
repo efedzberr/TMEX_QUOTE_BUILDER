@@ -5,6 +5,7 @@ export type PermissionKey =
   | 'admin.partner_accounts' | 'admin.bill_to' | 'admin.shippers' | 'admin.cities' | 'admin.global_variables'
   | 'admin.border_crossings' | 'admin.accessorials' | 'admin.terms_conditions'
   | 'admin.account_lanes' | 'admin.cost_structure' | 'admin.market_information' | 'admin.sla' | 'admin.users' | 'admin.profiles' | 'admin.roles'
+  | 'admin.password_policies' | 'admin.security_logs'
   | 'quote.header' | 'quote.history' | 'quote.tab_lanes' | 'quote.tab_accessorials' | 'quote.tab_terms' | 'quote.tab_pdf'
   | 'quote.field_history_config';
 
@@ -61,6 +62,8 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: 'admin.users', label: 'Users', description: 'Admin → Users tab', levels: ['view', 'edit'] },
       { key: 'admin.profiles', label: 'Profiles', description: 'Admin → Profiles tab (permissions)', levels: ['view', 'edit'] },
       { key: 'admin.roles', label: 'Roles', description: 'Admin → Roles tab (hierarchy & sharing)', levels: ['view', 'edit'] },
+      { key: 'admin.password_policies', label: 'Password Policies', description: 'Security → Password Policies (organization-wide rules)', levels: ['view', 'edit'] },
+      { key: 'admin.security_logs', label: 'Login History & Activity', description: 'Security → Login History & Activity for all users', levels: ['view'] },
     ],
   },
   {

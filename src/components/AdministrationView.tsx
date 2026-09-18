@@ -1712,8 +1712,8 @@ const MENU: MenuSection[] = [
   },
   {
     id: 'security', label: 'Security', items: [
-      { id: 'password_policies', label: 'Password Policies', adminOnly: true },
-      { id: 'security_logs', label: 'Login History & Activity', adminOnly: true },
+      { id: 'password_policies', label: 'Password Policies', permission: 'admin.password_policies' },
+      { id: 'security_logs', label: 'Login History & Activity', permission: 'admin.security_logs' },
     ],
   },
   {

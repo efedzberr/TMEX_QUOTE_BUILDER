@@ -25,7 +25,8 @@ const nullable = (v: string): number | null => (v === '' ? null : Number(v));
 const str = (v: number | null): string => (v === null ? '' : String(v));
 
 export function PasswordPoliciesTab({ onToast }: PasswordPoliciesTabProps) {
-  const { isAdmin } = usePermissions();
+  const { can } = usePermissions();
+  const isAdmin = can('admin.password_policies', 'edit');
   const [saved, setSaved] = useState<PolicyRow | null>(null);
   const [draft, setDraft] = useState<PasswordPolicy>(DEFAULT_POLICY);
   const [loading, setLoading] = useState(true);

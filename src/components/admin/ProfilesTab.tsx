@@ -53,7 +53,8 @@ function grantsEqual(a: Grants, b: Grants): boolean {
 }
 
 export function ProfilesTab({ onToast }: ProfilesTabProps) {
-  const { reload: reloadPermissions, isAdmin } = usePermissions();
+  const { reload: reloadPermissions, can } = usePermissions();
+  const isAdmin = can('admin.profiles', 'edit');
   const [savingTimeout, setSavingTimeout] = useState(false);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);

@@ -4,6 +4,7 @@ import { Search, X, UserPlus, Shield, ShieldOff, Ban, CheckCircle, KeyRound, Mor
 import { UserSecurityModal } from './UserSecurityModal';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/AuthContext';
+import { usePermissions } from '../../lib/permissions';
 import { logActivity } from '../../lib/activityLog';
 
 interface UserRow {
@@ -117,6 +118,7 @@ async function callAdminUsers(action: string, payload: Record<string, unknown> =
 export function UsersTab({ onToast }: UsersTabProps) {
   const { session } = useAuth();
   const currentUserId = session?.user?.id;
+  const { isAdmin: callerIsAdmin } = usePermissions();
 
   const [users, setUsers] = useState<UserRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -410,18 +412,20 @@ export function UsersTab({ onToast }: UsersTabProps) {
           className="fixed w-52 bg-white border border-gray-200 rounded-lg shadow-lg z-[9999] py-1"
           style={{ top: menuPos.top, left: menuPos.left }}
         >
-          <MenuButton
-            icon={menuUser.is_admin ? <ShieldOff className="w-4 h-4 text-gray-400" /> : <Shield className="w-4 h-4 text-gray-400" />}
-            label={menuUser.is_admin ? 'Remove Admin' : 'Make Admin'}
-            disabled={menuUser.id === currentUserId}
-            tooltip="You can't change your own role"
-            onClick={() => { closeMenu(); setConfirmAction({ type: 'toggle_admin', user: menuUser }); }}
-          />
+          {callerIsAdmin && (
+            <MenuButton
+              icon={menuUser.is_admin ? <ShieldOff className="w-4 h-4 text-gray-400" /> : <Shield className="w-4 h-4 text-gray-400" />}
+              label={menuUser.is_admin ? 'Remove Admin' : 'Make Admin'}
+              disabled={menuUser.id === currentUserId}
+              tooltip="You can't change your own role"
+              onClick={() => { closeMenu(); setConfirmAction({ type: 'toggle_admin', user: menuUser }); }}
+            />
+          )}
           <MenuButton
             icon={isActive(menuUser) ? <Ban className="w-4 h-4 text-gray-400" /> : <CheckCircle className="w-4 h-4 text-gray-400" />}
             label={isActive(menuUser) ? 'Deactivate' : 'Activate'}
-            disabled={menuUser.id === currentUserId}
-            tooltip="You can't deactivate your own account"
+            disabled={menuUser.id === currentUserId || (!callerIsAdmin && menuUser.is_admin)}
+            tooltip={menuUser.id === currentUserId ? "You can't deactivate your own account" : (!callerIsAdmin && menuUser.is_admin) ? 'Only administrators can act on administrator accounts' : undefined}
             onClick={() => { closeMenu(); setConfirmAction({ type: 'toggle_active', user: menuUser }); }}
           />
           <MenuButton
@@ -465,8 +469,8 @@ export function UsersTab({ onToast }: UsersTabProps) {
           <MenuButton
             icon={<Trash2 className="w-4 h-4 text-red-400" />}
             label="Delete User"
-            disabled={menuUser.id === currentUserId}
-            tooltip="You can't delete your own account"
+            disabled={menuUser.id === currentUserId || (!callerIsAdmin && menuUser.is_admin)}
+            tooltip={menuUser.id === currentUserId ? "You can't delete your own account" : (!callerIsAdmin && menuUser.is_admin) ? 'Only administrators can act on administrator accounts' : undefined}
             destructive
             onClick={() => { closeMenu(); setConfirmAction({ type: 'delete', user: menuUser }); }}
           />
@@ -474,7 +478,7 @@ export function UsersTab({ onToast }: UsersTabProps) {
       )}
 
       {/* Invite Modal */}
-      {showInvite && <InviteModal roles={roles} hierarchyRoles={hierarchyRoles} onClose={() => setShowInvite(false)} onSuccess={(email) => { onToast(`Invitation sent to ${email}`, 'success'); loadUsers(); }} />}
+      {showInvite && <InviteModal roles={roles} hierarchyRoles={hierarchyRoles} callerIsAdmin={callerIsAdmin} onClose={() => setShowInvite(false)} onSuccess={(email) => { onToast(`Invitation sent to ${email}`, 'success'); loadUsers(); }} />}
 
       {resendBusy && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -535,6 +539,7 @@ export function UsersTab({ onToast }: UsersTabProps) {
           roles={roles}
           hierarchyRoles={hierarchyRoles}
           isSelf={editUser.id === currentUserId}
+          callerIsAdmin={callerIsAdmin}
           onClose={() => setEditUser(null)}
           onSaved={(msg) => { onToast(msg, 'success'); setEditUser(null); loadUsers(); }}
         />
@@ -588,8 +593,8 @@ function MenuButton({ icon, label, disabled, tooltip, destructive, onClick }: {
   );
 }
 
-function EditUserModal({ user, roles, hierarchyRoles, isSelf, onClose, onSaved }: {
-  user: UserRow; roles: RoleOption[]; hierarchyRoles: HierarchyRole[]; isSelf: boolean; onClose: () => void; onSaved: (message: string) => void;
+function EditUserModal({ user, roles, hierarchyRoles, isSelf, callerIsAdmin, onClose, onSaved }: {
+  user: UserRow; roles: RoleOption[]; hierarchyRoles: HierarchyRole[]; isSelf: boolean; callerIsAdmin: boolean; onClose: () => void; onSaved: (message: string) => void;
 }) {
   const [displayName, setDisplayName] = useState(user.display_name || '');
   const [phone, setPhone] = useState(user.phone || '');
@@ -667,13 +672,15 @@ function EditUserModal({ user, roles, hierarchyRoles, isSelf, onClose, onSaved }
               {roleTreeOptions(hierarchyRoles).map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
             </select>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Access</label>
-            <label className={`flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg ${isSelf ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`} title={isSelf ? "You can't change your own access" : ''}>
-              <input type="checkbox" checked={isAdmin} disabled={isSelf} onChange={e => setIsAdmin(e.target.checked)} className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
-              <span className="text-sm text-gray-700">Administrator</span>
-            </label>
-          </div>
+          {callerIsAdmin && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Access</label>
+              <label className={`flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg ${isSelf ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`} title={isSelf ? "You can't change your own access" : ''}>
+                <input type="checkbox" checked={isAdmin} disabled={isSelf} onChange={e => setIsAdmin(e.target.checked)} className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                <span className="text-sm text-gray-700">Administrator</span>
+              </label>
+            </div>
+          )}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
             <select value={active ? 'active' : 'inactive'} disabled={isSelf} onChange={e => setActive(e.target.value === 'active')} className={`${field} disabled:opacity-60 disabled:cursor-not-allowed`} title={isSelf ? "You can't deactivate your own account" : ''}>
@@ -730,7 +737,7 @@ function ChangeRoleModal({ user, roles, onClose, onSave }: { user: UserRow; role
   );
 }
 
-function InviteModal({ roles, hierarchyRoles, onClose, onSuccess }: { roles: RoleOption[]; hierarchyRoles: HierarchyRole[]; onClose: () => void; onSuccess: (email: string) => void }) {
+function InviteModal({ roles, hierarchyRoles, callerIsAdmin, onClose, onSuccess }: { roles: RoleOption[]; hierarchyRoles: HierarchyRole[]; callerIsAdmin: boolean; onClose: () => void; onSuccess: (email: string) => void }) {
   const [email, setEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [phone, setPhone] = useState('');
@@ -820,15 +827,17 @@ function InviteModal({ roles, hierarchyRoles, onClose, onSuccess }: { roles: Rol
               {roleTreeOptions(hierarchyRoles).map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
             </select>
           </div>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={isAdmin}
-              onChange={e => setIsAdmin(e.target.checked)}
-              className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-            />
-            <span className="text-sm text-gray-700">Administrator</span>
-          </label>
+          {callerIsAdmin && (
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={isAdmin}
+                onChange={e => setIsAdmin(e.target.checked)}
+                className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <span className="text-sm text-gray-700">Administrator</span>
+            </label>
+          )}
 
           {error && <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">{error}</div>}
 

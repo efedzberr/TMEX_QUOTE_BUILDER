@@ -18,7 +18,7 @@ function jsonResponse(body: unknown, status = 200) {
 async function verifyAdmin(
   serviceClient: ReturnType<typeof createClient>,
   authHeader: string | null
-): Promise<{ callerId: string } | Response> {
+): Promise<{ callerId: string; isAdmin: boolean } | Response> {
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     console.log("[admin-users] REJECT: missing/invalid Authorization header");
     return jsonResponse({ error: "invalid_token", message: "Missing or invalid Authorization header" }, 403);
@@ -35,7 +35,7 @@ async function verifyAdmin(
 
   const callerId = user.id;
 
-  // Check is_admin in user_profiles
+  // Caller must be an administrator OR hold admin.users (edit) on their profile
   const { data: profile, error: profileErr } = await serviceClient
     .from("user_profiles")
     .select("is_admin")
@@ -43,9 +43,14 @@ async function verifyAdmin(
     .maybeSingle();
 
   const isAdmin = profile?.is_admin === true;
-  if (profileErr || !isAdmin) {
-    console.log(`[admin-users] REJECT: not_admin | user=${callerId} | profile_found=${!!profile} | is_admin=${profile?.is_admin}`);
-    return jsonResponse({ error: "not_admin", message: "Admin access required" }, 403);
+  let canManageUsers = isAdmin;
+  if (!canManageUsers && !profileErr) {
+    const { data: allowed } = await serviceClient.rpc("user_has_permission", { p_user_id: callerId, p_key: "admin.users", p_level: "edit" });
+    canManageUsers = allowed === true;
+  }
+  if (profileErr || !canManageUsers) {
+    console.log(`[admin-users] REJECT: not_authorized | user=${callerId} | profile_found=${!!profile} | is_admin=${profile?.is_admin}`);
+    return jsonResponse({ error: "not_admin", message: "User management permission required" }, 403);
   }
 
   // Determine AAL by decoding the JWT payload claims directly
@@ -74,8 +79,8 @@ async function verifyAdmin(
     return jsonResponse({ error: "aal2_required", message: "MFA (AAL2) required" }, 403);
   }
 
-  console.log(`[admin-users] PASS | user=${callerId} | is_admin=true | payload.aal=${payloadAal} | amr_has_totp=${amrHasTotp}`);
-  return { callerId };
+  console.log(`[admin-users] PASS | user=${callerId} | is_admin=${isAdmin} | payload.aal=${payloadAal} | amr_has_totp=${amrHasTotp}`);
+  return { callerId, isAdmin };
 }
 
 // --- Action handlers ---
@@ -512,10 +517,24 @@ Deno.serve(async (req: Request) => {
     const verification = await verifyAdmin(serviceClient, authHeader);
     if (verification instanceof Response) return verification;
 
-    const { callerId } = verification;
+    const { callerId, isAdmin: callerIsAdmin } = verification;
 
     const body = await req.json();
     const { action } = body;
+
+    // Delegated admins (not administrators) can never touch the Administrator flag
+    // nor act on accounts that are administrators.
+    if (!callerIsAdmin && action !== "list") {
+      if (action === "set_admin" || body.is_admin === true) {
+        return jsonResponse({ error: "admin_required", message: "Only administrators can grant or remove the Administrator flag" }, 403);
+      }
+      if (typeof body.user_id === "string") {
+        const { data: target } = await serviceClient.from("user_profiles").select("is_admin").eq("id", body.user_id).maybeSingle();
+        if (target?.is_admin) {
+          return jsonResponse({ error: "admin_required", message: "Only administrators can modify administrator accounts" }, 403);
+        }
+      }
+    }
 
     switch (action) {
       case "list":
