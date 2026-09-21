@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { LookupField } from './LookupField';
 import { MX_SALES_REPRESENTATIVES, US_SALES_REPRESENTATIVES, EQUIPMENT_TYPES, formatCurrency, CurrencyCode, buildQuoteName, OPPORTUNITY_TYPES, QUOTE_PRIORITIES } from '../lib/constants';
 import { getDueStatus, formatLocalDate } from '../lib/dueStatus';
+import { RecordAuditInfo } from './RecordAuditInfo';
 import { DueStatusBadge } from './DueStatusBadge';
 import { CollapsibleSection } from './CollapsibleSection';
 import { supabase } from '../lib/supabase';
@@ -830,6 +831,9 @@ export function QuoteHeader({
               : <div className="text-sm text-amber-600 italic text-[11px]">Set in Administration → Global Variables</div>
             }
           </div>
+        </div>
+        <div className="mt-4 pt-3 border-t border-gray-100">
+          <RecordAuditInfo createdAt={quote.created_at} createdByName={quote.created_by_name} updatedAt={quote.updated_at} updatedByName={quote.updated_by_name} />
         </div>
       </div>
       </CollapsibleSection>

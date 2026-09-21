@@ -9,6 +9,7 @@ import { BorderCrossingLookup, useBorderCrossingCities, validateBorderCrossing }
 import { MarketFilteredCityLookup } from './MarketFilteredCityLookup';
 import { computeLaneMiles, routeSignature } from '../lib/laneDistance';
 import { applyPricingDefaults } from '../lib/lanePricing';
+import { RecordAuditInfo } from './RecordAuditInfo';
 
 const UNITS_OPTIONS = ['Mi', 'Km'] as const;
 type UnitsCode = typeof UNITS_OPTIONS[number];
@@ -2995,6 +2996,9 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
           </div>
         </div>
 
+        <div className="flex-shrink-0 px-6 py-2 bg-gray-50 border-t border-gray-200">
+          <RecordAuditInfo compact createdAt={lane.created_at} createdByName={lane.created_by_name} updatedAt={lane.updated_at} updatedByName={lane.updated_by_name} />
+        </div>
         <div className="flex-shrink-0 px-6 py-3.5 bg-white border-t border-gray-200 flex items-center gap-3 flex-wrap">
           <button
             onClick={recalculateDistance}

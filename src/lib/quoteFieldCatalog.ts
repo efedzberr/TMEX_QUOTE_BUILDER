@@ -42,6 +42,9 @@ export const QUOTE_FIELD_CATALOG: QuoteFieldDef[] = [
   { key: 'effective_hours', label: 'Effective Time (hours)', dataType: 'number', sortable: false, computed: true },
   { key: 'hold_hours', label: 'Hold Time (hours)', dataType: 'number', sortable: false, computed: true },
   { key: 'created_at', label: 'Created Date', dataType: 'datetime', sortable: true },
+  { key: 'created_by_name', label: 'Created By', dataType: 'text', sortable: true },
+  { key: 'updated_at', label: 'Last Modified Date', dataType: 'datetime', sortable: true },
+  { key: 'updated_by_name', label: 'Last Modified By', dataType: 'text', sortable: true },
   { key: 'customer_review_status', label: 'Customer Review Status', dataType: 'picklist', sortable: false, computed: true },
 ];
 

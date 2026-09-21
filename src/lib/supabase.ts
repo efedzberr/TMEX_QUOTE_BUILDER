@@ -62,6 +62,10 @@ export interface Quote {
   due_date?: string | null;
   effective_date?: string | null;
   expiration_date?: string | null;
+  created_by?: string | null;
+  created_by_name?: string | null;
+  updated_by?: string | null;
+  updated_by_name?: string | null;
   due_warning_days?: number;
   owner_user_id?: string | null;
   closed_at?: string | null;
@@ -198,6 +202,10 @@ export interface QuoteLane {
   lane_origin?: string;
   created_at: string;
   updated_at: string;
+  created_by?: string | null;
+  created_by_name?: string | null;
+  updated_by?: string | null;
+  updated_by_name?: string | null;
 }
 
 export async function fetchCities(): Promise<City[]> {
