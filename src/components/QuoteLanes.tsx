@@ -387,49 +387,79 @@ export function QuoteLanes({
     seed(editingId);
     seed(editingPairedId);
     Object.keys(editingGroupLanes).forEach(seed);
-    if (!editingId && Object.keys(editingGroupLanes).length === 0) milesSigRef.current = {};
+    if (isAdding) {
+      // New lanes start with an empty route: any complete route is a change
+      if (milesSigRef.current['__new__'] === undefined) milesSigRef.current['__new__'] = '';
+      if (milesSigRef.current['__new2__'] === undefined) milesSigRef.current['__new2__'] = '';
+      splitBillingAddLanes.forEach((_, i) => { if (milesSigRef.current[`__sb${i}__`] === undefined) milesSigRef.current[`__sb${i}__`] = ''; });
+    }
+    if (!editingId && !isAdding && Object.keys(editingGroupLanes).length === 0) milesSigRef.current = {};
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editingId, editingPairedId, Object.keys(editingGroupLanes).join(',')]);
+  }, [editingId, editingPairedId, isAdding, splitBillingAddLanes.length, Object.keys(editingGroupLanes).join(',')]);
 
   // Primary edited lane: recompute when its route changes; Round Trip mirrors into lane 2
   const editSig = routeSignature(editData);
+  const primaryKey = editingId ?? (isAdding ? '__new__' : null);
+  const pairedKey = editingPairedId ?? (isAdding ? '__new2__' : null);
   useEffect(() => {
-    if (!editingId || !editSig) return;
-    const base = milesSigRef.current[editingId];
+    if (!primaryKey || !editSig) return;
+    const base = milesSigRef.current[primaryKey];
     if (base === undefined || base === editSig) return;
     let cancelled = false;
-    const laneId = editingId;
+    const key = primaryKey;
+    const isRoundTrip = (editData.trip_type || selectedTripType) === 'Round Trip';
     computeLaneMiles(editData).then(res => {
       if (cancelled) return;
-      milesSigRef.current[laneId] = editSig;
+      milesSigRef.current[key] = editSig;
       setEditData(prev => (routeSignature(prev) === editSig ? withMiles(prev, res) : prev));
-      if (editingPairedId && editData.trip_type === 'Round Trip') {
+      if (pairedKey && isRoundTrip) {
         setEditData2(prev => withMiles(prev, res));
-        milesSigRef.current[editingPairedId] = routeSignature({ ...editData2, origin_city: editData.destination_city, destination_city: editData.origin_city, border_crossing: editData.border_crossing, service_type: editData.service_type });
+        milesSigRef.current[pairedKey] = routeSignature({ ...editData2, origin_city: editData.destination_city, destination_city: editData.origin_city, border_crossing: editData.border_crossing, service_type: editData.service_type });
       }
       showDistanceNotes(res.notes);
     });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editSig, editingId]);
+  }, [editSig, primaryKey]);
 
   // Paired lane edited independently (Circuit): its own route, its own lookup
   const editSig2 = routeSignature(editData2);
   useEffect(() => {
-    if (!editingPairedId || !editSig2 || editData.trip_type === 'Round Trip') return;
-    const base = milesSigRef.current[editingPairedId];
+    if (!pairedKey || !editSig2) return;
+    if ((editData.trip_type || selectedTripType) === 'Round Trip') return; // mirrored from lane 1
+    const base = milesSigRef.current[pairedKey];
     if (base === undefined || base === editSig2) return;
     let cancelled = false;
-    const laneId = editingPairedId;
+    const key = pairedKey;
     computeLaneMiles(editData2).then(res => {
       if (cancelled) return;
-      milesSigRef.current[laneId] = editSig2;
+      milesSigRef.current[key] = editSig2;
       setEditData2(prev => (routeSignature(prev) === editSig2 ? withMiles(prev, res) : prev));
       showDistanceNotes(res.notes);
     });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editSig2, editingPairedId]);
+  }, [editSig2, pairedKey]);
+
+  // New Split Billing group (add mode): each lane with a complete, changed route gets its own lookup
+  const sbAddSigs = splitBillingAddLanes.map((l, i) => `${i}=${routeSignature(l)}`).join(';');
+  useEffect(() => {
+    if (!isAdding || splitBillingAddLanes.length === 0) return;
+    const pending = splitBillingAddLanes.map((l, i) => ({ l, i, sig: routeSignature(l) }))
+      .filter(({ i, sig }) => !!sig && milesSigRef.current[`__sb${i}__`] !== undefined && milesSigRef.current[`__sb${i}__`] !== sig);
+    if (pending.length === 0) return;
+    let cancelled = false;
+    pending.forEach(({ l, i, sig }) => {
+      computeLaneMiles(l).then(res => {
+        if (cancelled) return;
+        milesSigRef.current[`__sb${i}__`] = sig;
+        setSplitBillingAddLanes(prev => prev.map((row, idx) => (idx === i && routeSignature(row) === sig ? withMiles(row, res) : row)));
+        showDistanceNotes(res.notes);
+      });
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sbAddSigs, isAdding]);
 
   // Split-billing group: each lane with a changed route gets its own lookup
   const groupSigs = Object.entries(editingGroupLanes).map(([id, l]) => `${id}=${routeSignature(l)}`).join(';');
