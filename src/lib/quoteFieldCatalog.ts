@@ -34,6 +34,8 @@ export const QUOTE_FIELD_CATALOG: QuoteFieldDef[] = [
   { key: 'owner_name', label: 'Owner', dataType: 'user', sortable: true },
   { key: 'priority', label: 'Priority', dataType: 'picklist', sortable: true },
   { key: 'due_date', label: 'Due Date', dataType: 'date', sortable: true },
+  { key: 'effective_date', label: 'Effective Date', dataType: 'date', sortable: true },
+  { key: 'expiration_date', label: 'Expiration Date', dataType: 'date', sortable: true },
   { key: 'due_status', label: 'Due Status', dataType: 'picklist', sortable: false, computed: true },
   { key: 'age_days', label: 'Age (days)', dataType: 'number', sortable: false, computed: true },
   { key: 'total_hours', label: 'Total Time (hours)', dataType: 'number', sortable: false, computed: true },

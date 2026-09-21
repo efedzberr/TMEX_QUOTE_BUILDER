@@ -67,6 +67,8 @@ export function QuoteHeader({
     opportunity_type: quote.opportunity_type || '',
     priority: quote.priority || 'Standard',
     due_date: quote.due_date || '',
+    effective_date: quote.effective_date || '',
+    expiration_date: quote.expiration_date || '',
     owner_name: quote.owner_name,
     owner_user_id: quote.owner_user_id || '',
     mx_sales_rep: quote.mx_sales_rep,
@@ -132,6 +134,8 @@ export function QuoteHeader({
       opportunity_type: quote.opportunity_type || '',
       priority: quote.priority || 'Standard',
       due_date: quote.due_date || '',
+      effective_date: quote.effective_date || '',
+      expiration_date: quote.expiration_date || '',
       owner_name: quote.owner_name,
       owner_user_id: quote.owner_user_id || '',
       mx_sales_rep: quote.mx_sales_rep,
@@ -263,6 +267,8 @@ export function QuoteHeader({
       opportunity_type: editedData.opportunity_type,
       priority: editedData.priority,
       due_date: editedData.due_date || null,
+      effective_date: editedData.effective_date || null,
+      expiration_date: editedData.expiration_date || null,
       exchange_rate: editedData.exchange_rate,
       cad_exchange_rate: editedData.cad_exchange_rate,
       generated_quote_name: generatedQuoteName,
@@ -278,6 +284,8 @@ export function QuoteHeader({
       opportunity_type: quote.opportunity_type || '',
       priority: quote.priority || 'Standard',
       due_date: quote.due_date || '',
+      effective_date: quote.effective_date || '',
+      expiration_date: quote.expiration_date || '',
       owner_name: quote.owner_name,
       owner_user_id: quote.owner_user_id || '',
       mx_sales_rep: quote.mx_sales_rep,
@@ -298,8 +306,28 @@ export function QuoteHeader({
     setIsEditing(false);
   };
 
+  const [expirationDays, setExpirationDays] = useState<number>(30);
+  useEffect(() => {
+    supabase.from('global_variables').select('quote_link_expiration_days').order('updated_at', { ascending: false }).limit(1).maybeSingle()
+      .then(({ data }) => { const d = (data as { quote_link_expiration_days?: number } | null)?.quote_link_expiration_days; if (d && d > 0) setExpirationDays(d); });
+  }, []);
+
+  const addDays = (isoDate: string, days: number): string => {
+    const [y, m, d] = isoDate.split('-').map(Number);
+    const dt = new Date(y, m - 1, d + days);
+    return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+  };
+
+  const isExpired = !!quote.expiration_date && quote.expiration_date < new Date().toISOString().slice(0, 10);
+
   const handleChange = (field: string, value: string | number) => {
-    setEditedData(prev => ({ ...prev, [field]: value }));
+    setEditedData(prev => {
+      const next = { ...prev, [field]: value };
+      if (field === 'effective_date' && typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        next.expiration_date = addDays(value, expirationDays);
+      }
+      return next;
+    });
     if (validationErrors[field] && value) {
       setValidationErrors(prev => {
         const updated = { ...prev };
@@ -629,10 +657,12 @@ export function QuoteHeader({
           <div>
             <div className="text-[10px] text-gray-500 uppercase tracking-wide mb-0.5">Effective Date</div>
             {!isEditing ? (
-              <div className="text-sm text-gray-900">{formatDateDisplay(quote.created_at)}</div>
+              <div className="text-sm text-gray-900">{quote.effective_date ? formatLocalDate(quote.effective_date) : formatDateDisplay(quote.created_at)}</div>
             ) : (
               <input
                 type="date"
+                value={editedData.effective_date}
+                onChange={(e) => handleChange('effective_date', e.target.value)}
                 className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
               />
             )}
@@ -640,10 +670,17 @@ export function QuoteHeader({
           <div>
             <div className="text-[10px] text-gray-500 uppercase tracking-wide mb-0.5">Expiration Date</div>
             {!isEditing ? (
-              <div className="text-sm text-gray-900">DEC / 22 / 2027</div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="text-sm text-gray-900">{quote.expiration_date ? formatLocalDate(quote.expiration_date) : '—'}</div>
+                {isExpired && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-700 border border-red-200">Expired</span>
+                )}
+              </div>
             ) : (
               <input
                 type="date"
+                value={editedData.expiration_date}
+                onChange={(e) => handleChange('expiration_date', e.target.value)}
                 className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
               />
             )}

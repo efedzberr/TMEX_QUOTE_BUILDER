@@ -60,6 +60,8 @@ export interface Quote {
   mass_update_log_id?: string;
   priority?: string;
   due_date?: string | null;
+  effective_date?: string | null;
+  expiration_date?: string | null;
   due_warning_days?: number;
   owner_user_id?: string | null;
   closed_at?: string | null;
