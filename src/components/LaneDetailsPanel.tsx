@@ -1,4 +1,4 @@
-import { X, AlertCircle, Plus, Lock, BarChart2, ChevronDown } from 'lucide-react';
+import { X, AlertCircle, Plus, Lock, ChevronDown, RefreshCw } from 'lucide-react';
 import { supabase, Quote, QuoteLane } from '../lib/supabase';
 import { useState, useEffect, useRef } from 'react';
 import { CityLookupField } from './CityLookupField';
@@ -7,7 +7,7 @@ import { LaneSectionAccessorials, SectionAccessorial, calcSectionAccessorialsTot
 import { LANE_TYPES, LOAD_FREQUENCIES, COMMITMENT_TYPES, PRIORITIES, EQUIPMENT_TYPES, LIVE_LOAD_OPTIONS, formatCurrencyOrDash, CurrencyCode, CURRENCIES, normalizeCountryCode } from '../lib/constants';
 import { BorderCrossingLookup, useBorderCrossingCities, validateBorderCrossing } from './BorderCrossingLookup';
 import { MarketFilteredCityLookup } from './MarketFilteredCityLookup';
-import { fillLaneMiles } from '../lib/laneDistance';
+import { computeLaneMiles, routeSignature } from '../lib/laneDistance';
 
 const UNITS_OPTIONS = ['Mi', 'Km'] as const;
 type UnitsCode = typeof UNITS_OPTIONS[number];
@@ -71,7 +71,7 @@ interface LaneDetailsPanelProps {
   onBenchmark?: (lane: QuoteLane) => void;
 }
 
-export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, locked = false, onClose, onSave, onChangeCurrency, onNextLane, hasNextLane, onPreviousLane, hasPreviousLane, onUpdatePairedLaneBCO, onBenchmark }: LaneDetailsPanelProps) {
+export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, locked = false, onClose, onSave, onChangeCurrency, onNextLane, hasNextLane, onPreviousLane, hasPreviousLane, onUpdatePairedLaneBCO, onBenchmark: _onBenchmark }: LaneDetailsPanelProps) {
   const [formData, setFormData] = useState({
     origin_city: lane.origin_city || '',
     destination_city: lane.destination_city || '',
@@ -147,6 +147,10 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
   const [isDirty, setIsDirty] = useState(false);
   const [unsavedDialog, setUnsavedDialog] = useState<{ action: 'next' | 'previous' | 'close' } | null>(null);
   const [distanceNotes, setDistanceNotes] = useState<string[]>([]);
+  const [recalculating, setRecalculating] = useState(false);
+  // Signature of the route the current miles belong to. Seeded from the lane as opened, so
+  // opening the panel never triggers a lookup; only a route change does.
+  const milesSigRef = useRef<string>(routeSignature(lane));
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
     actions: true,
     general: false,
@@ -377,6 +381,7 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
   }, [isLoop, isDoorToDoor, formData.origin_city, originCountryCode]);
 
   useEffect(() => {
+    milesSigRef.current = routeSignature(lane);
     setFormData(buildLaneFormData(lane));
     setSelectedAccessorials(
       lane.accessorials_list ? (Array.isArray(lane.accessorials_list) ? lane.accessorials_list : []) : []
@@ -427,32 +432,54 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
     estimated_total_mx_section: '',
   });
 
-  useEffect(() => {
-    const origin = formData.origin_city;
-    const dest = formData.destination_city;
-    const crossing = formData.border_crossing;
-    if (!origin || !dest || !crossing) { setDistanceNotes([]); return; }
-    let cancelled = false;
-    fillLaneMiles(origin, dest, crossing).then(res => {
-      if (cancelled) return;
-      setFormData(prev => {
-        const updates: Partial<typeof prev> = {};
-        if (res.us_miles != null) updates.us_miles = res.us_miles;
-        if (res.mx_miles != null) updates.mx_miles = res.mx_miles;
-        const quoteRPM = quote?.rate_per_mile || 0;
-        const quoteFuel = quote?.today_fuel_rate || 0;
-        if (quoteRPM > 0 && !prev.us_rate_per_mile) updates.us_rate_per_mile = quoteRPM;
-        if (quoteRPM > 0 && !prev.mx_rate_per_mile) updates.mx_rate_per_mile = quoteRPM;
-        if (quoteFuel > 0 && !prev.us_fuel_rate) updates.us_fuel_rate = quoteFuel;
-        if (quoteFuel > 0 && !prev.mx_fuel_rate) updates.mx_fuel_rate = quoteFuel;
-        if (Object.keys(updates).length === 0) return prev;
-        return { ...prev, ...updates };
-      });
-      if (res.us_miles != null || res.mx_miles != null) setIsDirty(true);
-      setDistanceNotes(res.notes);
+  const applyMilesResult = (res: { us_miles: number | null; mx_miles: number | null; notes: string[] }) => {
+    setFormData(prev => {
+      const updates: Partial<typeof prev> = {};
+      if (res.us_miles != null) updates.us_miles = res.us_miles;
+      if (res.mx_miles != null) updates.mx_miles = res.mx_miles;
+      const quoteRPM = quote?.rate_per_mile || 0;
+      const quoteFuel = quote?.today_fuel_rate || 0;
+      if (quoteRPM > 0 && !prev.us_rate_per_mile) updates.us_rate_per_mile = quoteRPM;
+      if (quoteRPM > 0 && !prev.mx_rate_per_mile) updates.mx_rate_per_mile = quoteRPM;
+      if (quoteFuel > 0 && !prev.us_fuel_rate) updates.us_fuel_rate = quoteFuel;
+      if (quoteFuel > 0 && !prev.mx_fuel_rate) updates.mx_fuel_rate = quoteFuel;
+      if (Object.keys(updates).length === 0) return prev;
+      return { ...prev, ...updates };
     });
+    if (res.us_miles != null || res.mx_miles != null) setIsDirty(true);
+    setDistanceNotes(res.notes);
+  };
+
+  const currentRouteSig = routeSignature(formData as Partial<QuoteLane>);
+
+  // Auto-fill ONLY when the route changed since the miles were last set (never on open).
+  useEffect(() => {
+    if (locked) return;
+    if (!currentRouteSig || currentRouteSig === milesSigRef.current) return;
+    let cancelled = false;
+    const sig = currentRouteSig;
+    setRecalculating(true);
+    computeLaneMiles(formData as Partial<QuoteLane>).then(res => {
+      if (cancelled) return;
+      milesSigRef.current = sig;
+      applyMilesResult(res);
+    }).finally(() => { if (!cancelled) setRecalculating(false); });
     return () => { cancelled = true; };
-  }, [formData.origin_city, formData.destination_city, formData.border_crossing]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentRouteSig, locked]);
+
+  const recalculateDistance = async () => {
+    if (locked || recalculating) return;
+    if (!currentRouteSig) { setDistanceNotes(['Select origin, destination and border crossing first.']); return; }
+    setRecalculating(true);
+    try {
+      const res = await computeLaneMiles(formData as Partial<QuoteLane>);
+      milesSigRef.current = currentRouteSig;
+      applyMilesResult(res);
+    } finally {
+      setRecalculating(false);
+    }
+  };
 
 
   const getFieldVisibility = (serviceType: string | null | undefined, _countryOverride?: string) => {
@@ -2972,12 +2999,14 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
 
         <div className="flex-shrink-0 px-6 py-3.5 bg-white border-t border-gray-200 flex items-center gap-3 flex-wrap">
           <button
-            onClick={() => onBenchmark?.(lane)}
-            className="flex items-center gap-2 h-9 px-4 text-[13px] font-semibold rounded-lg border transition-colors"
-            style={{ color: '#0a5f5e', borderColor: '#cbd5e1', background: '#fff' }}
+            onClick={recalculateDistance}
+            disabled={locked || recalculating}
+            className="flex items-center gap-2 h-9 px-4 text-[13px] font-semibold rounded-lg border transition-colors disabled:opacity-50"
+            style={{ color: '#1d4ed8', borderColor: '#cbd5e1', background: '#fff' }}
+            title="Recalculate MX / US miles for this route"
           >
-            <BarChart2 className="w-4 h-4" />
-            Benchmark
+            <RefreshCw className={`w-4 h-4 ${recalculating ? 'animate-spin' : ''}`} />
+            {recalculating ? 'Calculating…' : 'Recalculate distance'}
           </button>
           <button
             onClick={() => handleNavigateWithCheck('close')}

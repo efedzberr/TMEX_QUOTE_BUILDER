@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import './QuoteLanes.css';
-import { CreditCard as Edit2, Trash2, FileText, Plus, Check, X, Truck, ChevronDown, Copy, Link2, Lock, CheckCircle, ArrowRight, ArrowLeftRight, Lock as LockIcon, DollarSign, BarChart2 } from 'lucide-react';
+import { CreditCard as Edit2, Trash2, FileText, Plus, Check, X, Truck, ChevronDown, Copy, Link2, Lock, CheckCircle, ArrowRight, ArrowLeftRight, Lock as LockIcon, DollarSign, RefreshCw } from 'lucide-react';
 import { QuoteLane, Quote } from '../lib/supabase';
+import { computeLaneMiles, routeSignature } from '../lib/laneDistance';
 import { EQUIPMENT_TYPES, TRIP_TYPES, RATE_TYPES, LOAD_FREQUENCIES, LANE_TYPES, formatCurrencyOrDash, CurrencyCode, normalizeCountryCode } from '../lib/constants';
 import { BorderCrossingLookup, useBorderCrossingCities } from './BorderCrossingLookup';
 import { CityLookupField, CityInfo } from './CityLookupField';
@@ -68,7 +69,7 @@ export function QuoteLanes({
   onDuplicateLane,
   onUpdateLinkedLanes,
   onToggleLaneCurrency,
-  onBenchmarkLane,
+  onBenchmarkLane: _onBenchmarkLane,
 }: QuoteLanesProps) {
   const currencyCode = (currency || 'USD') as CurrencyCode;
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -79,6 +80,11 @@ export function QuoteLanes({
   const [selectedTripType, setSelectedTripType] = useState<'One Way' | 'Round Trip' | 'Circuit' | null>(null);
   const [editData, setEditData] = useState<Partial<QuoteLane>>({});
   const [editData2, setEditData2] = useState<Partial<QuoteLane>>({});
+  // Route signature the current miles belong to, per lane id. Seeded from the persisted lane
+  // when an edit session starts, so entering edit mode never triggers a lookup.
+  const milesSigRef = useRef<Record<string, string>>({});
+  const [recalcLaneId, setRecalcLaneId] = useState<string | null>(null);
+  const [distanceNotice, setDistanceNotice] = useState<string | null>(null);
   const [splitBillingAddLanes, setSplitBillingAddLanes] = useState<Partial<QuoteLane>[]>([]);
   const [showEquipmentDropdown, setShowEquipmentDropdown] = useState(false);
   const [isDetailView, setIsDetailView] = useState(false);
@@ -355,6 +361,126 @@ export function QuoteLanes({
       data.mx_rate_per_mile = data.mx_miles ? (data.mx_rate || 0) / data.mx_miles : 0;
     }
     return data;
+  };
+
+  const withMiles = (data: Partial<QuoteLane>, res: { us_miles: number | null; mx_miles: number | null }): Partial<QuoteLane> => {
+    let next: Partial<QuoteLane> = { ...data };
+    if (res.us_miles != null) next = applyRateCalcs({ ...next, us_miles: res.us_miles }, 'us_miles');
+    if (res.mx_miles != null) next = applyRateCalcs({ ...next, mx_miles: res.mx_miles }, 'mx_miles');
+    return next;
+  };
+
+  const showDistanceNotes = (notes: string[]) => {
+    setDistanceNotice(notes.length ? notes.join(' ') : null);
+    if (notes.length) window.setTimeout(() => setDistanceNotice(null), 6000);
+  };
+
+  // Seed the baseline signature when an edit session starts (persisted route = current miles)
+  useEffect(() => {
+    const seed = (id: string | null) => {
+      if (!id) return;
+      if (milesSigRef.current[id] === undefined) {
+        const persisted = lanes.find(l => l.id === id);
+        milesSigRef.current[id] = routeSignature(persisted);
+      }
+    };
+    seed(editingId);
+    seed(editingPairedId);
+    Object.keys(editingGroupLanes).forEach(seed);
+    if (!editingId && Object.keys(editingGroupLanes).length === 0) milesSigRef.current = {};
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingId, editingPairedId, Object.keys(editingGroupLanes).join(',')]);
+
+  // Primary edited lane: recompute when its route changes; Round Trip mirrors into lane 2
+  const editSig = routeSignature(editData);
+  useEffect(() => {
+    if (!editingId || !editSig) return;
+    const base = milesSigRef.current[editingId];
+    if (base === undefined || base === editSig) return;
+    let cancelled = false;
+    const laneId = editingId;
+    computeLaneMiles(editData).then(res => {
+      if (cancelled) return;
+      milesSigRef.current[laneId] = editSig;
+      setEditData(prev => (routeSignature(prev) === editSig ? withMiles(prev, res) : prev));
+      if (editingPairedId && editData.trip_type === 'Round Trip') {
+        setEditData2(prev => withMiles(prev, res));
+        milesSigRef.current[editingPairedId] = routeSignature({ ...editData2, origin_city: editData.destination_city, destination_city: editData.origin_city, border_crossing: editData.border_crossing, service_type: editData.service_type });
+      }
+      showDistanceNotes(res.notes);
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editSig, editingId]);
+
+  // Paired lane edited independently (Circuit): its own route, its own lookup
+  const editSig2 = routeSignature(editData2);
+  useEffect(() => {
+    if (!editingPairedId || !editSig2 || editData.trip_type === 'Round Trip') return;
+    const base = milesSigRef.current[editingPairedId];
+    if (base === undefined || base === editSig2) return;
+    let cancelled = false;
+    const laneId = editingPairedId;
+    computeLaneMiles(editData2).then(res => {
+      if (cancelled) return;
+      milesSigRef.current[laneId] = editSig2;
+      setEditData2(prev => (routeSignature(prev) === editSig2 ? withMiles(prev, res) : prev));
+      showDistanceNotes(res.notes);
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editSig2, editingPairedId]);
+
+  // Split-billing group: each lane with a changed route gets its own lookup
+  const groupSigs = Object.entries(editingGroupLanes).map(([id, l]) => `${id}=${routeSignature(l)}`).join(';');
+  useEffect(() => {
+    const pending = Object.entries(editingGroupLanes).filter(([id, l]) => {
+      const sig = routeSignature(l);
+      const base = milesSigRef.current[id];
+      return !!sig && base !== undefined && base !== sig;
+    });
+    if (pending.length === 0) return;
+    let cancelled = false;
+    pending.forEach(([id, l]) => {
+      const sig = routeSignature(l);
+      computeLaneMiles(l).then(res => {
+        if (cancelled) return;
+        milesSigRef.current[id] = sig;
+        setEditingGroupLanes(prev => (prev[id] && routeSignature(prev[id]) === sig ? { ...prev, [id]: withMiles(prev[id], res) } : prev));
+        showDistanceNotes(res.notes);
+      });
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupSigs]);
+
+  // Recalculate distance button: always recomputes and replaces, in the editor or persisted
+  const handleRecalculateLane = async (lane: QuoteLane) => {
+    if (locked || recalcLaneId) return;
+    const source: Partial<QuoteLane> =
+      editingId === lane.id ? editData :
+      editingPairedId === lane.id ? editData2 :
+      editingGroupLanes[lane.id] ? editingGroupLanes[lane.id] : lane;
+    const sig = routeSignature(source);
+    if (!sig) { showDistanceNotes(['Select origin, destination and border crossing first.']); return; }
+    setRecalcLaneId(lane.id);
+    try {
+      const res = await computeLaneMiles(source);
+      milesSigRef.current[lane.id] = sig;
+      if (editingId === lane.id) setEditData(prev => withMiles(prev, res));
+      else if (editingPairedId === lane.id) setEditData2(prev => withMiles(prev, res));
+      else if (editingGroupLanes[lane.id]) setEditingGroupLanes(prev => ({ ...prev, [lane.id]: withMiles(prev[lane.id], res) }));
+      else {
+        const next = withMiles({ ...lane }, res);
+        const updates: Partial<QuoteLane> = {};
+        if (res.us_miles != null) { updates.us_miles = next.us_miles; updates.us_rate = next.us_rate; updates.us_rate_per_mile = next.us_rate_per_mile; }
+        if (res.mx_miles != null) { updates.mx_miles = next.mx_miles; updates.mx_rate = next.mx_rate; updates.mx_rate_per_mile = next.mx_rate_per_mile; }
+        if (Object.keys(updates).length > 0) await onUpdateLane(lane.id, updates);
+      }
+      showDistanceNotes(res.notes);
+    } finally {
+      setRecalcLaneId(null);
+    }
   };
 
   const handleFieldChange = (laneId: string, field: string, value: any) => {
@@ -1826,7 +1952,7 @@ export function QuoteLanes({
           <div className="flex gap-1">
             <button onClick={() => !locked && handleEdit(lane)} disabled={locked} className={`p-1 rounded ${locked ? 'text-gray-300 cursor-not-allowed' : 'text-blue-600 hover:bg-blue-50'}`} title="Edit"><Edit2 className="w-3.5 h-3.5" /></button>
             <button onClick={() => onShowDetails(lane)} className="p-1 text-blue-600 hover:bg-blue-50 rounded" title="Details"><FileText className="w-3.5 h-3.5" /></button>
-            <button onClick={() => onBenchmarkLane?.(lane)} className="p-1 text-blue-600 hover:bg-blue-50 rounded" title="Benchmark this lane"><BarChart2 className="w-3.5 h-3.5" /></button>
+            <button onClick={() => handleRecalculateLane(lane)} disabled={locked || recalcLaneId !== null} className={`p-1 rounded ${locked ? 'text-gray-300 cursor-not-allowed' : 'text-blue-600 hover:bg-blue-50'}`} title="Recalculate distance (MX / US miles)"><RefreshCw className={`w-3.5 h-3.5 ${recalcLaneId === lane.id ? 'animate-spin' : ''}`} /></button>
             <button onClick={() => !locked && onToggleLaneCurrency?.(lane)} disabled={locked} className={`p-1 rounded ${locked ? 'text-gray-300 cursor-not-allowed' : 'text-green-600 hover:bg-green-50'}`} title={`Currency: ${lane.currency_code || 'USD'}`}><DollarSign className="w-3.5 h-3.5" /></button>
             <button onClick={() => !locked && onDuplicateLane?.(lane)} disabled={locked} className={`p-1 rounded ${locked ? 'text-gray-300 cursor-not-allowed' : 'text-blue-600 hover:bg-blue-50'}`} title="Duplicate"><Copy className="w-3.5 h-3.5" /></button>
             <button onClick={() => !locked && handleDeleteClick(lane)} disabled={locked} className={`p-1 rounded ${locked ? 'text-gray-300 cursor-not-allowed' : 'text-red-600 hover:bg-red-50'}`} title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
@@ -1929,6 +2055,10 @@ export function QuoteLanes({
           </button>
         </div>
       </div>
+
+      {distanceNotice && (
+        <div className="mx-4 mb-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">{distanceNotice}</div>
+      )}
 
       <div className="lanes-grid-container min-h-[520px]">
         <table className="lanes-grid divide-y divide-gray-200">
