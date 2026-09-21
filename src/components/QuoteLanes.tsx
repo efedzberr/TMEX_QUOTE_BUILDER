@@ -3,6 +3,7 @@ import './QuoteLanes.css';
 import { CreditCard as Edit2, Trash2, FileText, Plus, Check, X, Truck, ChevronDown, Copy, Link2, Lock, CheckCircle, ArrowRight, ArrowLeftRight, Lock as LockIcon, DollarSign, RefreshCw } from 'lucide-react';
 import { QuoteLane, Quote } from '../lib/supabase';
 import { computeLaneMiles, routeSignature } from '../lib/laneDistance';
+import { fetchAccountFuelProgram, applyPricingDefaults, NO_FUEL_PROGRAM, type AccountFuelProgram, type PricingContext } from '../lib/lanePricing';
 import { EQUIPMENT_TYPES, TRIP_TYPES, RATE_TYPES, LOAD_FREQUENCIES, LANE_TYPES, formatCurrencyOrDash, CurrencyCode, normalizeCountryCode } from '../lib/constants';
 import { BorderCrossingLookup, useBorderCrossingCities } from './BorderCrossingLookup';
 import { CityLookupField, CityInfo } from './CityLookupField';
@@ -85,6 +86,16 @@ export function QuoteLanes({
   const milesSigRef = useRef<Record<string, string>>({});
   const [recalcLaneId, setRecalcLaneId] = useState<string | null>(null);
   const [distanceNotice, setDistanceNotice] = useState<string | null>(null);
+  const [accountFuel, setAccountFuel] = useState<AccountFuelProgram>(NO_FUEL_PROGRAM);
+  const accountFuelRef = useRef<AccountFuelProgram>(NO_FUEL_PROGRAM);
+
+  // Fetch the account fuel program whenever the quote's partner account changes
+  useEffect(() => {
+    const name = (quote as any)?.partner_account_name || (quote as any)?.account_name;
+    let cancelled = false;
+    fetchAccountFuelProgram(name).then(fp => { if (!cancelled) { setAccountFuel(fp); accountFuelRef.current = fp; } });
+    return () => { cancelled = true; };
+  }, [(quote as any)?.partner_account_name, (quote as any)?.account_name]);
   const [splitBillingAddLanes, setSplitBillingAddLanes] = useState<Partial<QuoteLane>[]>([]);
   const [showEquipmentDropdown, setShowEquipmentDropdown] = useState(false);
   const [isDetailView, setIsDetailView] = useState(false);
@@ -363,11 +374,15 @@ export function QuoteLanes({
     return data;
   };
 
-  const withMiles = (data: Partial<QuoteLane>, res: { us_miles: number | null; mx_miles: number | null }): Partial<QuoteLane> => {
+  const pricingCtx = (): PricingContext => ({ quote, account: accountFuelRef.current });
+
+  const withMiles = (data: Partial<QuoteLane>, res: { us_miles: number | null; mx_miles: number | null; notes?: string[] }): Partial<QuoteLane> => {
     let next: Partial<QuoteLane> = { ...data };
-    if (res.us_miles != null) next = applyRateCalcs({ ...next, us_miles: res.us_miles }, 'us_miles');
-    if (res.mx_miles != null) next = applyRateCalcs({ ...next, mx_miles: res.mx_miles }, 'mx_miles');
-    return next;
+    if (res.us_miles != null) next.us_miles = res.us_miles;
+    if (res.mx_miles != null) next.mx_miles = res.mx_miles;
+    const { lane, notes } = applyPricingDefaults(next, pricingCtx());
+    if (notes.length) showDistanceNotes([...(res.notes || []), ...notes]);
+    return lane;
   };
 
   const showDistanceNotes = (notes: string[]) => {

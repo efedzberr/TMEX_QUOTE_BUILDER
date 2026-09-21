@@ -8,6 +8,7 @@ import { LANE_TYPES, LOAD_FREQUENCIES, COMMITMENT_TYPES, PRIORITIES, EQUIPMENT_T
 import { BorderCrossingLookup, useBorderCrossingCities, validateBorderCrossing } from './BorderCrossingLookup';
 import { MarketFilteredCityLookup } from './MarketFilteredCityLookup';
 import { computeLaneMiles, routeSignature } from '../lib/laneDistance';
+import { applyPricingDefaults } from '../lib/lanePricing';
 
 const UNITS_OPTIONS = ['Mi', 'Km'] as const;
 type UnitsCode = typeof UNITS_OPTIONS[number];
@@ -434,17 +435,14 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
 
   const applyMilesResult = (res: { us_miles: number | null; mx_miles: number | null; notes: string[] }) => {
     setFormData(prev => {
-      const updates: Partial<typeof prev> = {};
-      if (res.us_miles != null) updates.us_miles = res.us_miles;
-      if (res.mx_miles != null) updates.mx_miles = res.mx_miles;
-      const quoteRPM = quote?.rate_per_mile || 0;
-      const quoteFuel = quote?.today_fuel_rate || 0;
-      if (quoteRPM > 0 && !prev.us_rate_per_mile) updates.us_rate_per_mile = quoteRPM;
-      if (quoteRPM > 0 && !prev.mx_rate_per_mile) updates.mx_rate_per_mile = quoteRPM;
-      if (quoteFuel > 0 && !prev.us_fuel_rate) updates.us_fuel_rate = quoteFuel;
-      if (quoteFuel > 0 && !prev.mx_fuel_rate) updates.mx_fuel_rate = quoteFuel;
-      if (Object.keys(updates).length === 0) return prev;
-      return { ...prev, ...updates };
+      let next: Partial<typeof prev> = { ...prev };
+      if (res.us_miles != null) next.us_miles = res.us_miles;
+      if (res.mx_miles != null) next.mx_miles = res.mx_miles;
+      const pCtx = { quote, account: accountFuelData as any };
+      const { lane: priced, notes: pNotes } = applyPricingDefaults(next as Partial<QuoteLane>, pCtx);
+      if (pNotes.length) setDistanceNotes(prev2 => [...(prev2 || []), ...pNotes]);
+      const changed = Object.keys(priced).some(k => (priced as any)[k] !== (prev as any)[k]);
+      return changed ? { ...prev, ...priced } as typeof prev : prev;
     });
     if (res.us_miles != null || res.mx_miles != null) setIsDirty(true);
     setDistanceNotes(res.notes);
