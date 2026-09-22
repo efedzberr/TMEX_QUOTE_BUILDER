@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { QuoteListView } from './components/QuoteListView';
 import { QuoteHeader } from './components/QuoteHeader';
 import { QuoteHistory } from './components/QuoteHistory';
+import { SystemInformation } from './components/SystemInformation';
 import { logActivity } from './lib/activityLog';
 import { QuoteTabs } from './components/QuoteTabs';
 import { StageProgressBar } from './components/StageProgressBar';
@@ -1813,6 +1814,7 @@ function App() {
             onToast={(message, type) => { setToastMessage(message); setToastType(type); }}
             onViewResponse={() => setShowViewResponse(true)}
           />
+          <SystemInformation record={quote} className="mt-6" />
         </div>
       </main>
 

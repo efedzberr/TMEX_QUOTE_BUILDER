@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Plus, Pencil, Trash2, Search, X, Check, Copy, ChevronDown } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { CustomersTable } from './customers/CustomersTable';
+import { SystemInformation } from './SystemInformation';
 import { EQUIPMENT_TYPES } from '../lib/constants';
 import { AccountLanesTab } from './admin/AccountLanesTab';
 import { CostStructureTab } from './admin/CostStructureTab';
@@ -302,6 +303,7 @@ function ManageBillTo() {
                 </select>
               </div>
             </div>
+            {editing && <SystemInformation record={editing} variant="inline" />}
             <div className="flex justify-end gap-3 mt-6">
               <button onClick={() => setShowModal(false)} className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded hover:bg-gray-50 transition-colors">Cancel</button>
               <button onClick={save} disabled={saving} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700 transition-colors disabled:opacity-50">
@@ -491,6 +493,7 @@ function ManageShippers() {
                 </select>
               </div>
             </div>
+            {editing && <SystemInformation record={editing} variant="inline" />}
             <div className="flex justify-end gap-3 mt-6">
               <button onClick={() => setShowModal(false)} className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded hover:bg-gray-50 transition-colors">Cancel</button>
               <button onClick={save} disabled={saving} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700 transition-colors disabled:opacity-50">
@@ -878,6 +881,7 @@ function ManageCities() {
                 </label>
               </div>
             </div>
+            {editing && <SystemInformation record={editing} variant="inline" />}
             <div className="flex justify-end gap-3 mt-6">
               <button onClick={() => setShowModal(false)} className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded hover:bg-gray-50 transition-colors">Cancel</button>
               <button onClick={save} disabled={saving} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700 transition-colors disabled:opacity-50">
@@ -1316,6 +1320,7 @@ function ManageAccessorials() {
                   className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
               </div>
             </div>
+            {editing && <SystemInformation record={editing} variant="inline" />}
             <div className="flex justify-end gap-3 mt-6">
               <button onClick={() => setShowModal(false)} className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded hover:bg-gray-50 transition-colors">Cancel</button>
               <button onClick={save} disabled={saving} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700 transition-colors disabled:opacity-50">
@@ -1652,6 +1657,7 @@ function ManageTermsConditions() {
                 </div>
               </div>
             </div>
+            {editing && <SystemInformation record={editing} variant="inline" />}
             <div className="flex justify-end gap-3 mt-6">
               <button onClick={() => setShowModal(false)} className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded hover:bg-gray-50 transition-colors">Cancel</button>
               <button onClick={save} disabled={saving} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700 transition-colors disabled:opacity-50">

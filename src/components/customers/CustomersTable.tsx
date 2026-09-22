@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, Pencil, Trash2, Search, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { SystemInformation } from '../SystemInformation';
 
 interface Account {
   id: string;
@@ -329,6 +330,7 @@ export function CustomersTable() {
                 {errors.fuel_rate_per_mile && <div className="text-xs text-red-500 mt-0.5">{errors.fuel_rate_per_mile}</div>}
               </div>
             </div>
+              {editing && <SystemInformation record={editing} variant="inline" />}
             <div className="flex justify-end gap-3 mt-6">
               <button onClick={() => setShowModal(false)} className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded hover:bg-gray-50 transition-colors">Cancel</button>
               <button onClick={save} disabled={saving} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700 transition-colors disabled:opacity-50">

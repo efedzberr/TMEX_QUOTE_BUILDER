@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Plus, Pencil, Trash2, Lock, Users, Save, X, Eye, Wrench, Clock } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { SystemInformation } from '../SystemInformation';
 import { usePermissions } from '../../lib/permissions';
 import { ALL_PERMISSION_KEYS, OWNED_OBJECTS, PERMISSION_GROUPS, PermissionKey, PermissionLevel } from '../../lib/permissionCatalog';
 
@@ -15,6 +16,10 @@ interface Profile {
   is_system: boolean;
   session_timeout_minutes: number;
   user_count: number;
+  created_at?: string | null;
+  created_by_name?: string | null;
+  updated_at?: string | null;
+  updated_by_name?: string | null;
 }
 
 const SESSION_TIMEOUT_OPTIONS: { value: number; label: string }[] = [
@@ -78,7 +83,7 @@ export function ProfilesTab({ onToast }: ProfilesTabProps) {
     setLoading(true);
     try {
       const [{ data: rows, error }, { data: users }] = await Promise.all([
-        supabase.from('profiles').select('id,name,description,is_system,session_timeout_minutes').order('is_system', { ascending: false }).order('name'),
+        supabase.from('profiles').select('id,name,description,is_system,session_timeout_minutes,created_at,created_by_name,updated_at,updated_by_name').order('is_system', { ascending: false }).order('name'),
         supabase.from('user_profiles').select('profile_id'),
       ]);
       if (error) throw error;
@@ -455,6 +460,7 @@ export function ProfilesTab({ onToast }: ProfilesTabProps) {
                 })}
               </div>
             )}
+            <SystemInformation record={selected} variant="inline" />
           </>
         )}
       </div>

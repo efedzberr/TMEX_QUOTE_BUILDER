@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { X, Loader2 } from 'lucide-react';
+import { SystemInformation } from '../SystemInformation';
 
 type Row = Record<string, unknown>;
 
@@ -501,6 +502,11 @@ export function AccountLaneModal({ editing, initialData, onClose, onSave }: Acco
           </div>
         </div>
 
+        {editing && (
+          <div className="px-6">
+            <SystemInformation record={editing as { created_at?: string | null; created_by_name?: string | null; updated_at?: string | null; updated_by_name?: string | null }} variant="inline" />
+          </div>
+        )}
         <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-200">
           <button
             onClick={onClose}
