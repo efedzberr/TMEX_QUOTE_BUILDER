@@ -1838,6 +1838,8 @@ function App() {
         return (
           <LaneDetailsPanel
             lane={currentLane}
+            laneNumber={currentIndex !== -1 ? currentIndex + 1 : undefined}
+            laneCount={lanes.length}
             pairedLane={paired}
             currency={quote.currency}
             quote={quote}

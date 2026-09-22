@@ -67,13 +67,16 @@ interface LaneDetailsPanelProps {
   onChangeCurrency?: (newCurrency: string) => Promise<void>;
   onNextLane?: () => void;
   hasNextLane?: boolean;
+  /** 1-based position of this lane in the quote's lane list, and the total count */
+  laneNumber?: number;
+  laneCount?: number;
   onPreviousLane?: () => void;
   hasPreviousLane?: boolean;
   onUpdatePairedLaneBCO?: (pairedLaneId: string, borderCrossingOnly: boolean) => Promise<void>;
   onBenchmark?: (lane: QuoteLane) => void;
 }
 
-export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, locked = false, onClose, onSave, onChangeCurrency, onNextLane, hasNextLane, onPreviousLane, hasPreviousLane, onUpdatePairedLaneBCO, onBenchmark: _onBenchmark }: LaneDetailsPanelProps) {
+export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, locked = false, onClose, onSave, onChangeCurrency, onNextLane, hasNextLane, onPreviousLane, hasPreviousLane, onUpdatePairedLaneBCO, onBenchmark: _onBenchmark, laneNumber, laneCount }: LaneDetailsPanelProps) {
   const [formData, setFormData] = useState({
     origin_city: lane.origin_city || '',
     destination_city: lane.destination_city || '',
@@ -1216,6 +1219,11 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
               className="flex-shrink-0 w-full font-semibold text-white flex items-center gap-2.5"
               style={{ background: 'linear-gradient(90deg, #0a5f5e, #0e7c7b)', fontSize: '13.5px', padding: '11px 22px', letterSpacing: '0.3px' }}
             >
+              {laneNumber != null && (
+                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold tracking-wide" style={{ background: 'rgba(255,255,255,0.28)' }}>
+                  Lane {laneNumber}{laneCount ? ` of ${laneCount}` : ''}
+                </span>
+              )}
               <span>{bannerText}</span>
               {tripType && (
                 <span className="px-2 py-0.5 rounded-full text-[11px] font-medium" style={{ background: 'rgba(255,255,255,0.18)' }}>
