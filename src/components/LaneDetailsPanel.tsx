@@ -153,13 +153,21 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
   // Signature of the route the current miles belong to. Seeded from the lane as opened, so
   // opening the panel never triggers a lookup; only a route change does.
   const milesSigRef = useRef<string>(routeSignature(lane));
-  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
-    actions: true,
-    general: false,
-    us: false,
-    mx: false,
-    additional: true,
+  const COLLAPSED_KEY = 'sph.lanePanel.collapsedSections';
+  const [collapsedSections, setCollapsedSectionsState] = useState<Record<string, boolean>>(() => {
+    try {
+      const saved = localStorage.getItem(COLLAPSED_KEY);
+      if (saved) return JSON.parse(saved) as Record<string, boolean>;
+    } catch { /* ignore */ }
+    return { actions: true, general: false, us: false, mx: false, additional: true };
   });
+  const setCollapsedSections = (update: Record<string, boolean> | ((s: Record<string, boolean>) => Record<string, boolean>)) => {
+    setCollapsedSectionsState(prev => {
+      const next = typeof update === 'function' ? update(prev) : update;
+      try { localStorage.setItem(COLLAPSED_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  };
 
   const [accountFuelData, setAccountFuelData] = useState<{ customer_fuel_program: boolean; fuel_program_type: string; fuel_rate_per_mile: number; fuel_program_method: string }>({ customer_fuel_program: false, fuel_program_type: 'FRPM', fuel_rate_per_mile: 0, fuel_program_method: 'per_mile' });
 
@@ -449,7 +457,8 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
     setDistanceNotes(res.notes);
   };
 
-  const currentRouteSig = routeSignature(formData as Partial<QuoteLane>);
+  const routeSource = { ...(formData as Partial<QuoteLane>), service_type: lane.service_type, trip_type: lane.trip_type, split_billing_group: lane.split_billing_group } as Partial<QuoteLane>;
+  const currentRouteSig = routeSignature(routeSource);
 
   // Auto-fill ONLY when the route changed since the miles were last set (never on open).
   useEffect(() => {
@@ -458,7 +467,7 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
     let cancelled = false;
     const sig = currentRouteSig;
     setRecalculating(true);
-    computeLaneMiles(formData as Partial<QuoteLane>).then(res => {
+    computeLaneMiles(routeSource).then(res => {
       if (cancelled) return;
       milesSigRef.current = sig;
       applyMilesResult(res);
@@ -472,7 +481,7 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
     if (!currentRouteSig) { setDistanceNotes(['Select origin, destination and border crossing first.']); return; }
     setRecalculating(true);
     try {
-      const res = await computeLaneMiles(formData as Partial<QuoteLane>);
+      const res = await computeLaneMiles(routeSource);
       milesSigRef.current = currentRouteSig;
       applyMilesResult(res);
     } finally {
