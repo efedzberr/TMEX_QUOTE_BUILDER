@@ -3005,8 +3005,8 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
           </div>
         </div>
 
-        <div className="flex-shrink-0 px-6 pb-4 bg-white border-t border-gray-200">
-          <SystemInformation record={lane} variant="inline" className="mt-4 pt-0 border-t-0" />
+        <div className="flex-shrink-0 px-6 pb-2 bg-white border-t border-gray-200">
+          <SystemInformation record={lane} variant="inline" className="mt-2 pt-0 border-t-0" />
         </div>
         <div className="flex-shrink-0 px-6 py-3.5 bg-white border-t border-gray-200 flex items-center gap-3 flex-wrap">
           <button
