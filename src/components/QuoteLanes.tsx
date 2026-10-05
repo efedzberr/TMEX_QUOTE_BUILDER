@@ -4,9 +4,10 @@ import { CreditCard as Edit2, Trash2, FileText, Plus, Check, X, Truck, ChevronDo
 import { QuoteLane, Quote } from '../lib/supabase';
 import { computeLaneMiles, routeSignature } from '../lib/laneDistance';
 import { fetchAccountFuelProgram, applyPricingDefaults, NO_FUEL_PROGRAM, type AccountFuelProgram, type PricingContext } from '../lib/lanePricing';
-import { EQUIPMENT_TYPES, TRIP_TYPES, RATE_TYPES, LOAD_FREQUENCIES, LANE_TYPES, formatCurrencyOrDash, CurrencyCode, normalizeCountryCode } from '../lib/constants';
+import { TRIP_TYPES, RATE_TYPES, LOAD_FREQUENCIES, LANE_TYPES, formatCurrencyOrDash, CurrencyCode, normalizeCountryCode } from '../lib/constants';
 import { BorderCrossingLookup, useBorderCrossingCities } from './BorderCrossingLookup';
 import { CityLookupField, CityInfo } from './CityLookupField';
+import { usePicklist } from '../lib/picklists';
 import { CityAutocompleteInput } from './CityAutocompleteInput';
 import { MarketFilteredCityLookup } from './MarketFilteredCityLookup';
 import { TripTypeModal } from './TripTypeModal';
@@ -98,6 +99,7 @@ export function QuoteLanes({
   }, [(quote as any)?.partner_account_name, (quote as any)?.account_name]);
   const [splitBillingAddLanes, setSplitBillingAddLanes] = useState<Partial<QuoteLane>[]>([]);
   const [showEquipmentDropdown, setShowEquipmentDropdown] = useState(false);
+  const equipmentTypes = usePicklist('equipment_type');
   const [isDetailView, setIsDetailView] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<{ laneId: string; linkedLaneId?: string; splitBillingGroup?: string; splitBillingCount?: number } | null>(null);
   const [showServiceTypeModal, setShowServiceTypeModal] = useState(false);
@@ -2076,7 +2078,7 @@ export function QuoteLanes({
             </button>
             {showEquipmentDropdown && (
               <div className="absolute right-0 mt-2 w-56 bg-white border border-gray-200 rounded-md shadow-lg z-10">
-                {EQUIPMENT_TYPES.map((type) => (
+                {equipmentTypes.map((type) => (
                   <button
                     key={type}
                     onClick={() => handleGlobalEquipmentChange(type)}

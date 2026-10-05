@@ -4,7 +4,8 @@ import { useState, useEffect, useRef } from 'react';
 import { CityLookupField } from './CityLookupField';
 import { SelectedAccessorial } from './AccessorialSelector';
 import { LaneSectionAccessorials, SectionAccessorial, calcSectionAccessorialsTotal } from './LaneSectionAccessorials';
-import { LANE_TYPES, LOAD_FREQUENCIES, COMMITMENT_TYPES, PRIORITIES, EQUIPMENT_TYPES, LIVE_LOAD_OPTIONS, formatCurrencyOrDash, CurrencyCode, CURRENCIES, normalizeCountryCode } from '../lib/constants';
+import { formatCurrencyOrDash, CurrencyCode, CURRENCIES, normalizeCountryCode } from '../lib/constants';
+import { usePicklist } from '../lib/picklists';
 import { BorderCrossingLookup, useBorderCrossingCities, validateBorderCrossing } from './BorderCrossingLookup';
 import { MarketFilteredCityLookup } from './MarketFilteredCityLookup';
 import { computeLaneMiles, routeSignature } from '../lib/laneDistance';
@@ -77,6 +78,12 @@ interface LaneDetailsPanelProps {
 }
 
 export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, locked = false, onClose, onSave, onChangeCurrency, onNextLane, hasNextLane, onPreviousLane, hasPreviousLane, onUpdatePairedLaneBCO, onBenchmark: _onBenchmark, laneNumber, laneCount }: LaneDetailsPanelProps) {
+  const equipmentTypes = usePicklist('equipment_type', lane.type_of_service);
+  const laneTypes = usePicklist('lane_type', lane.lane_type);
+  const loadFrequencies = usePicklist('load_frequency', lane.load_frequency);
+  const commitmentTypes = usePicklist('commitment_type', lane.commitment_type);
+  const liveLoadOptions = usePicklist('live_load_or_drop', lane.live_load_or_drop);
+  const lanePriorities = usePicklist('lane_priority', lane.priority);
   const [formData, setFormData] = useState({
     origin_city: lane.origin_city || '',
     destination_city: lane.destination_city || '',
@@ -1171,7 +1178,7 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           >
             <option value="">Select...</option>
-            {LIVE_LOAD_OPTIONS.map(option => (
+            {liveLoadOptions.map(option => (
               <option key={option} value={option}>{option}</option>
             ))}
           </select>
@@ -2893,7 +2900,7 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
                     className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   >
                     <option value="">Select...</option>
-                    {LANE_TYPES.map(type => (
+                    {laneTypes.map(type => (
                       <option key={type} value={type}>{type}</option>
                     ))}
                   </select>
@@ -2919,7 +2926,7 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
                     className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   >
                     <option value="">Select...</option>
-                    {LOAD_FREQUENCIES.map(freq => (
+                    {loadFrequencies.map(freq => (
                       <option key={freq} value={freq}>{freq}</option>
                     ))}
                   </select>
@@ -2934,7 +2941,7 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
                     className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   >
                     <option value="">Select...</option>
-                    {COMMITMENT_TYPES.map(type => (
+                    {commitmentTypes.map(type => (
                       <option key={type} value={type}>{type}</option>
                     ))}
                   </select>
@@ -2971,7 +2978,7 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
                     className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   >
                     <option value="">Select...</option>
-                    {EQUIPMENT_TYPES.map(type => (
+                    {equipmentTypes.map(type => (
                       <option key={type} value={type}>{type}</option>
                     ))}
                   </select>
@@ -2986,7 +2993,7 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
                     className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   >
                     <option value="">Select...</option>
-                    {PRIORITIES.map(priority => (
+                    {lanePriorities.map(priority => (
                       <option key={priority} value={priority}>{priority}</option>
                     ))}
                   </select>

@@ -3,7 +3,8 @@ import { X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { LookupField } from './LookupField';
 import { NewAccountModal, CreatedAccount } from './NewAccountModal';
-import { OPPORTUNITY_TYPES, QUOTE_PRIORITIES, EQUIPMENT_TYPES } from '../lib/constants';
+import { OPPORTUNITY_TYPES, QUOTE_PRIORITIES } from '../lib/constants';
+import { usePicklist, getPicklistDefault, loadPicklists } from '../lib/picklists';
 
 const DIRECT_CUSTOMER = 'Direct Customer';
 
@@ -53,6 +54,7 @@ export function NewQuoteModal({
   const [shipperList, setShipperList] = useState<ChildOption[]>([]);
   const [errors, setErrors] = useState<Record<string, boolean>>({});
   const [newAccount, setNewAccount] = useState<{ name: string; target: 'parent' | 'bco' } | null>(null);
+  const equipmentTypes = usePicklist('equipment_type');
 
   const partnerAccountOptions = accounts.map(a => a.account_name);
   const bcoOptions = accounts.filter(a => a.type === DIRECT_CUSTOMER).map(a => a.account_name);
@@ -64,6 +66,11 @@ export function NewQuoteModal({
   useEffect(() => {
     if (isOpen) {
       loadOptions();
+      // Preselects the list's default Equipment Type, when the administrator has set one
+      void loadPicklists().then(() => {
+        const defaultEquipment = getPicklistDefault('equipment_type');
+        if (defaultEquipment) setFormData(prev => (prev.equipment_type ? prev : { ...prev, equipment_type: defaultEquipment }));
+      });
     } else {
       setFormData({
         partner_account: '',
@@ -296,7 +303,7 @@ export function NewQuoteModal({
               className={`w-full px-3 py-2 text-sm border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.equipment_type ? 'border-red-500' : 'border-gray-300'}`}
             >
               <option value="">Select...</option>
-              {EQUIPMENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+              {equipmentTypes.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
             {errors.equipment_type && (
               <div className="text-red-600 text-xs mt-1">Required</div>

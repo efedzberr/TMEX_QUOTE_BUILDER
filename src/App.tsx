@@ -33,6 +33,7 @@ import { usePermissions } from './lib/permissions';
 import { QuoteStatusTimeTracking } from './components/QuoteStatusTimeTracking';
 import { formatDuration, getTimeMetrics } from './lib/timeTracking';
 import { allocateQuoteIdentifiers } from './lib/quoteNumbering';
+import { getPicklistDefault, applyLanePicklistDefaults } from './lib/picklists';
 
 function App() {
   const [viewMode, setViewMode] = useState<ViewMode>('home');
@@ -213,7 +214,7 @@ function App() {
         const { data: creatorProfile } = await supabase.from('user_profiles').select('display_name').eq('id', creatingUser.id).maybeSingle();
         if (creatorProfile?.display_name?.trim()) defaultOwner = creatorProfile.display_name.trim();
       }
-      const defaultMxRep = 'Alberto Paz';
+      const defaultMxRep = getPicklistDefault('mx_sales_rep') || 'Alberto Paz';
       const now = new Date().toISOString();
       const generatedQuoteName = buildQuoteName({
         mxSalesRep: defaultMxRep,
@@ -246,7 +247,7 @@ function App() {
           partner_account: quoteData.partner_account,
           priority: quoteData.priority,
           opportunity_type: quoteData.opportunity_type,
-          us_sales_rep: 'Connie Hills',
+          us_sales_rep: getPicklistDefault('us_sales_rep') || 'Connie Hills',
           mx_sales_rep: defaultMxRep,
           currency: 'USD',
           bill_to_customer: quoteData.bill_to_customer,
@@ -848,7 +849,7 @@ function App() {
     const { data, error } = await supabase
       .from('quote_lanes')
       .insert({
-        ...newLane,
+        ...applyLanePicklistDefaults(newLane),
         equipment_type: newLane.equipment_type || quoteEquipment,
         quote_id: quote.id,
         sort_order: nextSort + sortOffset,
@@ -867,7 +868,7 @@ function App() {
       const { data: lane2Data, error: lane2Error } = await supabase
         .from('quote_lanes')
         .insert({
-          ...newLane2,
+          ...applyLanePicklistDefaults(newLane2),
           equipment_type: newLane2.equipment_type || newLane.equipment_type || quoteEquipment,
           quote_id: quote.id,
           sort_order: nextSort + 1 + sortOffset,

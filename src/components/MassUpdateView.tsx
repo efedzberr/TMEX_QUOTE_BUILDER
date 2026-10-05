@@ -1,7 +1,8 @@
 import { useState, useMemo, useCallback } from 'react';
 import { ArrowLeft, ArrowRight, Zap, Check, Search, X, AlertTriangle, CheckCircle, XCircle, Loader2, Mail, ChevronDown, ChevronUp, History } from 'lucide-react';
 import { supabase, Quote, QuoteLane } from '../lib/supabase';
-import { EQUIPMENT_TYPES, OWNERS, formatCurrencyOrDash, buildQuoteName, CurrencyCode } from '../lib/constants';
+import { OWNERS, formatCurrencyOrDash, buildQuoteName, CurrencyCode } from '../lib/constants';
+import { usePicklist } from '../lib/picklists';
 import { generateReviewToken } from '../lib/customerPortalHelpers';
 import { LaneBadge } from './LaneBadge';
 import { allocateQuoteIdentifiers } from '../lib/quoteNumbering';
@@ -284,6 +285,7 @@ function FilterStep({ filters, setFilters, markets, lanes, selectedIds, loading,
   onSelectAll: () => void; onDeselectAll: () => void; onNext: () => void;
 }) {
   const upd = (key: keyof FilterState, val: string) => setFilters({ ...filters, [key]: val });
+  const equipmentTypes = usePicklist('equipment_type');
   const curr = 'USD' as CurrencyCode;
 
   return (
@@ -300,7 +302,7 @@ function FilterStep({ filters, setFilters, markets, lanes, selectedIds, loading,
             <FilterSelect label="Market" value={filters.market} onChange={v => upd('market', v)} options={[{ value: '', label: 'All Markets' }, ...markets.map(m => ({ value: m, label: m }))]} />
             <FilterSelect label="Service Type" value={filters.serviceType} onChange={v => upd('serviceType', v)} options={[{ value: '', label: 'All' }, { value: 'Loop', label: 'Loop' }, { value: 'Door to Door', label: 'Door to Door' }, { value: 'Domestic', label: 'Domestic' }]} />
             <FilterSelect label="Trip Type" value={filters.tripType} onChange={v => upd('tripType', v)} options={[{ value: '', label: 'All' }, { value: 'One Way', label: 'One Way' }, { value: 'Round Trip', label: 'Round Trip' }, { value: 'Circuit', label: 'Circuit' }]} />
-            <FilterSelect label="Equipment Type" value={filters.equipmentType} onChange={v => upd('equipmentType', v)} options={[{ value: '', label: 'All' }, ...EQUIPMENT_TYPES.map(e => ({ value: e, label: e }))]} />
+            <FilterSelect label="Equipment Type" value={filters.equipmentType} onChange={v => upd('equipmentType', v)} options={[{ value: '', label: 'All' }, ...equipmentTypes.map(e => ({ value: e, label: e }))]} />
           </div>
         </div>
 

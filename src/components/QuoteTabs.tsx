@@ -5,7 +5,8 @@ import { QuoteLanes } from './QuoteLanes';
 import { TermsConditionsTab } from './TermsConditionsTab';
 import { PdfQuoteTab } from './pdf/PdfQuoteTab';
 import { QuoteLane, Quote, supabase } from '../lib/supabase';
-import { EQUIPMENT_TYPES, CURRENCIES, CurrencyCode } from '../lib/constants';
+import { CURRENCIES, CurrencyCode } from '../lib/constants';
+import { usePicklist, getPicklistDefault, getPicklistOptions } from '../lib/picklists';
 
 interface QuoteTabsProps {
   lanes: QuoteLane[];
@@ -46,14 +47,15 @@ interface SelectedAccessorial extends GlobalAccessorial {
 const EMPTY_FORM = {
   name_en: '',
   name_es: '',
-  commodity: EQUIPMENT_TYPES[0],
+  commodity: 'Dry Van',
   unit_type: 'FLAT',
   default_rate: 0,
   notes: '',
 };
 
 function NewAccessorialModal({ onClose, onSaved }: { onClose: () => void; onSaved: (acc: GlobalAccessorial) => void }) {
-  const [form, setForm] = useState({ ...EMPTY_FORM });
+  const equipmentTypes = usePicklist('equipment_type');
+  const [form, setForm] = useState({ ...EMPTY_FORM, commodity: getPicklistDefault('equipment_type') || getPicklistOptions('equipment_type')[0] || EMPTY_FORM.commodity });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [dupError, setDupError] = useState('');
@@ -128,7 +130,7 @@ function NewAccessorialModal({ onClose, onSaved }: { onClose: () => void; onSave
               <label className="block text-sm font-medium text-gray-700 mb-1"><span className="text-red-500">*</span> Equipment Type</label>
               <select value={form.commodity} onChange={e => setForm(f => ({ ...f, commodity: e.target.value }))}
                 className={`w-full px-3 py-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.commodity ? 'border-red-500' : 'border-gray-300'}`}>
-                {EQUIPMENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                {equipmentTypes.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
             <div>

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ChevronDown, ChevronRight, X, Search, Check, Globe } from 'lucide-react';
 import { Quote, QuoteLane, supabase } from '../lib/supabase';
-import { EQUIPMENT_TYPES } from '../lib/constants';
+import { usePicklist } from '../lib/picklists';
 
 interface TermCondition {
   id: string;
@@ -22,7 +22,6 @@ interface TermsConditionsTabProps {
 }
 
 const TC_COUNTRIES = ['All', 'US', 'MX'];
-const TC_EQUIPMENT_OPTIONS = ['All', ...EQUIPMENT_TYPES];
 
 const LANG_LABELS = {
   EN: {
@@ -60,6 +59,7 @@ const LANG_LABELS = {
 } as const;
 
 export function TermsConditionsTab({ quote, lanes, locked, onUpdateQuote }: TermsConditionsTabProps) {
+  const equipmentTypes = usePicklist('equipment_type');
   const [allTerms, setAllTerms] = useState<TermCondition[]>([]);
   const [selected, setSelected] = useState<TermCondition[]>([]);
   const [loading, setLoading] = useState(true);
@@ -286,7 +286,7 @@ export function TermsConditionsTab({ quote, lanes, locked, onUpdateQuote }: Term
                 onChange={e => setBulkEquip(e.target.value)}
                 className="px-3 py-1.5 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
-                {TC_EQUIPMENT_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                {['All', ...equipmentTypes].map(t => <option key={t} value={t}>{t}</option>)}
               </select>
               <button
                 onClick={handleBulkSelect}

@@ -2,7 +2,8 @@ import { User, CheckCircle, X, Copy, Trash2, Calculator, Sigma, Globe as GlobeIc
 import { Quote, QuoteLane } from '../lib/supabase';
 import { useState, useEffect, useMemo } from 'react';
 import { LookupField } from './LookupField';
-import { MX_SALES_REPRESENTATIVES, US_SALES_REPRESENTATIVES, EQUIPMENT_TYPES, formatCurrency, CurrencyCode, buildQuoteName, OPPORTUNITY_TYPES, QUOTE_PRIORITIES } from '../lib/constants';
+import { formatCurrency, CurrencyCode, buildQuoteName, OPPORTUNITY_TYPES, QUOTE_PRIORITIES } from '../lib/constants';
+import { usePicklist } from '../lib/picklists';
 import { getDueStatus, formatLocalDate } from '../lib/dueStatus';
 import { DueStatusBadge } from './DueStatusBadge';
 import { CollapsibleSection } from './CollapsibleSection';
@@ -60,6 +61,9 @@ export function QuoteHeader({
   const [billToCustomers, setBillToCustomers] = useState<string[]>([]);
   const [validationErrors, setValidationErrors] = useState<Record<string, boolean>>({});
   const [accountCodeMap, setAccountCodeMap] = useState<Record<string, string>>({});
+  const mxSalesReps = usePicklist('mx_sales_rep', quote.mx_sales_rep);
+  const usSalesReps = usePicklist('us_sales_rep', quote.us_sales_rep);
+  const equipmentTypes = usePicklist('equipment_type', quote.type_of_service);
 
   const [editedData, setEditedData] = useState({
     quote_number: quote.quote_number,
@@ -518,7 +522,7 @@ export function QuoteHeader({
                 onChange={(e) => handleChange('mx_sales_rep', e.target.value)}
                 className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
               >
-                {MX_SALES_REPRESENTATIVES.map((rep) => (
+                {mxSalesReps.map((rep) => (
                   <option key={rep} value={rep}>
                     {rep}
                   </option>
@@ -536,7 +540,7 @@ export function QuoteHeader({
                 onChange={(e) => handleChange('us_sales_rep', e.target.value)}
                 className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
               >
-                {US_SALES_REPRESENTATIVES.map((rep) => (
+                {usSalesReps.map((rep) => (
                   <option key={rep} value={rep}>
                     {rep}
                   </option>
@@ -711,7 +715,7 @@ export function QuoteHeader({
                 onChange={(e) => handleChange('type_of_service', e.target.value)}
                 className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
               >
-                {EQUIPMENT_TYPES.map((type) => (
+                {equipmentTypes.map((type) => (
                   <option key={type} value={type}>
                     {type}
                   </option>
