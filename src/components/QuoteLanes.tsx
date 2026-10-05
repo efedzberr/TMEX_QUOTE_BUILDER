@@ -99,7 +99,17 @@ export function QuoteLanes({
   }, [(quote as any)?.partner_account_name, (quote as any)?.account_name]);
   const [splitBillingAddLanes, setSplitBillingAddLanes] = useState<Partial<QuoteLane>[]>([]);
   const [showEquipmentDropdown, setShowEquipmentDropdown] = useState(false);
-  const equipmentTypes = usePicklist('equipment_type');
+  const quoteEquipmentType = quote?.type_of_service || '';
+  const equipmentTypes = usePicklist('equipment_type', quoteEquipmentType);
+  const equipmentMenuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!showEquipmentDropdown) return;
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (equipmentMenuRef.current && !equipmentMenuRef.current.contains(event.target as Node)) setShowEquipmentDropdown(false);
+    };
+    document.addEventListener('mousedown', closeOnOutsideClick);
+    return () => document.removeEventListener('mousedown', closeOnOutsideClick);
+  }, [showEquipmentDropdown]);
   const [isDetailView, setIsDetailView] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<{ laneId: string; linkedLaneId?: string; splitBillingGroup?: string; splitBillingCount?: number } | null>(null);
   const [showServiceTypeModal, setShowServiceTypeModal] = useState(false);
@@ -1531,6 +1541,7 @@ export function QuoteLanes({
 
   const handleGlobalEquipmentChange = (type: string) => {
     setShowEquipmentDropdown(false);
+    if (locked || type === quoteEquipmentType) return;
     if (onGlobalEquipmentTypeChange) {
       onGlobalEquipmentTypeChange(type);
     }
@@ -2067,24 +2078,27 @@ export function QuoteLanes({
           <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">{lanes.length} {lanes.length === 1 ? 'lane' : 'lanes'}</span>
         </div>
         <div className="flex items-center gap-3">
-          <div className="relative">
+          <div className="relative" ref={equipmentMenuRef}>
             <button
-              onClick={() => setShowEquipmentDropdown(!showEquipmentDropdown)}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-50 transition-colors shadow-sm"
+              onClick={() => { if (!locked) setShowEquipmentDropdown(!showEquipmentDropdown); }}
+              disabled={locked}
+              title={locked ? 'This quote is locked' : 'Default equipment for new lanes. Changing it updates the quote and all its lanes.'}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-50 transition-colors shadow-sm disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed"
             >
               <Truck className="w-4 h-4" />
-              <span>Equipment Type</span>
-              <ChevronDown className="w-4 h-4" />
+              <span>Equipment Type: <span className="font-semibold text-gray-900">{quoteEquipmentType || 'Not set'}</span></span>
+              {locked ? <LockIcon className="w-3.5 h-3.5" /> : <ChevronDown className="w-4 h-4" />}
             </button>
-            {showEquipmentDropdown && (
-              <div className="absolute right-0 mt-2 w-56 bg-white border border-gray-200 rounded-md shadow-lg z-10">
+            {showEquipmentDropdown && !locked && (
+              <div className="absolute right-0 mt-2 w-64 max-h-80 overflow-y-auto bg-white border border-gray-200 rounded-md shadow-lg z-50">
                 {equipmentTypes.map((type) => (
                   <button
                     key={type}
                     onClick={() => handleGlobalEquipmentChange(type)}
-                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors first:rounded-t-md last:rounded-b-md"
+                    className={`flex items-center justify-between w-full text-left px-4 py-2 text-sm hover:bg-blue-50 hover:text-blue-600 transition-colors first:rounded-t-md last:rounded-b-md ${type === quoteEquipmentType ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'}`}
                   >
-                    {type}
+                    <span>{type}</span>
+                    {type === quoteEquipmentType && <Check className="w-4 h-4" />}
                   </button>
                 ))}
               </div>

@@ -45,6 +45,7 @@ function App() {
   const [showDetails, setShowDetails] = useState<QuoteLane | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const [showDeleteQuoteConfirm, setShowDeleteQuoteConfirm] = useState(false);
+  const [pendingEquipmentType, setPendingEquipmentType] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('success');
   const [showNewQuoteForm, setShowNewQuoteForm] = useState(false);
@@ -611,8 +612,17 @@ function App() {
     }
   };
 
-  const handleUpdateQuote = async (updates: Partial<Quote>) => {
+  const handleUpdateQuote = async (incoming: Partial<Quote>) => {
     if (!quote) return;
+
+    // An Equipment Type change on a quote that already has lanes also changes every lane,
+    // so it is taken out of this save and confirmed with the user first.
+    let updates = incoming;
+    if (incoming.type_of_service !== undefined && incoming.type_of_service !== quote.type_of_service && lanes.length > 0) {
+      const { type_of_service: requestedEquipment, ...rest } = incoming;
+      updates = rest;
+      if (requestedEquipment) setPendingEquipmentType(requestedEquipment);
+    }
 
     const { error } = await supabase
       .from('quotes')
@@ -1495,24 +1505,51 @@ function App() {
     setToastMessage(`All rates converted to ${newCurrency}`);
   };
 
-  const handleGlobalEquipmentTypeChange = async (equipmentType: string) => {
-    if (!quote || lanes.length === 0) return;
+  /** Sets the quote's Equipment Type (the default for new lanes) and aligns every existing lane to it. */
+  const applyQuoteEquipmentType = async (equipmentType: string) => {
+    if (!quote) return;
 
-    for (const lane of lanes) {
-      await supabase
-        .from('quote_lanes')
-        .update({ equipment_type: equipmentType })
-        .eq('id', lane.id);
-    }
-
-    await supabase
+    const { error: quoteError } = await supabase
       .from('quotes')
       .update({ type_of_service: equipmentType })
       .eq('id', quote.id);
+    if (quoteError) {
+      setToastMessage(`Error updating Equipment Type: ${quoteError.message}`);
+      setToastType('error');
+      return;
+    }
 
-    setLanes(lanes.map(lane => ({ ...lane, equipment_type: equipmentType })));
+    if (lanes.length > 0) {
+      const { error: lanesError } = await supabase
+        .from('quote_lanes')
+        .update({ equipment_type: equipmentType, type_of_service: equipmentType })
+        .eq('quote_id', quote.id);
+      if (lanesError) {
+        setQuote({ ...quote, type_of_service: equipmentType });
+        setToastMessage(`Equipment Type saved on the quote, but the lanes could not be updated: ${lanesError.message}`);
+        setToastType('error');
+        return;
+      }
+    }
+
+    setLanes(lanes.map(lane => ({ ...lane, equipment_type: equipmentType, type_of_service: equipmentType })));
     setQuote({ ...quote, type_of_service: equipmentType });
-    setToastMessage(`Equipment Type set to ${equipmentType} for all lanes`);
+    await reloadHistory(quote.id);
+    logActivity('Quote Saved', { object: 'quote', recordId: quote.id, recordLabel: quote.quote_number, details: `Equipment Type: ${equipmentType}` });
+    setToastMessage(lanes.length > 0
+      ? `Equipment Type set to ${equipmentType} for the quote and its ${lanes.length} ${lanes.length === 1 ? 'lane' : 'lanes'}`
+      : `Equipment Type set to ${equipmentType}`);
+    setToastType('success');
+  };
+
+  const handleGlobalEquipmentTypeChange = async (equipmentType: string) => {
+    if (!quote || equipmentType === quote.type_of_service) return;
+    // With lanes, the change affects all of them: ask first. Without lanes, just save the default.
+    if (lanes.length > 0) {
+      setPendingEquipmentType(equipmentType);
+      return;
+    }
+    await applyQuoteEquipmentType(equipmentType);
   };
 
   if (viewMode === 'admin') {
@@ -1877,6 +1914,17 @@ function App() {
           message="Are you sure you want to delete this lane? This action cannot be undone."
           onConfirm={() => handleDeleteLane(showDeleteConfirm)}
           onCancel={() => setShowDeleteConfirm(null)}
+        />
+      )}
+
+      {pendingEquipmentType && quote && (
+        <ConfirmModal
+          title="Change Equipment Type"
+          message={`This will change the Equipment Type of the quote and of all its ${lanes.length} ${lanes.length === 1 ? 'lane' : 'lanes'} to "${pendingEquipmentType}", including lanes that currently have a different equipment. Do you want to continue?`}
+          confirmLabel="Change all lanes"
+          tone="primary"
+          onConfirm={() => { const next = pendingEquipmentType; setPendingEquipmentType(null); void applyQuoteEquipmentType(next); }}
+          onCancel={() => setPendingEquipmentType(null)}
         />
       )}
 

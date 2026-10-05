@@ -1016,7 +1016,11 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
       };
     }
 
-    await onSave(lane1Payload, lane2Payload);
+    // The lane keeps its equipment in two columns; keep them in step when it is changed here
+    const lane1WithEquipment = lane1Payload.type_of_service
+      ? { ...lane1Payload, equipment_type: lane1Payload.type_of_service }
+      : lane1Payload;
+    await onSave(lane1WithEquipment, lane2Payload);
     setIsDirty(false);
     if (!skipClose) {
       onClose();
