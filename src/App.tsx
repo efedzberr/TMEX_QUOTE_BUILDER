@@ -178,6 +178,7 @@ function App() {
     bco_partner: string;
     priority: string;
     opportunity_type: string;
+    equipment_type: string;
   }) => {
     setLoading(true);
     try {
@@ -241,7 +242,7 @@ function App() {
           mx_rate: 0,
           border_crossing_fee: 0,
           units: 'Miles',
-          type_of_service: 'Dry Van',
+          type_of_service: quoteData.equipment_type || 'Dry Van',
           partner_account: quoteData.partner_account,
           priority: quoteData.priority,
           opportunity_type: quoteData.opportunity_type,
@@ -804,6 +805,7 @@ function App() {
         .from('quote_lanes')
         .insert({
           ...laneData,
+          equipment_type: laneData.equipment_type || quote.type_of_service || 'Dry Van',
           quote_id: quote.id,
           sort_order: nextSort + i,
           is_primary_lane: lane.split_billing_index === 1,
@@ -839,6 +841,7 @@ function App() {
     const tripType = newLane.trip_type || 'One Way';
 
     const nextSort = await getNextSortOrder(quote.id);
+    const quoteEquipment = quote.type_of_service || 'Dry Van';
 
     const sortOffset = newLane.split_billing_index ? (newLane.split_billing_index - 1) : 0;
 
@@ -846,6 +849,7 @@ function App() {
       .from('quote_lanes')
       .insert({
         ...newLane,
+        equipment_type: newLane.equipment_type || quoteEquipment,
         quote_id: quote.id,
         sort_order: nextSort + sortOffset,
         is_primary_lane: !isSplitBilling || newLane.split_billing_index === 1,
@@ -864,6 +868,7 @@ function App() {
         .from('quote_lanes')
         .insert({
           ...newLane2,
+          equipment_type: newLane2.equipment_type || newLane.equipment_type || quoteEquipment,
           quote_id: quote.id,
           sort_order: nextSort + 1 + sortOffset,
           is_primary_lane: false,
@@ -890,7 +895,7 @@ function App() {
         border_crossing_rate: isDomesticService ? 0 : (newLane2?.border_crossing_rate || newLane.border_crossing_rate || 0),
         us_rate: newLane2?.us_rate || 0,
         mx_rate: isDomesticService ? 0 : (newLane2?.mx_rate || newLane.mx_rate || 0),
-        equipment_type: newLane2?.equipment_type || newLane.equipment_type || 'Dry Van',
+        equipment_type: newLane2?.equipment_type || newLane.equipment_type || quoteEquipment,
         sort_order: nextSort + 1,
         effective_from_date: newLane2?.effective_from_date || newLane.effective_from_date || '2026-02-01',
         effective_to_date: newLane2?.effective_to_date || newLane.effective_to_date || '2026-12-31',
@@ -939,7 +944,7 @@ function App() {
         border_crossing_rate: isDomesticCircuit ? 0 : (newLane2?.border_crossing_rate || newLane.border_crossing_rate || 0),
         us_rate: newLane2?.us_rate || 0,
         mx_rate: isDomesticCircuit ? 0 : (newLane2?.mx_rate || 0),
-        equipment_type: newLane2?.equipment_type || newLane.equipment_type || 'Dry Van',
+        equipment_type: newLane2?.equipment_type || newLane.equipment_type || quoteEquipment,
         sort_order: nextSort + 1,
         effective_from_date: newLane2?.effective_from_date || newLane.effective_from_date || '2026-02-01',
         effective_to_date: newLane2?.effective_to_date || newLane.effective_to_date || '2026-12-31',

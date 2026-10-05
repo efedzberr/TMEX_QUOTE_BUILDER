@@ -9,6 +9,8 @@ interface LookupFieldProps {
   label?: string;
   icon?: React.ReactNode;
   onCreateNew?: (value: string) => Promise<void>;
+  /** When set, "Add" hands the typed name to the parent (which opens its own form) instead of creating directly */
+  onRequestCreate?: (value: string) => void;
 }
 
 export function LookupField({
@@ -19,6 +21,7 @@ export function LookupField({
   label,
   icon,
   onCreateNew,
+  onRequestCreate,
 }: LookupFieldProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -33,7 +36,7 @@ export function LookupField({
     (o) => o.toLowerCase() === searchTerm.toLowerCase()
   );
 
-  const canCreate = onCreateNew && searchTerm.trim().length > 0 && !exactMatch;
+  const canCreate = (onCreateNew || onRequestCreate) && searchTerm.trim().length > 0 && !exactMatch;
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -54,6 +57,13 @@ export function LookupField({
   };
 
   const handleCreate = async () => {
+    if (onRequestCreate && searchTerm.trim()) {
+      const requested = searchTerm.trim();
+      setIsOpen(false);
+      setSearchTerm('');
+      onRequestCreate(requested);
+      return;
+    }
     if (!onCreateNew || !searchTerm.trim()) return;
     setCreating(true);
     await onCreateNew(searchTerm.trim());

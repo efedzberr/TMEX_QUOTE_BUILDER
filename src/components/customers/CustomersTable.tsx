@@ -76,7 +76,7 @@ export function CustomersTable() {
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<Account | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [form, setForm] = useState({ account_name: '', account_code: '', type: 'Direct Customer', status: 'Active', customer_email: '', customer_fuel_program: false, fuel_program_type: 'FRPM', fuel_rate_per_mile: 0, fuel_program_method: 'per_mile' });
+  const [form, setForm] = useState({ account_name: '', account_code: '', type: '', status: 'Active', customer_email: '', customer_fuel_program: false, fuel_program_type: 'FRPM', fuel_rate_per_mile: 0, fuel_program_method: 'per_mile' });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
 
@@ -100,7 +100,7 @@ export function CustomersTable() {
 
   function openAdd() {
     setEditing(null);
-    setForm({ account_name: '', account_code: '', type: 'Direct Customer', status: 'Active', customer_email: '', customer_fuel_program: false, fuel_program_type: 'FRPM', fuel_rate_per_mile: 0, fuel_program_method: 'per_mile' });
+    setForm({ account_name: '', account_code: '', type: '', status: 'Active', customer_email: '', customer_fuel_program: false, fuel_program_type: 'FRPM', fuel_rate_per_mile: 0, fuel_program_method: 'per_mile' });
     setErrors({});
     setShowModal(true);
   }
@@ -115,7 +115,7 @@ export function CustomersTable() {
   function validate() {
     const e: Record<string, string> = {};
     if (!form.account_name.trim()) e.account_name = 'Required';
-    if (!form.account_code.trim()) e.account_code = 'Required';
+    if (!ACCOUNT_TYPES.includes(form.type)) e.type = 'Required';
     if (form.customer_fuel_program && (!form.fuel_rate_per_mile || form.fuel_rate_per_mile <= 0)) {
       e.fuel_rate_per_mile = 'Fuel Rate Per Mile is required when Customer Fuel Program is enabled';
     }
@@ -130,16 +130,37 @@ export function CustomersTable() {
     if (editing) {
       const { error } = await supabase.from('accounts').update({ ...payload, updated_at: new Date().toISOString() }).eq('id', editing.id);
       if (error) {
-        setErrors({ account_name: error.message });
+        setErrors(error.message.includes('Account Code') ? { account_code: error.message } : { account_name: error.message });
         setSaving(false);
         return;
       }
       setAccounts(prev => prev.map(a => a.id === editing.id ? { ...a, ...payload } : a));
     } else {
-      const { data, error } = await supabase.from('accounts').insert(payload).select().single();
+      // Creates the account plus its Bill To and Shipper; the database rejects duplicates
+      const { data: created, error: createError } = await supabase.rpc('create_account_with_children', {
+        p_account_name: form.account_name,
+        p_type: form.type,
+        p_account_code: form.account_code,
+        p_status: form.status,
+        p_customer_email: form.customer_email,
+      });
+      if (createError || !created) {
+        const message = createError?.message || 'The account could not be created.';
+        setErrors(message.includes('Account Code') ? { account_code: message } : { account_name: message });
+        setSaving(false);
+        return;
+      }
+      const newId = (created as { id: string }).id;
+      const { data, error } = await supabase.from('accounts').update({
+        customer_fuel_program: form.customer_fuel_program,
+        fuel_program_type: form.fuel_program_type,
+        fuel_rate_per_mile: form.fuel_rate_per_mile,
+        fuel_program_method: form.fuel_program_method,
+      }).eq('id', newId).select().single();
       if (error) {
         setErrors({ account_name: error.message });
         setSaving(false);
+        await load();
         return;
       }
       if (data) setAccounts(prev => [data, ...prev]);
@@ -228,17 +249,21 @@ export function CustomersTable() {
                 {errors.account_name && <div className="text-xs text-red-500 mt-0.5">{errors.account_name}</div>}
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1"><span className="text-red-500">*</span> Account Code</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Account Code</label>
                 <input type="text" value={form.account_code} onChange={e => setForm(f => ({ ...f, account_code: e.target.value }))}
+                  placeholder="Optional — leave empty for prospects"
                   className={`w-full px-3 py-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.account_code ? 'border-red-500' : 'border-gray-300'}`} />
                 {errors.account_code && <div className="text-xs text-red-500 mt-0.5">{errors.account_code}</div>}
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1"><span className="text-red-500">*</span> Type</label>
                 <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-                  {ACCOUNT_TYPES.map(t => <option key={t}>{t}</option>)}
+                  className={`w-full px-3 py-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.type ? 'border-red-500' : 'border-gray-300'}`}>
+                  <option value="">Select...</option>
+                  {ACCOUNT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
+                {errors.type && <div className="text-xs text-red-500 mt-0.5">{errors.type}</div>}
+                {!editing && <div className="text-xs text-gray-500 mt-1">A Bill To and a Shipper are created automatically for the new account.</div>}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
