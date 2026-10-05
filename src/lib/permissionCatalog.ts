@@ -2,7 +2,7 @@ import type { ViewMode } from '../components/Sidebar';
 
 export type PermissionKey =
   | 'module.quotes' | 'module.mass_update' | 'module.customers' | 'module.dashboards' | 'module.import' | 'module.kpi_sets'
-  | 'admin.partner_accounts' | 'admin.bill_to' | 'admin.shippers' | 'admin.cities' | 'admin.global_variables'
+  | 'admin.partner_accounts' | 'admin.bill_to' | 'admin.shippers' | 'admin.cities' | 'admin.global_variables' | 'admin.picklists'
   | 'admin.border_crossings' | 'admin.accessorials' | 'admin.terms_conditions'
   | 'admin.account_lanes' | 'admin.cost_structure' | 'admin.market_information' | 'admin.sla' | 'admin.users' | 'admin.profiles' | 'admin.roles'
   | 'admin.password_policies' | 'admin.security_logs'
@@ -52,6 +52,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: 'admin.shippers', label: 'Shippers', description: 'Admin → Shippers tab', levels: ['view', 'edit'] },
       { key: 'admin.cities', label: 'Cities', description: 'Admin → Cities tab', levels: ['view', 'edit'] },
       { key: 'admin.global_variables', label: 'Global Variables', description: 'Admin → Global Variables tab', levels: ['view', 'edit'] },
+      { key: 'admin.picklists', label: 'Global Picklists', description: 'Admin → Global Picklists (add values, order, default)', levels: ['view', 'edit'] },
       { key: 'admin.border_crossings', label: 'Border Crossing Cities', description: 'Admin → Border Crossing Cities tab', levels: ['view', 'edit'] },
       { key: 'admin.accessorials', label: 'Accessorials', description: 'Admin → Accessorials tab', levels: ['view', 'edit'] },
       { key: 'admin.terms_conditions', label: 'Terms & Conditions', description: 'Admin → Terms & Conditions tab', levels: ['view', 'edit'] },

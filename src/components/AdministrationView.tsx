@@ -3,7 +3,6 @@ import { Plus, Pencil, Trash2, Search, X, Check, Copy, ChevronDown } from 'lucid
 import { supabase } from '../lib/supabase';
 import { CustomersTable } from './customers/CustomersTable';
 import { SystemInformation } from './SystemInformation';
-import { EQUIPMENT_TYPES } from '../lib/constants';
 import { AccountLanesTab } from './admin/AccountLanesTab';
 import { CostStructureTab } from './admin/CostStructureTab';
 import { MarketInformationTab } from './admin/MarketInformationTab';
@@ -16,11 +15,13 @@ import { UpdateLogTab } from './admin/UpdateLogTab';
 import { SecurityTab } from './admin/SecurityTab';
 import { PasswordPoliciesTab } from './admin/PasswordPoliciesTab';
 import { ObjectPage } from './admin/ObjectPage';
+import { GlobalPicklistsTab } from './admin/GlobalPicklistsTab';
+import { usePicklist, getPicklistDefault } from '../lib/picklists';
 import { usePermissions } from '../lib/permissions';
 import type { PermissionKey } from '../lib/permissionCatalog';
 
 
-type AdminTab = 'accounts' | 'bill_to' | 'shippers' | 'cities' | 'global_variables' | 'border_crossings' | 'accessorials' | 'terms_conditions' | 'account_lanes' | 'cost_structure' | 'market_information' | 'sla' | 'users' | 'profiles' | 'roles' | 'wolke' | 'update_log' | 'quotes_object' | 'quote_lanes_object' | 'security_logs' | 'password_policies';
+type AdminTab = 'accounts' | 'bill_to' | 'shippers' | 'cities' | 'global_variables' | 'picklists' | 'border_crossings' | 'accessorials' | 'terms_conditions' | 'account_lanes' | 'cost_structure' | 'market_information' | 'sla' | 'users' | 'profiles' | 'roles' | 'wolke' | 'update_log' | 'quotes_object' | 'quote_lanes_object' | 'security_logs' | 'password_policies';
 
 
 interface BillTo {
@@ -1079,9 +1080,10 @@ interface AccessorialRecord {
 }
 
 const ACCESSORIAL_COUNTRIES = ['US', 'MX', 'CA', 'Both'];
-const EMPTY_ACC_FORM = { name_en: '', name_es: '', commodity: EQUIPMENT_TYPES[0], unit_type: 'FLAT', default_rate: 0, notes: '', country: 'Both' };
+const EMPTY_ACC_FORM = { name_en: '', name_es: '', commodity: 'Dry Van', unit_type: 'FLAT', default_rate: 0, notes: '', country: 'Both' };
 
 function ManageAccessorials() {
+  const equipmentTypes = usePicklist('equipment_type');
   const [items, setItems] = useState<AccessorialRecord[]>([]);
   const [search, setSearch] = useState('');
   const [equipFilter, setEquipFilter] = useState('All');
@@ -1111,7 +1113,7 @@ function ManageAccessorials() {
 
   function openAdd() {
     setEditing(null);
-    setForm({ ...EMPTY_ACC_FORM });
+    setForm({ ...EMPTY_ACC_FORM, commodity: getPicklistDefault('equipment_type') || equipmentTypes[0] || EMPTY_ACC_FORM.commodity });
     setErrors({});
     setDupError('');
     setShowModal(true);
@@ -1119,7 +1121,7 @@ function ManageAccessorials() {
 
   function openEdit(item: AccessorialRecord) {
     setEditing(item);
-    setForm({ name_en: item.name_en, name_es: item.name_es || '', commodity: item.commodity || EQUIPMENT_TYPES[0], unit_type: item.unit_type || 'FLAT', default_rate: item.default_rate || 0, notes: item.notes || '', country: item.country || 'Both' });
+    setForm({ name_en: item.name_en, name_es: item.name_es || '', commodity: item.commodity || equipmentTypes[0], unit_type: item.unit_type || 'FLAT', default_rate: item.default_rate || 0, notes: item.notes || '', country: item.country || 'Both' });
     setErrors({});
     setDupError('');
     setShowModal(true);
@@ -1127,7 +1129,7 @@ function ManageAccessorials() {
 
   function openClone(item: AccessorialRecord) {
     setEditing(null);
-    setForm({ name_en: `Copy of ${item.name_en}`, name_es: item.name_es || '', commodity: item.commodity || EQUIPMENT_TYPES[0], unit_type: item.unit_type || 'FLAT', default_rate: item.default_rate || 0, notes: item.notes || '', country: item.country || 'Both' });
+    setForm({ name_en: `Copy of ${item.name_en}`, name_es: item.name_es || '', commodity: item.commodity || equipmentTypes[0], unit_type: item.unit_type || 'FLAT', default_rate: item.default_rate || 0, notes: item.notes || '', country: item.country || 'Both' });
     setErrors({});
     setDupError('');
     setShowModal(true);
@@ -1193,7 +1195,7 @@ function ManageAccessorials() {
             <select value={equipFilter} onChange={e => setEquipFilter(e.target.value)}
               className="pl-3 pr-8 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 appearance-none">
               <option value="All">All Equipment Types</option>
-              {EQUIPMENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+              {equipmentTypes.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
             <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
           </div>
@@ -1285,7 +1287,7 @@ function ManageAccessorials() {
                   <label className="block text-sm font-medium text-gray-700 mb-1"><span className="text-red-500">*</span> Equipment Type</label>
                   <select value={form.commodity} onChange={e => setForm(f => ({ ...f, commodity: e.target.value }))}
                     className={`w-full px-3 py-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.commodity ? 'border-red-500' : 'border-gray-300'}`}>
-                    {EQUIPMENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                    {equipmentTypes.map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
                   {errors.commodity && <div className="text-xs text-red-500 mt-0.5">{errors.commodity}</div>}
                 </div>
@@ -1343,7 +1345,6 @@ function ManageAccessorials() {
 }
 
 const TC_COUNTRIES = ['US', 'MX', 'All'];
-const TC_EQUIPMENT_TYPES = ['All', ...EQUIPMENT_TYPES];
 const TC_TYPES = ['Note', 'T&C', 'Disclaimer'];
 const EMPTY_TC_FORM = { name_en: '', name_es: '', description_en: '', description_es: '', country: 'All', equipment_type: 'All', active: true, Type: 'T&C' };
 
@@ -1360,6 +1361,7 @@ interface TermConditionRecord {
 }
 
 function ManageTermsConditions() {
+  const equipmentTypes = usePicklist('equipment_type');
   const [items, setItems] = useState<TermConditionRecord[]>([]);
   const [search, setSearch] = useState('');
   const [countryFilter, setCountryFilter] = useState('All');
@@ -1512,7 +1514,7 @@ function ManageTermsConditions() {
             <select value={equipFilter} onChange={e => setEquipFilter(e.target.value)}
               className="pl-3 pr-8 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 appearance-none">
               <option value="All">All Equipment Types</option>
-              {EQUIPMENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+              {equipmentTypes.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
             <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
           </div>
@@ -1636,7 +1638,7 @@ function ManageTermsConditions() {
                   <label className="block text-sm font-medium text-gray-700 mb-1"><span className="text-red-500">*</span> Equipment Type</label>
                   <select value={form.equipment_type} onChange={e => setForm(f => ({ ...f, equipment_type: e.target.value }))}
                     className={`w-full px-3 py-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.equipment_type ? 'border-red-500' : 'border-gray-300'}`}>
-                    {TC_EQUIPMENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                    {['All', ...equipmentTypes].map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
                   {errors.equipment_type && <div className="text-xs text-red-500 mt-0.5">{errors.equipment_type}</div>}
                 </div>
@@ -1703,6 +1705,7 @@ const MENU: MenuSection[] = [
   {
     id: 'pricing_configuration', label: 'Pricing Configuration', items: [
       { id: 'global_variables', label: 'Global Variables', permission: 'admin.global_variables' },
+      { id: 'picklists', label: 'Global Picklists', permission: 'admin.picklists' },
       { id: 'cost_structure', label: 'Cost Structure', permission: 'admin.cost_structure' },
       { id: 'market_information', label: 'Market Information', permission: 'admin.market_information' },
       { id: 'accessorials', label: 'Accessorials', permission: 'admin.accessorials' },
@@ -1895,6 +1898,7 @@ export function AdministrationView() {
               ) : (
                 <>
                   {activeTab === 'global_variables' && <ManageGlobalVariables />}
+                  {activeTab === 'picklists' && <GlobalPicklistsTab />}
                   {activeTab === 'accessorials' && <ManageAccessorials />}
                   {activeTab === 'terms_conditions' && <ManageTermsConditions />}
                   {activeTab === 'cost_structure' && <CostStructureTab onToast={handleToast} />}

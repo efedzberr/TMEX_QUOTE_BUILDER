@@ -4,6 +4,8 @@ import { supabase } from '../../lib/supabase';
 import { adminObjectFor } from '../../lib/adminObjectCatalog';
 import { usePermissions } from '../../lib/permissions';
 import { HistoryTrackingTab } from './HistoryTrackingTab';
+import { PicklistDef, picklistForField } from '../../lib/picklists';
+import { PicklistValuesModal } from './PicklistValuesModal';
 
 interface ObjectPageProps {
   objectId: string;
@@ -18,6 +20,7 @@ export function ObjectPage({ objectId, children }: ObjectPageProps) {
   const showHistoryTab = !!def?.historyTracking && can('quote.field_history_config');
   const [tab, setTab] = useState<ObjectTab>(def?.fieldsOnly ? 'fields' : 'content');
   const [count, setCount] = useState<number | null>(null);
+  const [openPicklist, setOpenPicklist] = useState<{ def: PicklistDef; context: string } | null>(null);
 
   useEffect(() => {
     setTab(def?.fieldsOnly ? 'fields' : 'content');
@@ -83,18 +86,36 @@ export function ObjectPage({ objectId, children }: ObjectPageProps) {
               </tr>
             </thead>
             <tbody>
-              {def.fields.map(f => (
+              {def.fields.map(f => {
+                const picklist = picklistForField(objectId, f.column);
+                return (
                 <tr key={f.column} className="border-b border-gray-100 last:border-b-0 hover:bg-gray-50">
                   <td className="px-4 py-2.5 text-gray-900">{f.label}</td>
                   <td className="px-4 py-2.5 font-mono text-xs text-gray-500">{f.column}</td>
-                  <td className="px-4 py-2.5"><span className="inline-block px-2 py-0.5 text-xs rounded-full bg-gray-50 border border-gray-200 text-gray-600">{f.type}</span></td>
+                  <td className="px-4 py-2.5">
+                    {picklist ? (
+                      <button
+                        onClick={() => setOpenPicklist({ def: picklist, context: `${def.label} · ${f.label}` })}
+                        title="View picklist values"
+                        className="inline-block px-2 py-0.5 text-xs rounded-full bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 transition-colors"
+                      >
+                        Picklist
+                      </button>
+                    ) : (
+                      <span className="inline-block px-2 py-0.5 text-xs rounded-full bg-gray-50 border border-gray-200 text-gray-600">{f.type}</span>
+                    )}
+                  </td>
                   <td className="px-4 py-2.5">{f.required ? <span className="text-red-600 font-medium">Yes</span> : <span className="text-gray-400">No</span>}</td>
                   <td className="px-4 py-2.5 text-xs text-gray-500">{f.notes || ''}</td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
+      )}
+      {openPicklist && (
+        <PicklistValuesModal def={openPicklist.def} context={openPicklist.context} onClose={() => setOpenPicklist(null)} />
       )}
     </div>
   );
