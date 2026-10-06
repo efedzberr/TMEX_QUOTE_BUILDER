@@ -1,7 +1,7 @@
 import { supabase } from './supabase';
 import type { QuoteLane } from './supabase';
 
-interface CityRef { id: string; country_code: string | null }
+interface CityRef { id: string; country_code: string | null; is_border_crossing_city?: boolean | null }
 
 export interface LaneMilesResult {
   us_miles: number | null;
@@ -13,12 +13,25 @@ type RouteLike = Pick<QuoteLane, 'origin_city' | 'destination_city' | 'border_cr
 
 const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
 
+/**
+ * Split billing segment that carries no border crossing of its own ("N/A"): the crossing is billed
+ * on another lane of the group, so this lane is measured directly from its origin to its destination.
+ */
+export function isDirectSplitBillingLeg(l: Partial<RouteLike> | null | undefined): boolean {
+  if (!l || !l.split_billing_group) return false;
+  const st = l.service_type || '';
+  if (st === 'Domestic' || st === 'Loop' || l.border_crossing_only) return false;
+  const b = norm(l.border_crossing);
+  return !b || b === 'n/a';
+}
+
 /** Stable key of everything that determines the lane's miles. Empty string = route not complete. */
 export function routeSignature(l: Partial<RouteLike> | null | undefined): string {
   if (!l) return '';
   const st = l.service_type || '';
   const o = norm(l.origin_city), d = norm(l.destination_city), b = norm(l.border_crossing);
   if (!o || !d) return '';
+  if (isDirectSplitBillingLeg(l)) return [st, o, d, 'direct'].join('|');
   const needsCrossing = st !== 'Domestic';
   if (needsCrossing && (!b || b === 'n/a')) return '';
   return [st, o, d, needsCrossing ? b : '', l.border_crossing_only ? 'bco' : ''].join('|');
@@ -29,7 +42,7 @@ async function resolveCity(cityText: string | null | undefined): Promise<CityRef
   if (!text || text.toUpperCase() === 'N/A') return null;
   const { data, error } = await supabase
     .from('cities')
-    .select('id, country_code')
+    .select('id, country_code, is_border_crossing_city')
     .ilike('city_full_name', text)
     .limit(1);
   if (error || !data || data.length === 0) return null;
@@ -66,6 +79,22 @@ export async function computeLaneMiles(l: Partial<RouteLike>): Promise<LaneMiles
       if (m == null) result.notes.push('Distance could not be calculated; enter the miles manually.');
       else result.us_miles = m;
     }
+    return result;
+  }
+
+  if (isDirectSplitBillingLeg(l)) {
+    if (!origin || !destination) return result;
+    const mexican = isMX(origin) && isMX(destination);
+    if (!mexican && (isMX(origin) || isMX(destination))) {
+      result.notes.push('This split billing lane crosses the border but has no border crossing; miles not filled.');
+      return result;
+    }
+    // Same order as a regular lane (city first, border city second) so the stored distances are reused
+    const [from, to] = origin.is_border_crossing_city && !destination.is_border_crossing_city ? [destination, origin] : [origin, destination];
+    const m = await getLegMiles(from.id, to.id);
+    if (m == null) result.notes.push('Distance could not be calculated; enter the miles manually.');
+    else if (mexican) result.mx_miles = m;
+    else result.us_miles = m;
     return result;
   }
 
