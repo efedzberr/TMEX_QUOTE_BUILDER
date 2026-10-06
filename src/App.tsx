@@ -34,6 +34,9 @@ import { QuoteStatusTimeTracking } from './components/QuoteStatusTimeTracking';
 import { formatDuration, getTimeMetrics } from './lib/timeTracking';
 import { allocateQuoteIdentifiers } from './lib/quoteNumbering';
 import { getPicklistDefault, applyLanePicklistDefaults } from './lib/picklists';
+import { deriveSplitBillingSiblings } from './lib/splitBillingGroup';
+import { computeLaneMiles } from './lib/laneDistance';
+import { fetchAccountFuelProgram, applyPricingDefaults, NO_FUEL_PROGRAM } from './lib/lanePricing';
 
 function App() {
   const [viewMode, setViewMode] = useState<ViewMode>('home');
@@ -1239,8 +1242,9 @@ function App() {
     setBenchmarkLane(lane);
   };
 
-  const handleSaveDetails = async (updatedLane: Partial<QuoteLane>, pairedLaneUpdates?: Partial<QuoteLane>) => {
-    if (!showDetails) return;
+  /** Saves the lane open in the detail panel. Returns false when the lane itself could not be saved. */
+  const handleSaveDetails = async (updatedLane: Partial<QuoteLane>, pairedLaneUpdates?: Partial<QuoteLane>): Promise<boolean> => {
+    if (!showDetails) return false;
 
     const laneId = showDetails.id;
 
@@ -1269,15 +1273,55 @@ function App() {
 
     if (error) {
       console.error('Error saving lane details:', error);
-      setToastMessage('Error saving lane details');
+      setToastMessage(`Error saving lane details: ${error.message}`);
       setToastType('error');
-      return;
+      return false;
     }
 
     const updatedLaneData = savedData as QuoteLane;
     let updatedLanes = lanes.map(lane => lane.id === laneId ? updatedLaneData : lane);
+    const autoUpdatedLaneNumbers: number[] = [];
+    let groupSyncFailed = false;
 
-    if (pairedLaneUpdates && showDetails.split_billing_group) {
+    if (showDetails.split_billing_group && updatedLaneData.trip_type !== 'Circuit') {
+      // One Way / Round Trip split billing: the other segments follow the lane that was saved
+      const group = updatedLanes.filter(l => l.split_billing_group === showDetails.split_billing_group);
+      const siblingUpdates = deriveSplitBillingSiblings(group, laneId);
+      const account = siblingUpdates.some(s => s.routeChanged)
+        ? await fetchAccountFuelProgram(quote?.partner_account)
+        : NO_FUEL_PROGRAM;
+      for (const sibling of siblingUpdates) {
+        const current = updatedLanes.find(l => l.id === sibling.id);
+        if (!current) continue;
+        let changes: Partial<QuoteLane> = { ...sibling.updates };
+        if (sibling.routeChanged) {
+          // New route: recalculate its miles and price, as the grid does
+          const routed: Partial<QuoteLane> = { ...current, ...sibling.updates };
+          const miles = await computeLaneMiles(routed);
+          if (miles.us_miles != null) routed.us_miles = miles.us_miles;
+          if (miles.mx_miles != null) routed.mx_miles = miles.mx_miles;
+          const { lane: priced } = applyPricingDefaults(routed, { quote: quote || undefined, account });
+          changes = {};
+          (Object.keys(priced) as (keyof QuoteLane)[]).forEach(key => {
+            if (priced[key] !== current[key]) (changes as Record<string, unknown>)[key] = priced[key];
+          });
+        }
+        if (Object.keys(changes).length === 0) continue;
+        const { data: sibSaved, error: sibError } = await supabase
+          .from('quote_lanes')
+          .update(changes)
+          .eq('id', sibling.id)
+          .select()
+          .single();
+        if (sibError || !sibSaved) {
+          console.error('Error updating split billing segment:', sibError);
+          groupSyncFailed = true;
+          continue;
+        }
+        updatedLanes = updatedLanes.map(lane => lane.id === sibling.id ? (sibSaved as QuoteLane) : lane);
+        if (sibling.id !== laneId) autoUpdatedLaneNumbers.push(updatedLanes.findIndex(l => l.id === sibling.id) + 1);
+      }
+    } else if (pairedLaneUpdates && showDetails.split_billing_group) {
       const allSiblings = lanes.filter(
         l => l.split_billing_group === showDetails.split_billing_group && l.id !== laneId
       );
@@ -1330,8 +1374,19 @@ function App() {
     }
 
     setLanes(updatedLanes);
-    setToastMessage('Lane details updated successfully');
-    setToastType('success');
+    if (groupSyncFailed) {
+      setToastMessage('Lane saved, but another segment of its split billing group could not be updated. Open the group in the grid and save it again.');
+      setToastType('error');
+    } else if (autoUpdatedLaneNumbers.length > 0) {
+      const numbers = autoUpdatedLaneNumbers.sort((a, b) => a - b);
+      const list = numbers.length === 1 ? `Lane ${numbers[0]}` : `Lanes ${numbers.slice(0, -1).join(', ')} and ${numbers[numbers.length - 1]}`;
+      setToastMessage(`Lane details updated. ${list} of the same split billing group ${numbers.length === 1 ? 'was' : 'were'} updated automatically.`);
+      setToastType('success');
+    } else {
+      setToastMessage('Lane details updated successfully');
+      setToastType('success');
+    }
+    return true;
   };
 
   const handleUpdatePairedLaneBCO = async (pairedLaneId: string, borderCrossingOnly: boolean) => {

@@ -64,7 +64,8 @@ interface LaneDetailsPanelProps {
   quote?: Quote;
   locked?: boolean;
   onClose: () => void;
-  onSave: (updatedLane: Partial<QuoteLane>, pairedLaneUpdates?: Partial<QuoteLane>) => Promise<void> | void;
+  /** resolves to false when the lane could not be saved (the panel then stays on the lane) */
+  onSave: (updatedLane: Partial<QuoteLane>, pairedLaneUpdates?: Partial<QuoteLane>) => Promise<boolean | void> | boolean | void;
   onChangeCurrency?: (newCurrency: string) => Promise<void>;
   onNextLane?: () => void;
   hasNextLane?: boolean;
@@ -419,6 +420,7 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
     prevOriginCountry.current = normCode;
     setIsDirty(false);
     setUnsavedDialog(null);
+    setSaveProblems([]);
     setErrors({
       origin_city: '',
       destination_city: '',
@@ -451,6 +453,41 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
     estimated_total_us_section: '',
     estimated_total_mx_section: '',
   });
+
+  // Why the last save attempt did not go through; shown above the buttons so it is never hidden
+  // inside a collapsed section.
+  const [saveProblems, setSaveProblems] = useState<string[]>([]);
+  const ERROR_FIELD_INFO: Record<string, { label: string; section: string }> = {
+    origin_city: { label: 'Origin City', section: 'general' },
+    destination_city: { label: 'Destination City', section: 'general' },
+    border_crossing: { label: 'Border Crossing City', section: 'general' },
+    border_crossing_fee: { label: 'Border Fee', section: 'general' },
+    us_rate: { label: 'US Line Haul', section: 'us' },
+    us_miles: { label: 'US Miles', section: 'us' },
+    us_rate_per_mile: { label: 'US Rate Per Mile', section: 'us' },
+    us_fuel_rate: { label: 'US Fuel Rate', section: 'us' },
+    estimated_total_us_section: { label: 'Estimated Total US Section', section: 'us' },
+    mx_rate: { label: 'MX Line Haul', section: 'mx' },
+    mx_miles: { label: 'MX Miles', section: 'mx' },
+    mx_rate_per_mile: { label: 'MX Rate Per Mile', section: 'mx' },
+    mx_fuel_rate: { label: 'MX Fuel Rate', section: 'mx' },
+    estimated_total_mx_section: { label: 'Estimated Total MX Section', section: 'mx' },
+  };
+  /** Lists the failed fields above the buttons and opens the sections that contain them. */
+  const reportSaveProblems = (fieldErrors: Record<string, string>) => {
+    const failed = Object.entries(fieldErrors).filter(([, message]) => !!message);
+    if (failed.length === 0) {
+      setSaveProblems([]);
+      return;
+    }
+    setSaveProblems(failed.map(([field, message]) => `${ERROR_FIELD_INFO[field]?.label || field}: ${message}`));
+    const sectionsToOpen = new Set(failed.map(([field]) => ERROR_FIELD_INFO[field]?.section || 'general'));
+    setCollapsedSections(prev => {
+      const next = { ...prev };
+      sectionsToOpen.forEach(section => { next[section] = false; });
+      return next;
+    });
+  };
 
   const applyMilesResult = (res: { us_miles: number | null; mx_miles: number | null; notes: string[] }) => {
     setFormData(prev => {
@@ -844,6 +881,7 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
 
     setErrors(newErrors);
     const valid = !Object.values(newErrors).some(e => e !== '');
+    reportSaveProblems(newErrors);
 
     return valid;
   };
@@ -947,6 +985,7 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
         const destNorm = normalizeCountryCode(destCity.country_code);
         if (origNorm === destNorm) {
           setErrors(prev => ({ ...prev, destination_city: 'Destination City must be in a different country than Origin City for Door to Door service' }));
+          reportSaveProblems({ destination_city: 'Destination City must be in a different country than Origin City for Door to Door service' });
           return false;
         }
       }
@@ -1020,7 +1059,12 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
     const lane1WithEquipment = lane1Payload.type_of_service
       ? { ...lane1Payload, equipment_type: lane1Payload.type_of_service }
       : lane1Payload;
-    await onSave(lane1WithEquipment, lane2Payload);
+    const saveResult = await onSave(lane1WithEquipment, lane2Payload);
+    if (saveResult === false) {
+      setSaveProblems(['The lane could not be saved. Check the error message shown on the page and try again.']);
+      return false;
+    }
+    setSaveProblems([]);
     setIsDirty(false);
     if (!skipClose) {
       onClose();
@@ -1538,7 +1582,7 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
                     </p>
                   ) : (
                     <p className="text-sm text-yellow-800">
-                      This is <span className="font-semibold">Lane {lane.split_billing_index}</span> of a <span className="font-semibold">Door to Door {isRoundTrip ? 'Round Trip ' : ''}Split Billing</span> group ({isRoundTrip || isCircuit ? '4' : '2'} lanes). {isD2DSBRT ? 'Changes to city fields will automatically update Lanes 3 and 4.' : 'Changes to city fields will automatically update the paired lane.'}
+                      This is <span className="font-semibold">Lane {lane.split_billing_index}</span> of a <span className="font-semibold">Door to Door {isRoundTrip ? 'Round Trip ' : ''}Split Billing</span> group ({isRoundTrip || isCircuit ? '4' : '2'} lanes). {isD2DSBRT ? 'When you save a change to the origin, the border crossing or the destination, the other lanes of the group are updated automatically.' : 'Changes to city fields will automatically update the paired lane.'}
                     </p>
                   )}
                 </div>
@@ -1946,7 +1990,7 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
                         <label className="block text-sm text-gray-700 mb-1">
                           {!fieldVis.borderCrossingDisabled && <span className="text-red-500">*</span>} Border Crossing City
                         </label>
-                        {(isD2DSBLane1 || isD2DSBLane2 || isD2DSBLane3or4) && fieldVis.borderCrossingDisabled ? (
+                        {(isD2DSBLane1 || isD2DSBLane2 || isD2DSBLane3or4) && (fieldVis.borderCrossingDisabled || (isD2DSBRT && isD2DSBLane3or4)) ? (
                           <div className="flex items-center gap-2 w-full px-3 py-2 text-sm rounded" style={{ backgroundColor: '#F3F4F6' }}>
                             <Lock className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
                             <span className="text-gray-700">{formData.border_crossing || 'N/A'}</span>
@@ -1957,6 +2001,9 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
                               value={formData.border_crossing}
                               onChange={(value) => {
                                 handleChange('border_crossing', value);
+                                // Round Trip: this segment ends (segment 1) or starts (segment 2) at the crossing
+                                if (isD2DSBRT && isD2DSBLane1) setFormData(prev => ({ ...prev, border_crossing: value, destination_city: value }));
+                                if (isD2DSBRT && isD2DSBLane2) setFormData(prev => ({ ...prev, border_crossing: value, origin_city: value }));
                               }}
                               hasError={!!errors.border_crossing}
                               placeholder="Select border crossing city..."
@@ -3027,6 +3074,14 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
         <div className="flex-shrink-0 px-6 pb-2 bg-white border-t border-gray-200">
           <SystemInformation record={lane} variant="inline" className="mt-2 pt-0 border-t-0" />
         </div>
+        {saveProblems.length > 0 && (
+          <div className="flex-shrink-0 px-6 py-2.5 bg-red-50 border-t border-red-200 text-[13px] text-red-800">
+            <div className="font-semibold">This lane was not saved. Fix the following and save again:</div>
+            <ul className="mt-1 list-disc pl-5 space-y-0.5">
+              {saveProblems.map(problem => <li key={problem}>{problem}</li>)}
+            </ul>
+          </div>
+        )}
         <div className="flex-shrink-0 px-6 py-3.5 bg-white border-t border-gray-200 flex items-center gap-3 flex-wrap">
           <button
             onClick={recalculateDistance}
