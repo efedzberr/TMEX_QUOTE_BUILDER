@@ -43,7 +43,9 @@ interface QuoteLanesProps {
   locked?: boolean;
   onUpdateLane: (id: string, updates: Partial<QuoteLane>) => Promise<boolean>;
   onAddLane: (newLane: Partial<QuoteLane>, newLane2?: Partial<QuoteLane>) => Promise<void>;
-  onAddSplitBillingGroup?: (lanes: Partial<QuoteLane>[]) => Promise<void>;
+  /** resolves to false when the group could not be saved (the add rows then stay open) */
+  onAddSplitBillingGroup?: (lanes: Partial<QuoteLane>[]) => Promise<boolean | void>;
+  onToast?: (message: string, type: 'success' | 'error') => void;
   onDeleteLane: (id: string) => void;
   onShowDetails: (lane: QuoteLane) => void;
   onGlobalEquipmentTypeChange?: (equipmentType: string) => void;
@@ -63,6 +65,7 @@ export function QuoteLanes({
   onUpdateLane,
   onAddLane,
   onAddSplitBillingGroup,
+  onToast,
   onDeleteLane,
   onShowDetails,
   onGlobalEquipmentTypeChange,
@@ -540,8 +543,16 @@ export function QuoteLanes({
     }
   };
 
-  const handleFieldChange = (laneId: string, field: string, value: any) => {
-    if (editingId === laneId) {
+  /** The group being edited, with the latest values of the lane that was clicked (kept in editData). */
+  const mergedEditingGroup = (): { [laneId: string]: Partial<QuoteLane> } =>
+    editingId && editingGroupLanes[editingId]
+      ? { ...editingGroupLanes, [editingId]: { ...editingGroupLanes[editingId], ...editData } }
+      : editingGroupLanes;
+
+  const handleFieldChange = (laneId: string, field: string, value: any, extra?: Partial<QuoteLane>) => {
+    // A lane that belongs to a split billing group is always edited through the group (below),
+    // including the lane that was clicked, so its changes reach the other segments and the save.
+    if (editingId === laneId && !editingGroupLanes[laneId]) {
       const updated = applyRateCalcs({ ...editData, [field]: value }, field);
       setEditData(updated);
       if (editingPairedId && (editData.service_type === 'Loop' || editData.service_type === 'Door to Door') && editData.trip_type === 'Round Trip') {
@@ -580,9 +591,11 @@ export function QuoteLanes({
     } else if (editingPairedId === laneId) {
       setEditData2(applyRateCalcs({ ...editData2, [field]: value }, field));
     } else if (editingGroupLanes[laneId]) {
+      const groupBase = mergedEditingGroup();
       const updatedGroup = {
-        ...editingGroupLanes,
-        [laneId]: applyRateCalcs({ ...editingGroupLanes[laneId], [field]: value }, field),
+        ...groupBase,
+        // `extra` carries fields that change together with this one (e.g. the city's country)
+        [laneId]: applyRateCalcs({ ...groupBase[laneId], ...extra, [field]: value }, field),
       };
       if (field === 'border_crossing') {
         const changedLane = editingGroupLanes[laneId];
@@ -684,7 +697,61 @@ export function QuoteLanes({
           }
         }
       }
+
+      // Door to Door round trip: the four segments are always derived from the trip origin
+      // (segment 1), the border crossing and the trip destination (segment 2), as when adding.
+      const editedLane = groupBase[laneId];
+      if (editedLane.service_type === 'Door to Door' && editedLane.trip_type === 'Round Trip') {
+        const idOf = (idx: number) => Object.keys(updatedGroup).find(id => updatedGroup[id].split_billing_index === idx);
+        const id1 = idOf(1), id2 = idOf(2), id3 = idOf(3), id4 = idOf(4);
+        if (id1 && id2 && id3 && id4) {
+          const seg = (id: string) => ({ ...updatedGroup[id] });
+          const s1 = seg(id1), s2 = seg(id2), s3 = seg(id3), s4 = seg(id4);
+          const realBorder = (v?: string) => (v && v !== 'N/A' ? v : '');
+          const border = realBorder(s1.border_crossing) || realBorder(s2.border_crossing);
+          if (border) {
+            const borderCity = borderCrossingCities.find(c => (c.city_full_name || c.city_name) === border);
+            const borderCountry = borderCity ? normalizeCountryCode(borderCity.country_code) : undefined;
+            s1.destination_city = border;
+            s2.origin_city = border;
+            s3.destination_city = border;
+            s4.origin_city = border;
+            if (borderCountry) {
+              s1.destination_country_code = borderCountry;
+              s2.origin_country_code = borderCountry;
+              s3.destination_country_code = borderCountry;
+              s4.origin_country_code = borderCountry;
+            }
+            if (realBorder(s1.border_crossing)) s4.border_crossing = border;
+            if (realBorder(s2.border_crossing)) s3.border_crossing = border;
+          }
+          if (s1.origin_city) {
+            s4.destination_city = s1.origin_city;
+            if (s1.origin_country_code) s4.destination_country_code = s1.origin_country_code;
+          }
+          if (s2.destination_city) {
+            s3.origin_city = s2.destination_city;
+            if (s2.destination_country_code) s3.origin_country_code = s2.destination_country_code;
+          }
+          updatedGroup[id1] = s1;
+          updatedGroup[id2] = s2;
+          updatedGroup[id3] = s3;
+          updatedGroup[id4] = s4;
+        }
+      }
+
+      // Door to Door one way: the crossing chosen on segment 1 is where segment 1 ends and segment 2 starts
+      if (editedLane.service_type === 'Door to Door' && editedLane.trip_type === 'One Way'
+          && field === 'border_crossing' && editedLane.split_billing_index === 1 && value && value !== 'N/A') {
+        const id2 = Object.keys(updatedGroup).find(id => updatedGroup[id].split_billing_index === 2);
+        const borderCity = borderCrossingCities.find(c => (c.city_full_name || c.city_name) === value);
+        const borderCountry = borderCity ? normalizeCountryCode(borderCity.country_code) : undefined;
+        updatedGroup[laneId] = { ...updatedGroup[laneId], destination_city: value, ...(borderCountry ? { destination_country_code: borderCountry } : {}) };
+        if (id2) updatedGroup[id2] = { ...updatedGroup[id2], origin_city: value, ...(borderCountry ? { origin_country_code: borderCountry } : {}) };
+      }
+
       setEditingGroupLanes(updatedGroup);
+      if (editingId && updatedGroup[editingId]) setEditData(updatedGroup[editingId]);
     }
   };
 
@@ -786,7 +853,8 @@ export function QuoteLanes({
     if (!editingId && Object.keys(editingGroupLanes).length === 0) return;
 
     if (Object.keys(editingGroupLanes).length > 0 && editData.service_type === 'Door to Door' && editData.split_billing_group) {
-      const groupLanesArr = Object.entries(editingGroupLanes)
+      const groupForSave = mergedEditingGroup();
+      const groupLanesArr = Object.entries(groupForSave)
         .map(([id, data]) => ({ id, ...data }))
         .sort((a, b) => (a.split_billing_index || 0) - (b.split_billing_index || 0));
 
@@ -819,6 +887,9 @@ export function QuoteLanes({
         if (gl.split_billing_index === 4 && editData.trip_type === 'Circuit' && !gl.destination_city) {
           lErrs.destination_city = 'This field is required';
         }
+        // Every segment of the group must stay complete
+        if (!gl.origin_city && !lErrs.origin_city) lErrs.origin_city = 'This field is required';
+        if (!gl.destination_city && !lErrs.destination_city) lErrs.destination_city = 'This field is required';
         if (Object.keys(lErrs).length > 0) allErrs[laneKey] = lErrs;
       }
       if (Object.keys(allErrs).length > 0) {
@@ -827,7 +898,7 @@ export function QuoteLanes({
       }
 
       const results: boolean[] = [];
-      for (const [laneId, laneData] of Object.entries(editingGroupLanes)) {
+      for (const [laneId, laneData] of Object.entries(groupForSave)) {
         const payload = prepareSavePayload(laneData);
         results.push(await onUpdateLane(laneId, payload));
       }
@@ -1323,6 +1394,34 @@ export function QuoteLanes({
         } else if (index === 1 && field === 'destination_city') {
           updated[2].origin_city = value;
         }
+
+        // Door to Door round trip: the four segments are always derived from the origin, the border
+        // crossing and the destination, whatever the order in which the user selects them.
+        if (isD2DSB && updated.length >= 4) {
+          const realBorder = (v?: string) => (v && v !== 'N/A' ? v : '');
+          const border = realBorder(updated[0].border_crossing) || realBorder(updated[1].border_crossing);
+          const tripOrigin = updated[0].origin_city;
+          const tripDestination = updated[1].destination_city;
+          if (border) {
+            const borderCity = borderCrossingCities.find(c => (c.city_full_name || c.city_name) === border);
+            const borderCountry = borderCity ? normalizeCountryCode(borderCity.country_code) : undefined;
+            updated[0].destination_city = border;
+            updated[1].origin_city = border;
+            updated[2].destination_city = border;
+            updated[3].origin_city = border;
+            if (borderCountry) {
+              updated[0].destination_country_code = borderCountry;
+              updated[1].origin_country_code = borderCountry;
+              updated[2].destination_country_code = borderCountry;
+              updated[3].origin_country_code = borderCountry;
+            }
+          }
+          if (tripOrigin) updated[3].destination_city = tripOrigin;
+          if (tripDestination) updated[2].origin_city = tripDestination;
+          // The return crosses at the same point as the outbound trip
+          if (border && realBorder(updated[0].border_crossing)) updated[3].border_crossing = border;
+          if (border && realBorder(updated[1].border_crossing)) updated[2].border_crossing = border;
+        }
       } else if (selectedTripType === 'Circuit') {
         if ((index === 0 || index === 1) && field === 'border_crossing' && selectedServiceType === 'Door to Door') {
           const bcCity = borderCrossingCities.find(c => (c.city_full_name || c.city_name) === value);
@@ -1432,13 +1531,33 @@ export function QuoteLanes({
         }
       }
 
+      // Every segment of the group must be complete: the group is saved all together or not at all
+      const incompleteSegments = splitBillingAddLanes
+        .map((lane, i) => ({ number: i + 1, lane }))
+        .filter(({ lane }) => !lane.origin_city || !lane.destination_city || !lane.border_crossing);
+      if (incompleteSegments.length > 0) {
+        const segmentErrors: Record<string, Record<string, string>> = { lane1: {}, lane2: {}, lane3: {}, lane4: {} };
+        incompleteSegments.forEach(({ number, lane }) => {
+          const errs: Record<string, string> = {};
+          if (!lane.origin_city) errs.origin_city = 'This field is required';
+          if (!lane.destination_city) errs.destination_city = 'This field is required';
+          if (!lane.border_crossing) errs.border_crossing = 'This field is required';
+          segmentErrors[`lane${number}`] = errs;
+        });
+        setValidationErrors(segmentErrors as typeof validationErrors);
+        onToast?.(`The split billing group is incomplete (segment ${incompleteSegments.map(s => s.number).join(', ')}). Select origin, border crossing and destination so every segment is filled.`, 'error');
+        return;
+      }
+
       const lanesToInsert = splitBillingAddLanes.map((lane) => {
         const { id, ...rest } = lane;
         return prepareSavePayload(rest);
       });
 
       if (onAddSplitBillingGroup) {
-        await onAddSplitBillingGroup(lanesToInsert);
+        const saved = await onAddSplitBillingGroup(lanesToInsert);
+        // Not saved: keep the rows open so the user does not lose what was captured
+        if (saved === false) return;
       } else {
         for (let i = 0; i < lanesToInsert.length; i += 2) {
           await onAddLane(lanesToInsert[i], lanesToInsert[i + 1]);
@@ -1550,6 +1669,16 @@ export function QuoteLanes({
   const renderDisplayRow = (lane: QuoteLane, index: number) => {
     const isEditing = editingId === lane.id;
     const isInSplitBillingGroup = !!editingGroupLanes[lane.id];
+    // Door to Door round trip with split billing: same locks as when the group is added
+    const isD2DRoundTripSBEdit = isInSplitBillingGroup && lane.service_type === 'Door to Door' && lane.trip_type === 'Round Trip';
+    const sbSegment = lane.split_billing_index || 1;
+    const sbSegment1 = isD2DRoundTripSBEdit ? Object.values(mergedEditingGroup()).find(l => l.split_billing_index === 1) : undefined;
+    const sbTripOriginCountry = sbSegment1?.origin_country_code || undefined;
+    const sbTripStartsInMX = sbTripOriginCountry
+      ? normalizeCountryCode(sbTripOriginCountry) === 'MX'
+      : !!sbSegment1?.border_crossing && sbSegment1.border_crossing !== 'N/A';
+    // The crossing is chosen on the outbound segment that touches Mexico
+    const sbBorderSegment = sbTripStartsInMX ? 1 : 2;
     const isLane1 = isEditing;
     const isLane2 = editingPairedId === lane.id;
     const currentData = isLane1 ? editData : isLane2 ? editData2 : isInSplitBillingGroup ? editingGroupLanes[lane.id] : lane;
@@ -1623,7 +1752,16 @@ export function QuoteLanes({
             </div>
           </td>
           <td style={{ minWidth: '128px' }} className="px-2 py-2">
-            {isInSplitBillingGroup && lane.service_type === 'Door to Door' && lane.trip_type === 'Circuit' && lane.split_billing_index === 3 ? (
+            {isD2DRoundTripSBEdit && sbSegment !== 1 ? (
+              <div className="text-xs px-2 py-1 rounded italic text-gray-600 flex items-center gap-1" style={{ backgroundColor: '#F3F4F6' }}><LockIcon className="w-3 h-3" />{currentData.origin_city || 'Auto'}</div>
+            ) : isD2DRoundTripSBEdit ? (
+              <>
+                <div className={laneErrs.origin_city ? 'border-2 border-red-500 rounded' : ''}>
+                  <CityLookupField value={currentData.origin_city || ''} onChange={(value, countryCode) => handleFieldChange(lane.id, 'origin_city', value, countryCode ? { origin_country_code: countryCode } : undefined)} placeholder={sbTripStartsInMX ? 'Search MX cities...' : 'Search US/CAN cities...'} countryFilter={sbTripStartsInMX ? 'MEX' : 'US_CAN'} />
+                </div>
+                {laneErrs.origin_city && <div className="text-[10px] text-red-500 mt-0.5">{laneErrs.origin_city}</div>}
+              </>
+            ) : isInSplitBillingGroup && lane.service_type === 'Door to Door' && lane.trip_type === 'Circuit' && lane.split_billing_index === 3 ? (
               <>
                 <MarketFilteredCityLookup value={currentData.origin_city || ''} onChange={(value, _mkt, countryCode) => { handleFieldChange(lane.id, 'origin_city', value); if (countryCode) handleFieldChange(lane.id, 'origin_country_code', countryCode); }} marketFilter={editLane1Markets.destMarket} placeholder={editLane1Markets.destMarket ? 'Select city...' : '—'} hasError={!!laneErrs.origin_city} disabled={!editLane1Markets.destMarket} disabledMessage="Please select Destination City on Lane 2" />
                 {laneErrs.origin_city && <div className="text-[10px] text-red-500 mt-0.5">{laneErrs.origin_city}</div>}
@@ -1668,7 +1806,21 @@ export function QuoteLanes({
             </td>
           )}
           <td style={{ minWidth: '128px' }} className="px-2 py-2">
-            {isInSplitBillingGroup && lane.service_type === 'Door to Door' && lane.trip_type === 'Circuit' && lane.split_billing_index === 4 ? (
+            {isD2DRoundTripSBEdit && sbSegment !== 2 ? (
+              <div className="text-xs px-2 py-1 rounded italic text-gray-600 flex items-center gap-1" style={{ backgroundColor: '#F3F4F6' }}><LockIcon className="w-3 h-3" />{currentData.destination_city || 'Auto'}</div>
+            ) : isD2DRoundTripSBEdit ? (
+              (() => {
+                const tripOriginCC = sbTripStartsInMX ? 'MX' : 'US';
+                return (
+                  <>
+                    <div className={laneErrs.destination_city ? 'border-2 border-red-500 rounded' : ''}>
+                      <CityLookupField value={currentData.destination_city || ''} onChange={(value, countryCode) => handleFieldChange(lane.id, 'destination_city', value, countryCode ? { destination_country_code: countryCode } : undefined)} placeholder={tripOriginCC === 'MX' ? 'Search US/CAN cities...' : 'Search MX cities...'} countryFilter={tripOriginCC === 'MX' ? 'US_CAN' : 'MEX'} />
+                    </div>
+                    {laneErrs.destination_city && <div className="text-[10px] text-red-500 mt-0.5">{laneErrs.destination_city}</div>}
+                  </>
+                );
+              })()
+            ) : isInSplitBillingGroup && lane.service_type === 'Door to Door' && lane.trip_type === 'Circuit' && lane.split_billing_index === 4 ? (
               <>
                 <MarketFilteredCityLookup value={currentData.destination_city || ''} onChange={(value, _mkt, countryCode) => { handleFieldChange(lane.id, 'destination_city', value); if (countryCode) handleFieldChange(lane.id, 'destination_country_code', countryCode); }} marketFilter={editLane1Markets.originMarket} placeholder={editLane1Markets.originMarket ? 'Select city...' : '—'} hasError={!!laneErrs.destination_city} disabled={!editLane1Markets.originMarket} disabledMessage="Please select Origin City on Lane 1" />
                 {laneErrs.destination_city && <div className="text-[10px] text-red-500 mt-0.5">{laneErrs.destination_city}</div>}
@@ -1734,7 +1886,9 @@ export function QuoteLanes({
             )}
           </td>
           <td style={{ minWidth: '128px' }} className="px-2 py-2">
-            {(isDomesticRoundTripLane2 || isDomesticCircuitLane2) ? (
+            {isD2DRoundTripSBEdit && sbSegment !== sbBorderSegment ? (
+              <div className="text-xs px-2 py-1 rounded italic text-gray-600 flex items-center gap-1" style={{ backgroundColor: '#F3F4F6' }}><LockIcon className="w-3 h-3" />{currentData.border_crossing || 'N/A'}</div>
+            ) : (isDomesticRoundTripLane2 || isDomesticCircuitLane2) ? (
               <div className="text-xs px-2 py-1 rounded italic text-gray-600 flex items-center gap-1" style={{ backgroundColor: '#F3F4F6' }}><LockIcon className="w-3 h-3" />N/A</div>
             ) : (isLane2 && lane.trip_type === 'Round Trip') ? (
               <div className="text-xs px-2 py-1 rounded italic text-gray-600 flex items-center gap-1" style={{ backgroundColor: '#F3F4F6' }}><LockIcon className="w-3 h-3" />{editData2.border_crossing || 'Auto'}</div>
@@ -2264,7 +2418,8 @@ export function QuoteLanes({
                       const d2dSBOriginIsUS = isD2DOneWaySB && countryCodes.origin && countryCodes.origin !== 'MX';
                       let bcEditable = false;
                       if (isD2DRTSB) {
-                        bcEditable = laneAnyMX;
+                        // Round Trip returns through the same border crossing: only the outbound segments choose it
+                        bcEditable = laneAnyMX && (selectedTripType !== 'Round Trip' || index <= 1);
                       } else if (isD2DOneWaySB) {
                         bcEditable = d2dSBOriginIsUS ? index === 1 : index === 0;
                       } else {

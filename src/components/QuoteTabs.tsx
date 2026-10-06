@@ -14,7 +14,7 @@ interface QuoteTabsProps {
   locked?: boolean;
   onUpdateLane: (id: string, updates: Partial<QuoteLane>) => Promise<boolean>;
   onAddLane: (newLane: Partial<QuoteLane>) => void;
-  onAddSplitBillingGroup?: (lanes: Partial<QuoteLane>[]) => Promise<void>;
+  onAddSplitBillingGroup?: (lanes: Partial<QuoteLane>[]) => Promise<boolean | void>;
   onDeleteLane: (id: string) => void;
   onShowDetails: (lane: QuoteLane) => void;
   onGlobalEquipmentTypeChange?: (equipmentType: string) => void;
@@ -622,6 +622,7 @@ export function QuoteTabs({
             onUpdateLane={onUpdateLane}
             onAddLane={onAddLane}
             onAddSplitBillingGroup={onAddSplitBillingGroup}
+            onToast={onToast}
             onDeleteLane={onDeleteLane}
             onShowDetails={onShowDetails}
             onGlobalEquipmentTypeChange={onGlobalEquipmentTypeChange}

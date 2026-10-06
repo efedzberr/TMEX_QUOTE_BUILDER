@@ -804,40 +804,51 @@ function App() {
     return (data && data.length > 0 ? data[0].sort_order : 0) + 1;
   };
 
-  const handleAddSplitBillingGroup = async (sbLanes: Partial<QuoteLane>[]) => {
-    if (!quote || sbLanes.length === 0) return;
+  /**
+   * Saves a split billing group. All its segments are inserted in ONE statement, so the group is
+   * stored complete or not at all. Returns false when nothing was saved.
+   */
+  const handleAddSplitBillingGroup = async (sbLanes: Partial<QuoteLane>[]): Promise<boolean> => {
+    if (!quote || sbLanes.length === 0) return false;
+
+    const incomplete = sbLanes.findIndex(l => !l.origin_city || !l.destination_city || !l.border_crossing);
+    if (incomplete !== -1) {
+      setToastMessage(`The split billing group was not saved: segment ${incomplete + 1} is missing its origin, destination or border crossing.`);
+      setToastType('error');
+      return false;
+    }
+
     const nextSort = await getNextSortOrder(quote.id);
     const groupId = `split-${Date.now()}`;
-    const insertedLanes: QuoteLane[] = [];
-    for (let i = 0; i < sbLanes.length; i++) {
-      const lane = sbLanes[i];
+    const rows = sbLanes.map((lane, i) => {
       const { id: _stripId, ...laneData } = lane as any;
-      const { data, error } = await supabase
-        .from('quote_lanes')
-        .insert({
-          ...laneData,
-          equipment_type: laneData.equipment_type || quote.type_of_service || 'Dry Van',
-          quote_id: quote.id,
-          sort_order: nextSort + i,
-          is_primary_lane: lane.split_billing_index === 1,
-          split_billing_group: groupId,
-        })
-        .select()
-        .single();
-      if (error || !data) {
-        console.error('Error inserting SB lane', i + 1, error);
-        if (insertedLanes.length > 0) {
-          setLanes((prev) => [...prev, ...insertedLanes]);
-        }
-        setToastMessage(`Failed to save lanes: ${error?.message || 'Unknown error'}`);
-        setToastType('error');
-        return;
-      }
-      insertedLanes.push(data as QuoteLane);
+      return {
+        ...laneData,
+        equipment_type: laneData.equipment_type || quote.type_of_service || 'Dry Van',
+        quote_id: quote.id,
+        sort_order: nextSort + i,
+        is_primary_lane: lane.split_billing_index === 1,
+        split_billing_group: groupId,
+      };
+    });
+
+    // defaultToNull: false -> a field that one segment does not carry uses the column default
+    const { data, error } = await supabase
+      .from('quote_lanes')
+      .insert(rows, { defaultToNull: false })
+      .select();
+    if (error || !data || data.length !== rows.length) {
+      console.error('Error inserting split billing group', error);
+      setToastMessage(`The split billing group was not saved: ${error?.message || 'Unknown error'}`);
+      setToastType('error');
+      return false;
     }
+
+    const insertedLanes = (data as QuoteLane[]).slice().sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     setLanes((prev) => [...prev, ...insertedLanes]);
     setToastMessage(`${insertedLanes.length} split billing lanes added successfully`);
     setToastType('success');
+    return true;
   };
 
   const handleAddLane = async (newLane: Partial<QuoteLane>, newLane2?: Partial<QuoteLane>) => {
