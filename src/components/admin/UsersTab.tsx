@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase as supabaseClient } from '../../lib/supabase';
-import { Search, X, UserPlus, Shield, ShieldOff, Ban, CheckCircle, KeyRound, MoreHorizontal, Users, Trash2, Pencil, Mail, Copy, Activity } from 'lucide-react';
+import { Search, X, UserPlus, Shield, ShieldOff, Ban, CheckCircle, KeyRound, MoreHorizontal, Users, Trash2, Pencil, Mail, Copy, Activity, ArrowRightLeft } from 'lucide-react';
 import { UserSecurityModal } from './UserSecurityModal';
+import { TransferRecordsModal } from './TransferRecordsModal';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/AuthContext';
 import { usePermissions } from '../../lib/permissions';
@@ -132,6 +133,7 @@ export function UsersTab({ onToast }: UsersTabProps) {
   const [hierarchyRoles, setHierarchyRoles] = useState<HierarchyRole[]>([]);
   const [expandedRolePaths, setExpandedRolePaths] = useState<Set<string>>(new Set());
   const [editUser, setEditUser] = useState<UserRow | null>(null);
+  const [transferUser, setTransferUser] = useState<UserRow | null>(null);
   const [resendResult, setResendResult] = useState<{ email: string; mode: string; sent: boolean; send_error: string | null; link: string | null } | null>(null);
   const [resendBusy, setResendBusy] = useState(false);
   const roleName = (id: string | null) => roles.find(r => r.id === id)?.name || null;
@@ -254,7 +256,12 @@ export function UsersTab({ onToast }: UsersTabProps) {
       onToast(`${user.display_name || user.email} has been permanently deleted.`, 'success');
       loadUsers();
     } catch (e: any) {
-      onToast(e.message, 'error');
+      const message = String(e?.message || '');
+      if (/database error deleting user/i.test(message)) {
+        onToast(`${user.display_name || user.email} still owns records (quotes or list views) and cannot be deleted yet. Use "Transfer Records" in the Actions menu first.`, 'error');
+      } else {
+        onToast(message, 'error');
+      }
     }
   }
 
@@ -465,6 +472,13 @@ export function UsersTab({ onToast }: UsersTabProps) {
             label="Reset 2FA"
             onClick={() => { closeMenu(); setConfirmAction({ type: 'reset_mfa', user: menuUser }); }}
           />
+          {callerIsAdmin && (
+            <MenuButton
+              icon={<ArrowRightLeft className="w-4 h-4 text-gray-400" />}
+              label="Transfer Records"
+              onClick={() => { closeMenu(); setTransferUser(menuUser); }}
+            />
+          )}
           <div className="border-t border-gray-100 my-1" />
           <MenuButton
             icon={<Trash2 className="w-4 h-4 text-red-400" />}
@@ -542,6 +556,19 @@ export function UsersTab({ onToast }: UsersTabProps) {
           callerIsAdmin={callerIsAdmin}
           onClose={() => setEditUser(null)}
           onSaved={(msg) => { onToast(msg, 'success'); setEditUser(null); loadUsers(); }}
+        />
+      )}
+
+      {transferUser && (
+        <TransferRecordsModal
+          source={{ id: transferUser.id, email: transferUser.email, display_name: transferUser.display_name, active: isActive(transferUser) }}
+          candidates={users
+            .filter(u => u.id !== transferUser.id)
+            .map(u => ({ id: u.id, email: u.email, display_name: u.display_name, active: isActive(u) }))
+            .sort((a, b) => (a.display_name || a.email).localeCompare(b.display_name || b.email))}
+          onClose={() => setTransferUser(null)}
+          onTransferred={loadUsers}
+          onToast={onToast}
         />
       )}
 
