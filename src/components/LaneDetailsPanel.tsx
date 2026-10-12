@@ -4,8 +4,9 @@ import { useState, useEffect, useRef } from 'react';
 import { CityLookupField } from './CityLookupField';
 import { SelectedAccessorial } from './AccessorialSelector';
 import { LaneSectionAccessorials, SectionAccessorial, calcSectionAccessorialsTotal } from './LaneSectionAccessorials';
-import { formatCurrencyOrDash, CurrencyCode, CURRENCIES, normalizeCountryCode } from '../lib/constants';
+import { formatCurrencyOrDash, CurrencyCode, normalizeCountryCode } from '../lib/constants';
 import { usePicklist } from '../lib/picklists';
+import { useActiveCurrencies, currencyOptions } from '../lib/currencies';
 import { BorderCrossingLookup, useBorderCrossingCities, validateBorderCrossing } from './BorderCrossingLookup';
 import { MarketFilteredCityLookup } from './MarketFilteredCityLookup';
 import { computeLaneMiles, routeSignature } from '../lib/laneDistance';
@@ -85,6 +86,7 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
   const commitmentTypes = usePicklist('commitment_type', lane.commitment_type);
   const liveLoadOptions = usePicklist('live_load_or_drop', lane.live_load_or_drop);
   const lanePriorities = usePicklist('lane_priority', lane.priority);
+  const activeCurrencies = useActiveCurrencies();
   const [formData, setFormData] = useState({
     origin_city: lane.origin_city || '',
     destination_city: lane.destination_city || '',
@@ -1454,7 +1456,7 @@ export function LaneDetailsPanel({ lane, pairedLane, currency = 'USD', quote, lo
                     }}
                     className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   >
-                    {CURRENCIES.map(c => (
+                    {currencyOptions(activeCurrencies, formData.currency_code).map(c => (
                       <option key={c} value={c}>{c}</option>
                     ))}
                   </select>

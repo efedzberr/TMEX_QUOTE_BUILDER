@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { LookupField } from './LookupField';
 import { formatCurrency, CurrencyCode, buildQuoteName, OPPORTUNITY_TYPES, QUOTE_PRIORITIES } from '../lib/constants';
 import { usePicklist } from '../lib/picklists';
+import { useActiveCurrencies } from '../lib/currencies';
 import { getDueStatus, formatLocalDate } from '../lib/dueStatus';
 import { DueStatusBadge } from './DueStatusBadge';
 import { CollapsibleSection } from './CollapsibleSection';
@@ -64,6 +65,10 @@ export function QuoteHeader({
   const mxSalesReps = usePicklist('mx_sales_rep', quote.mx_sales_rep);
   const usSalesReps = usePicklist('us_sales_rep', quote.us_sales_rep);
   const equipmentTypes = usePicklist('equipment_type', quote.type_of_service);
+  const activeCurrencies = useActiveCurrencies();
+  const showCadRate = activeCurrencies.includes('CAD')
+    || quote.currency === 'CAD'
+    || lanes.some(l => l.currency_code === 'CAD');
 
   const [editedData, setEditedData] = useState({
     quote_number: quote.quote_number,
@@ -802,6 +807,7 @@ export function QuoteHeader({
               />
             )}
           </div>
+          {showCadRate && (
           <div>
             <div className="text-[10px] text-gray-500 uppercase tracking-wide mb-0.5">USD → CAD Rate</div>
             {!isEditing ? (
@@ -820,6 +826,7 @@ export function QuoteHeader({
               />
             )}
           </div>
+          )}
           <div>
             <div className="text-[10px] text-gray-500 uppercase tracking-wide mb-0.5">Today's Fuel (RPM)</div>
             {(quote.today_fuel_rate && quote.today_fuel_rate > 0)

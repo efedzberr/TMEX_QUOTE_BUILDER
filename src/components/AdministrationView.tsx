@@ -20,6 +20,8 @@ import { PdfFormatTab } from './admin/PdfFormatTab';
 import { usePicklist, getPicklistDefault } from '../lib/picklists';
 import { usePermissions } from '../lib/permissions';
 import type { PermissionKey } from '../lib/permissionCatalog';
+import { SUPPORTED_CURRENCIES, LOCKED_CURRENCIES, CURRENCY_LABELS, loadActiveCurrencies } from '../lib/currencies';
+import type { CurrencyCode } from '../lib/constants';
 
 
 type AdminTab = 'accounts' | 'bill_to' | 'shippers' | 'cities' | 'global_variables' | 'picklists' | 'border_crossings' | 'accessorials' | 'terms_conditions' | 'account_lanes' | 'cost_structure' | 'market_information' | 'sla' | 'users' | 'profiles' | 'roles' | 'wolke' | 'update_log' | 'quotes_object' | 'quote_lanes_object' | 'security_logs' | 'password_policies' | 'pdf_format';
@@ -58,6 +60,7 @@ interface GlobalVariables {
   mxn_exchange_rate: number;
   cad_exchange_rate: number;
   quote_link_expiration_days: number;
+  active_currencies?: string[];
 }
 
 
@@ -907,7 +910,7 @@ function ManageCities() {
 
 function ManageGlobalVariables() {
   const [vars, setVars] = useState<GlobalVariables | null>(null);
-  const [form, setForm] = useState({ fuel_rate_usd: 0, rate_per_mile: 0, mxn_exchange_rate: 0, cad_exchange_rate: 0, quote_link_expiration_days: 30 });
+  const [form, setForm] = useState({ fuel_rate_usd: 0, rate_per_mile: 0, mxn_exchange_rate: 0, cad_exchange_rate: 0, quote_link_expiration_days: 30, active_currencies: ['USD', 'MXN'] as string[] });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -925,6 +928,7 @@ function ManageGlobalVariables() {
         mxn_exchange_rate: data.mxn_exchange_rate,
         cad_exchange_rate: data.cad_exchange_rate,
         quote_link_expiration_days: data.quote_link_expiration_days ?? 30,
+        active_currencies: data.active_currencies ?? ['USD', 'MXN'],
       });
     }
     setLoading(false);
@@ -933,15 +937,28 @@ function ManageGlobalVariables() {
   async function save() {
     setSaving(true);
     const updates = { ...form, updated_at: new Date().toISOString() };
+    let failed = false;
     if (vars) {
-      await supabase.from('global_variables').update(updates).eq('id', vars.id);
+      const { error } = await supabase.from('global_variables').update(updates).eq('id', vars.id);
+      failed = !!error;
     } else {
-      const { data } = await supabase.from('global_variables').insert(form).select().single();
+      const { data, error } = await supabase.from('global_variables').insert(form).select().single();
       if (data) setVars(data);
+      failed = !!error;
     }
+    if (!failed) await loadActiveCurrencies(true);
     setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
+  }
+
+  function toggleCurrency(code: CurrencyCode) {
+    setForm(f => {
+      const next = f.active_currencies.includes(code)
+        ? f.active_currencies.filter(c => c !== code)
+        : [...f.active_currencies, code];
+      return { ...f, active_currencies: SUPPORTED_CURRENCIES.filter(c => next.includes(c)) };
+    });
   }
 
   if (loading) return <div className="py-12 text-center text-sm text-gray-500">Loading...</div>;
@@ -963,17 +980,43 @@ function ManageGlobalVariables() {
             className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
         </div>
         <div>
+          <span className="block text-sm font-medium text-gray-700 mb-1">Active Currencies</span>
+          <p className="text-xs text-gray-500 mb-2">Currencies users can choose in quotes, lanes, accessorials and PDFs. Records that already use an inactive currency keep it.</p>
+          <div className="border border-gray-200 rounded-lg divide-y divide-gray-100">
+            {SUPPORTED_CURRENCIES.map(code => {
+              const locked = LOCKED_CURRENCIES.includes(code);
+              return (
+                <label key={code} className={`flex items-center gap-3 px-3 py-2 text-sm ${locked ? 'text-gray-600' : 'text-gray-800 cursor-pointer hover:bg-gray-50'}`}>
+                  <input
+                    type="checkbox"
+                    checked={locked || form.active_currencies.includes(code)}
+                    disabled={locked}
+                    onChange={() => toggleCurrency(code)}
+                    className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-60"
+                  />
+                  <span className="flex-1">{CURRENCY_LABELS[code]}</span>
+                  {locked && (
+                    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">Always active</span>
+                  )}
+                </label>
+              );
+            })}
+          </div>
+        </div>
+        <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">MXN Exchange Rate (1 USD = X MXN)</label>
           <input type="number" step="0.0001" value={form.mxn_exchange_rate}
             onChange={e => setForm(f => ({ ...f, mxn_exchange_rate: parseFloat(e.target.value) || 0 }))}
             className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
         </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">CAD Exchange Rate (1 USD = X CAD)</label>
-          <input type="number" step="0.0001" value={form.cad_exchange_rate}
-            onChange={e => setForm(f => ({ ...f, cad_exchange_rate: parseFloat(e.target.value) || 0 }))}
-            className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
-        </div>
+        {form.active_currencies.includes('CAD') && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">CAD Exchange Rate (1 USD = X CAD)</label>
+            <input type="number" step="0.0001" value={form.cad_exchange_rate}
+              onChange={e => setForm(f => ({ ...f, cad_exchange_rate: parseFloat(e.target.value) || 0 }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+          </div>
+        )}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Quote Link Expiration (days)</label>
           <p className="text-xs text-gray-500 mb-1.5">Default number of days before a customer portal link expires.</p>

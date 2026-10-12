@@ -37,6 +37,7 @@ import { getPicklistDefault, applyLanePicklistDefaults } from './lib/picklists';
 import { deriveSplitBillingSiblings } from './lib/splitBillingGroup';
 import { computeLaneMiles } from './lib/laneDistance';
 import { fetchAccountFuelProgram, applyPricingDefaults, NO_FUEL_PROGRAM } from './lib/lanePricing';
+import { getActiveCurrencies } from './lib/currencies';
 
 function App() {
   const [viewMode, setViewMode] = useState<ViewMode>('home');
@@ -1467,7 +1468,7 @@ function App() {
   };
 
   const handleToggleLaneCurrency = async (lane: QuoteLane) => {
-    const currencies = ['USD', 'MXN', 'CAD'];
+    const currencies: string[] = getActiveCurrencies();
     const currentCurrency = lane.currency_code || 'USD';
     const currentIndex = currencies.indexOf(currentCurrency);
     const nextCurrency = currencies[(currentIndex + 1) % currencies.length];

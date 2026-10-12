@@ -23,6 +23,7 @@ import { PdfLivePreview } from './PdfLivePreview';
 import { PdfPortalStatusBar } from './PdfPortalStatusBar';
 import { PdfSendToCustomerModal } from './PdfSendToCustomerModal';
 import { AttachmentsSection } from './PdfFooterConfig';
+import { useActiveCurrencies, currencyOptions } from '../../lib/currencies';
 
 interface Props {
   quote: Quote;
@@ -63,6 +64,7 @@ function sectionEnabled(sections: FooterSectionConfig[] | null | undefined, key:
 export function PdfSimpleTab({ quote, lanes, onToast, onQuoteUpdate, onViewResponse }: Props) {
   const [format, setFormat] = useState<StandardPdfFormat>(buildDefaultStandardFormat);
   const [choices, setChoices] = useState<QuotePdfChoices>(DEFAULT_QUOTE_PDF_CHOICES);
+  const activeCurrencies = useActiveCurrencies();
   const [existingConfigId, setExistingConfigId] = useState<string | undefined>(undefined);
   const [globalVars, setGlobalVars] = useState<GlobalVariables>(DEFAULT_GLOBAL_VARS);
   const [loading, setLoading] = useState(true);
@@ -467,9 +469,9 @@ export function PdfSimpleTab({ quote, lanes, onToast, onQuoteUpdate, onViewRespo
                 className={SELECT}
               >
                 <option value="default">Per lane (default)</option>
-                <option value="USD">USD</option>
-                <option value="MXN">MXN</option>
-                <option value="CAD">CAD</option>
+                {currencyOptions(activeCurrencies, choices.currency === 'default' ? null : choices.currency).map(c => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
               </select>
             </div>
             <div>

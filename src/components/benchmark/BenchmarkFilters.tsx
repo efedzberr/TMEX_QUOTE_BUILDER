@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { EQUIPMENT_TYPES, formatCurrency } from '../../lib/constants';
+import { useActiveCurrencies } from '../../lib/currencies';
 
 export interface BenchmarkFilterValues {
   dateRange: string;
@@ -24,6 +25,7 @@ const RADIUS_OPTIONS = ['Same City', 'Same Market', 'Same Region'];
 
 export function BenchmarkFilters({ filters, onChange, defaultEquipment, defaultTripType }: BenchmarkFiltersProps) {
   const [globalVars, setGlobalVars] = useState<GlobalVars | null>(null);
+  const activeCurrencies = useActiveCurrencies();
 
   useEffect(() => { loadGlobalVars(); }, []);
 
@@ -69,10 +71,12 @@ export function BenchmarkFilters({ filters, onChange, defaultEquipment, defaultT
             <div className="text-[9px] text-gray-400 uppercase">MXN Rate</div>
             <div className="text-[11px] font-medium text-gray-800">{globalVars?.mxn_exchange_rate ? `$1.00 USD = $${globalVars.mxn_exchange_rate.toFixed(4)} MXN` : '—'}</div>
           </div>
-          <div>
-            <div className="text-[9px] text-gray-400 uppercase">CAD Rate</div>
-            <div className="text-[11px] font-medium text-gray-800">{globalVars?.cad_exchange_rate ? `$1.00 USD = $${globalVars.cad_exchange_rate.toFixed(2)} CAD` : '—'}</div>
-          </div>
+          {activeCurrencies.includes('CAD') && (
+            <div>
+              <div className="text-[9px] text-gray-400 uppercase">CAD Rate</div>
+              <div className="text-[11px] font-medium text-gray-800">{globalVars?.cad_exchange_rate ? `$1.00 USD = ${globalVars.cad_exchange_rate.toFixed(2)} CAD` : '—'}</div>
+            </div>
+          )}
         </div>
       </div>
     </div>

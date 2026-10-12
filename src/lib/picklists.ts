@@ -49,7 +49,7 @@ export const PICKLIST_DEFS: PicklistDef[] = [
   { key: 'stage', label: 'Stage', usedBy: 'Quotes', editable: false, builtIn: STAGES },
   { key: 'opportunity_type', label: 'Opportunity Type', usedBy: 'Quotes, SLA', editable: false, builtIn: OPPORTUNITY_TYPES },
   { key: 'quote_priority', label: 'Priority', usedBy: 'Quotes, SLA', editable: false, builtIn: QUOTE_PRIORITIES },
-  { key: 'currency', label: 'Currency', usedBy: 'Quotes, Quote Lanes', editable: false, builtIn: CURRENCIES },
+  { key: 'currency', label: 'Currency', usedBy: 'Quotes, Quote Lanes — active currencies are managed in Global Variables', editable: false, builtIn: CURRENCIES },
 ];
 
 export function picklistDef(key: string): PicklistDef | undefined {

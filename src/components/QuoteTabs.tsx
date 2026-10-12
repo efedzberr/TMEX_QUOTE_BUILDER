@@ -5,7 +5,8 @@ import { QuoteLanes } from './QuoteLanes';
 import { TermsConditionsTab } from './TermsConditionsTab';
 import { PdfSimpleTab } from './pdf/PdfSimpleTab';
 import { QuoteLane, Quote, supabase } from '../lib/supabase';
-import { CURRENCIES, CurrencyCode } from '../lib/constants';
+import { CurrencyCode } from '../lib/constants';
+import { getActiveCurrencies } from '../lib/currencies';
 import { usePicklist, getPicklistDefault, getPicklistOptions } from '../lib/picklists';
 
 interface QuoteTabsProps {
@@ -247,8 +248,9 @@ function AccessorialsTab({ quote, locked = false, onUpdateQuote }: { quote: Quot
   }
 
   function cycleCurrency() {
-    const idx = CURRENCIES.indexOf(activeCurrency);
-    const next = CURRENCIES[(idx + 1) % CURRENCIES.length];
+    const active = getActiveCurrencies();
+    const idx = active.indexOf(activeCurrency);
+    const next = active[(idx + 1) % active.length];
     setActiveCurrency(next);
     onUpdateQuote({ accessorials_tab_currency: next });
   }

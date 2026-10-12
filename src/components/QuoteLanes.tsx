@@ -8,6 +8,7 @@ import { TRIP_TYPES, RATE_TYPES, LOAD_FREQUENCIES, LANE_TYPES, formatCurrencyOrD
 import { BorderCrossingLookup, useBorderCrossingCities } from './BorderCrossingLookup';
 import { CityLookupField, CityInfo } from './CityLookupField';
 import { usePicklist } from '../lib/picklists';
+import { useActiveCurrencies, currencyOptions } from '../lib/currencies';
 import { CityAutocompleteInput } from './CityAutocompleteInput';
 import { MarketFilteredCityLookup } from './MarketFilteredCityLookup';
 import { TripTypeModal } from './TripTypeModal';
@@ -104,6 +105,7 @@ export function QuoteLanes({
   const [showEquipmentDropdown, setShowEquipmentDropdown] = useState(false);
   const quoteEquipmentType = quote?.type_of_service || '';
   const equipmentTypes = usePicklist('equipment_type', quoteEquipmentType);
+  const activeCurrencies = useActiveCurrencies();
   const equipmentMenuRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!showEquipmentDropdown) return;
@@ -2569,9 +2571,9 @@ export function QuoteLanes({
                           className="w-full px-1 py-1 text-xs border border-gray-300 rounded"
                           title="Currency"
                         >
-                          <option value="USD">USD</option>
-                          <option value="MXN">MXN</option>
-                          <option value="CAD">CAD</option>
+                          {currencyOptions(activeCurrencies, lane.currency_code).map(c => (
+                            <option key={c} value={c}>{c}</option>
+                          ))}
                         </select>
                       )}
                       {isLastLane && (
@@ -2890,9 +2892,9 @@ export function QuoteLanes({
                       className="w-full px-1 py-1 text-xs border border-gray-300 rounded"
                       title="Currency"
                     >
-                      <option value="USD">USD</option>
-                      <option value="MXN">MXN</option>
-                      <option value="CAD">CAD</option>
+                      {currencyOptions(activeCurrencies, editData.currency_code).map(c => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
                     </select>
                     <div className="flex gap-1">
                       <button onClick={handleFinishAdd} className="p-1 text-green-600 hover:bg-green-50 rounded">
