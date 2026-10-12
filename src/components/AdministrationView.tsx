@@ -49,6 +49,7 @@ interface City {
   city_name: string;
   city_code: string | null;
   city_full_name: string | null;
+  city_abbreviation: string | null;
   state_code: string | null;
   country_code: string | null;
   market_name: string | null;
@@ -71,6 +72,7 @@ interface GlobalVariables {
   cad_exchange_rate: number;
   quote_link_expiration_days: number;
   active_currencies?: string[];
+  city_abbreviation_separator?: string;
 }
 
 
@@ -538,10 +540,11 @@ interface CityFilters {
   country: string;
   market: string;
   borderCrossing: 'all' | 'yes' | 'no';
+  abbreviation: string;
   onlyIncomplete: boolean;
 }
 
-const EMPTY_CITY_FILTERS: CityFilters = { cityName: '', state: '', country: '', market: '', borderCrossing: 'all', onlyIncomplete: false };
+const EMPTY_CITY_FILTERS: CityFilters = { cityName: '', state: '', country: '', market: '', borderCrossing: 'all', abbreviation: '', onlyIncomplete: false };
 
 /** Fields that make a city "complete". */
 const CITY_REQUIRED_FIELDS: { key: keyof City; label: string }[] = [
@@ -572,6 +575,7 @@ function suggestCityFullName(cityName: string, stateCode: string): string {
 const CITY_COLUMNS: { key: string; label: string; defaultVisible: boolean }[] = [
   { key: 'city_name', label: 'City Name', defaultVisible: true },
   { key: 'city_code', label: 'City Code', defaultVisible: true },
+  { key: 'city_abbreviation', label: 'Abbreviation', defaultVisible: true },
   { key: 'state_code', label: 'State/Province', defaultVisible: true },
   { key: 'country_code', label: 'Country', defaultVisible: true },
   { key: 'market_name', label: 'Market', defaultVisible: true },
@@ -625,7 +629,7 @@ function CityCompletenessPill({ city }: { city: City }) {
   );
 }
 
-function CityDetailRow({ label, value, required = false, mono = false, sub }: { label: string; value: string | null | undefined; required?: boolean; mono?: boolean; sub?: string | null }) {
+function CityDetailRow({ label, value, required = false, mono = false, sub, note }: { label: string; value: string | null | undefined; required?: boolean; mono?: boolean; sub?: string | null; note?: string }) {
   const blank = isBlank(value);
   return (
     <>
@@ -639,6 +643,7 @@ function CityDetailRow({ label, value, required = false, mono = false, sub }: { 
           <span className={mono ? 'font-mono text-xs text-gray-900' : 'text-gray-900'}>{value}</span>
         )}
         {sub && <div className="text-xs text-gray-400 font-mono break-all">{sub}</div>}
+        {note && <div className="text-xs text-gray-400">{note}</div>}
       </div>
     </>
   );
@@ -703,6 +708,7 @@ function CityDetailPanel({ city, onClose, onEdit }: { city: City; onClose: () =>
             <CityDetailRow label="City Name" value={city.city_name} required />
             <CityDetailRow label="Full Name" value={city.city_full_name} />
             <CityDetailRow label="City Code" value={city.city_code} required />
+            <CityDetailRow label="Abbreviation" value={city.city_abbreviation} note="Automatic: City Code + separator + State/Province" />
             <CityDetailRow label="State / Province" value={city.state_code} required />
             <CityDetailRow label="Country" value={city.country_code} required />
           </CityDetailGroup>
@@ -746,6 +752,7 @@ function ManageCities() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [detailCity, setDetailCity] = useState<City | null>(null);
+  const [abbreviationSeparator, setAbbreviationSeparator] = useState(' ');
   const [visibleColumns, setVisibleColumns] = useState<string[]>(loadVisibleCityColumns);
   const [showColumnMenu, setShowColumnMenu] = useState(false);
   const columnMenuRef = useRef<HTMLDivElement>(null);
@@ -755,7 +762,14 @@ function ManageCities() {
 
   const totalPages = Math.ceil(totalCount / CITIES_PAGE_SIZE);
 
-  const hasActiveFilters = appliedFilters.cityName || appliedFilters.state || appliedFilters.country || appliedFilters.market || appliedFilters.borderCrossing !== 'all' || appliedFilters.onlyIncomplete;
+  const hasActiveFilters = appliedFilters.cityName || appliedFilters.state || appliedFilters.country || appliedFilters.market || appliedFilters.borderCrossing !== 'all' || appliedFilters.abbreviation || appliedFilters.onlyIncomplete;
+
+  useEffect(() => {
+    supabase.from('global_variables').select('city_abbreviation_separator').limit(1).maybeSingle()
+      .then(({ data }) => {
+        if (data && typeof data.city_abbreviation_separator === 'string') setAbbreviationSeparator(data.city_abbreviation_separator);
+      });
+  }, []);
 
   const shownColumns = CITY_COLUMNS.filter(c => visibleColumns.includes(c.key));
 
@@ -821,6 +835,7 @@ function ManageCities() {
     if (f.state.trim()) query = query.ilike('state_code', `%${f.state.trim()}%`);
     if (f.country.trim()) query = query.ilike('country_code', `%${f.country.trim()}%`);
     if (f.market.trim()) query = query.ilike('market_name', `%${f.market.trim()}%`);
+    if (f.abbreviation.trim()) query = query.ilike('city_abbreviation', `%${f.abbreviation.trim()}%`);
     if (f.borderCrossing === 'yes') query = query.eq('is_border_crossing_city', true);
     if (f.borderCrossing === 'no') query = query.eq('is_border_crossing_city', false);
     if (f.onlyIncomplete) {
@@ -974,6 +989,9 @@ function ManageCities() {
   const suggestedCityCode = suggestCityCode(form.city_name);
   const suggestedMarketCode = suggestMarketCode(form.market_name);
   const suggestedFullName = suggestCityFullName(form.city_name, form.state_code);
+  const abbreviationPreview = form.city_code.trim() && form.state_code.trim()
+    ? form.city_code.trim().toUpperCase() + abbreviationSeparator + form.state_code.trim().toUpperCase()
+    : '—';
   const fullNameChanged = !!editing && form.city_full_name.trim() !== (editing.city_full_name || '').trim();
 
   const inputClass = (hasError?: boolean) =>
@@ -1004,7 +1022,7 @@ function ManageCities() {
             </button>
           )}
         </div>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wider">City Name</label>
             <div className="relative">
@@ -1068,6 +1086,23 @@ function ManageCities() {
               />
               {filters.market && (
                 <button onClick={() => handleFilterChange('market', '')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wider">Abbreviation</label>
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="e.g. LAR TX"
+                value={filters.abbreviation}
+                onChange={e => handleFilterChange('abbreviation', e.target.value)}
+                className="w-full pl-3 pr-7 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+              {filters.abbreviation && (
+                <button onClick={() => handleFilterChange('abbreviation', '')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
                   <X className="w-3 h-3" />
                 </button>
               )}
@@ -1269,6 +1304,10 @@ function ManageCities() {
                 {suggestionLink(form.city_code, suggestedCityCode, () => setForm(f => ({ ...f, city_code: suggestedCityCode })))}
               </div>
               <div>
+                <span className="block text-sm font-medium text-gray-700 mb-1">Abbreviation (automatic)</span>
+                <div className="px-3 py-2 bg-gray-50 border border-gray-200 rounded text-sm font-mono text-gray-700 whitespace-pre">{abbreviationPreview}</div>
+              </div>
+              <div>
                 <label className="flex items-center text-sm font-medium text-gray-700 mb-1">Market{completeTag}</label>
                 <input type="text" value={form.market_name} onChange={e => updateForm('market_name', e.target.value)} className={inputClass()} />
               </div>
@@ -1319,12 +1358,23 @@ function ManageCities() {
   );
 }
 
+const SEPARATOR_PRESETS: { value: string; label: string }[] = [
+  { value: ' ', label: 'Space (LAR TX)' },
+  { value: '', label: 'None (LARTX)' },
+  { value: '-', label: 'Hyphen (LAR-TX)' },
+  { value: '/', label: 'Slash (LAR/TX)' },
+  { value: ', ', label: 'Comma + space (LAR, TX)' },
+];
+const CUSTOM_SEPARATOR = '__custom__';
+
 function ManageGlobalVariables() {
   const [vars, setVars] = useState<GlobalVariables | null>(null);
-  const [form, setForm] = useState({ fuel_rate_usd: 0, rate_per_mile: 0, mxn_exchange_rate: 0, cad_exchange_rate: 0, quote_link_expiration_days: 30, active_currencies: ['USD', 'MXN'] as string[] });
+  const [form, setForm] = useState({ fuel_rate_usd: 0, rate_per_mile: 0, mxn_exchange_rate: 0, cad_exchange_rate: 0, quote_link_expiration_days: 30, active_currencies: ['USD', 'MXN'] as string[], city_abbreviation_separator: ' ' });
+  const [customSeparator, setCustomSeparator] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [recalculated, setRecalculated] = useState(false);
 
   useEffect(() => { load(); }, []);
 
@@ -1340,7 +1390,9 @@ function ManageGlobalVariables() {
         cad_exchange_rate: data.cad_exchange_rate,
         quote_link_expiration_days: data.quote_link_expiration_days ?? 30,
         active_currencies: data.active_currencies ?? ['USD', 'MXN'],
+        city_abbreviation_separator: data.city_abbreviation_separator ?? ' ',
       });
+      setCustomSeparator(!SEPARATOR_PRESETS.some(p => p.value === (data.city_abbreviation_separator ?? ' ')));
     }
     setLoading(false);
   }
@@ -1348,16 +1400,19 @@ function ManageGlobalVariables() {
   async function save() {
     setSaving(true);
     const updates = { ...form, updated_at: new Date().toISOString() };
+    const separatorChanged = (vars?.city_abbreviation_separator ?? ' ') !== form.city_abbreviation_separator;
     let failed = false;
     if (vars) {
       const { error } = await supabase.from('global_variables').update(updates).eq('id', vars.id);
       failed = !!error;
+      if (!failed) setVars({ ...vars, city_abbreviation_separator: form.city_abbreviation_separator });
     } else {
       const { data, error } = await supabase.from('global_variables').insert(form).select().single();
       if (data) setVars(data);
       failed = !!error;
     }
     if (!failed) await loadActiveCurrencies(true);
+    setRecalculated(!failed && separatorChanged);
     setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
@@ -1429,6 +1484,34 @@ function ManageGlobalVariables() {
           </div>
         )}
         <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">City Abbreviation Separator</label>
+          <p className="text-xs text-gray-500 mb-1.5">Used to build each city's abbreviation: City Code + separator + State/Province. Changing it recalculates all cities.</p>
+          <select
+            value={customSeparator ? CUSTOM_SEPARATOR : form.city_abbreviation_separator}
+            onChange={e => {
+              const v = e.target.value;
+              if (v === CUSTOM_SEPARATOR) {
+                setCustomSeparator(true);
+              } else {
+                setCustomSeparator(false);
+                setForm(f => ({ ...f, city_abbreviation_separator: v }));
+              }
+            }}
+            className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          >
+            {SEPARATOR_PRESETS.map(p => <option key={p.label} value={p.value}>{p.label}</option>)}
+            <option value={CUSTOM_SEPARATOR}>Custom…</option>
+          </select>
+          {customSeparator && (
+            <input type="text" maxLength={3} value={form.city_abbreviation_separator} placeholder="Up to 3 characters"
+              onChange={e => setForm(f => ({ ...f, city_abbreviation_separator: e.target.value.slice(0, 3) }))}
+              className="mt-2 w-full px-3 py-2 border border-gray-300 rounded text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+          )}
+          <p className="text-xs text-gray-600 mt-1.5">
+            Example: <span className="font-mono text-gray-900 whitespace-pre">"{'LAR' + form.city_abbreviation_separator + 'TX'}"</span>
+          </p>
+        </div>
+        <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Quote Link Expiration (days)</label>
           <p className="text-xs text-gray-500 mb-1.5">Default number of days before a customer portal link expires.</p>
           <input type="number" min={1} max={90} step="1" value={form.quote_link_expiration_days}
@@ -1442,7 +1525,7 @@ function ManageGlobalVariables() {
         </button>
         {saved && (
           <span className="flex items-center gap-1.5 text-sm text-green-700 font-medium">
-            <Check className="w-4 h-4" /> Saved successfully
+            <Check className="w-4 h-4" /> Saved successfully{recalculated && ' — all city abbreviations were recalculated.'}
           </span>
         )}
       </div>
