@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Pencil, Trash2, Search, X, Check, Copy, ChevronDown } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { Plus, Pencil, Trash2, Search, X, Check, Copy, ChevronDown, Columns3 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { CustomersTable } from './customers/CustomersTable';
 import { SystemInformation } from './SystemInformation';
@@ -46,11 +47,20 @@ interface Shipper {
 interface City {
   id: string;
   city_name: string;
-  state_code: string;
-  country_code: string;
-  market_name: string;
-  city_full_name: string;
+  city_code: string | null;
+  city_full_name: string | null;
+  state_code: string | null;
+  country_code: string | null;
+  market_name: string | null;
+  market_code: string | null;
+  pkey: string | null;
   is_border_crossing_city: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+  created_by: string | null;
+  created_by_name: string | null;
+  updated_by: string | null;
+  updated_by_name: string | null;
 }
 
 interface GlobalVariables {
@@ -528,9 +538,196 @@ interface CityFilters {
   country: string;
   market: string;
   borderCrossing: 'all' | 'yes' | 'no';
+  onlyIncomplete: boolean;
 }
 
-const EMPTY_CITY_FILTERS: CityFilters = { cityName: '', state: '', country: '', market: '', borderCrossing: 'all' };
+const EMPTY_CITY_FILTERS: CityFilters = { cityName: '', state: '', country: '', market: '', borderCrossing: 'all', onlyIncomplete: false };
+
+/** Fields that make a city "complete". */
+const CITY_REQUIRED_FIELDS: { key: keyof City; label: string }[] = [
+  { key: 'city_name', label: 'City Name' },
+  { key: 'state_code', label: 'State / Province' },
+  { key: 'country_code', label: 'Country' },
+  { key: 'market_name', label: 'Market' },
+  { key: 'city_code', label: 'City Code' },
+  { key: 'market_code', label: 'Market Code' },
+];
+
+function isBlank(v: unknown): boolean {
+  return v === null || v === undefined || (typeof v === 'string' && v.trim() === '');
+}
+
+function missingCityFields(c: City): string[] {
+  return CITY_REQUIRED_FIELDS.filter(f => isBlank(c[f.key])).map(f => f.label);
+}
+
+/** Same rules the screen used before, now shown as editable suggestions. */
+function suggestCityCode(cityName: string): string { return cityName.trim().substring(0, 3).toUpperCase(); }
+function suggestMarketCode(marketName: string): string { return marketName.trim().substring(0, 3).toUpperCase(); }
+function suggestCityFullName(cityName: string, stateCode: string): string {
+  return cityName.trim() && stateCode.trim() ? `${cityName.trim()}, ${stateCode.trim()}` : '';
+}
+
+/** All list columns. `defaultVisible` = shown the first time. */
+const CITY_COLUMNS: { key: string; label: string; defaultVisible: boolean }[] = [
+  { key: 'city_name', label: 'City Name', defaultVisible: true },
+  { key: 'city_code', label: 'City Code', defaultVisible: true },
+  { key: 'state_code', label: 'State/Province', defaultVisible: true },
+  { key: 'country_code', label: 'Country', defaultVisible: true },
+  { key: 'market_name', label: 'Market', defaultVisible: true },
+  { key: 'market_code', label: 'Market Code', defaultVisible: true },
+  { key: 'is_border_crossing_city', label: 'Border Crossing City', defaultVisible: true },
+  { key: 'completeness', label: 'Completeness', defaultVisible: true },
+  { key: 'city_full_name', label: 'Full Name', defaultVisible: false },
+  { key: 'pkey', label: 'PKey', defaultVisible: false },
+  { key: 'id', label: 'ID', defaultVisible: false },
+  { key: 'created_at', label: 'Created At', defaultVisible: false },
+  { key: 'created_by_name', label: 'Created By', defaultVisible: false },
+  { key: 'updated_at', label: 'Last Modified', defaultVisible: false },
+  { key: 'updated_by_name', label: 'Modified By', defaultVisible: false },
+];
+
+const CITY_COLUMNS_STORAGE_KEY = 'sph.admin.cities.columns';
+
+const DEFAULT_CITY_COLUMNS = CITY_COLUMNS.filter(c => c.defaultVisible).map(c => c.key);
+const REQUIRED_CITY_KEYS = CITY_REQUIRED_FIELDS.map(f => f.key as string);
+const CITY_DATE_COLUMNS = ['created_at', 'updated_at'];
+
+function loadVisibleCityColumns(): string[] {
+  try {
+    const raw = localStorage.getItem(CITY_COLUMNS_STORAGE_KEY);
+    if (raw) {
+      const parsed: unknown = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        const known = parsed.filter((k): k is string => typeof k === 'string' && CITY_COLUMNS.some(c => c.key === k));
+        return known.includes('city_name') ? known : ['city_name', ...known];
+      }
+    }
+  } catch {
+    // invalid stored value: fall back to defaults
+  }
+  return DEFAULT_CITY_COLUMNS;
+}
+
+function formatCityDate(v: string | null): string {
+  return v ? new Date(v).toLocaleString() : '—';
+}
+
+function CityCompletenessPill({ city }: { city: City }) {
+  const missing = missingCityFields(city);
+  if (missing.length === 0) {
+    return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-200">Complete</span>;
+  }
+  return (
+    <span title={missing.join(', ')} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
+      Missing {missing.length}
+    </span>
+  );
+}
+
+function CityDetailRow({ label, value, required = false, mono = false, sub }: { label: string; value: string | null | undefined; required?: boolean; mono?: boolean; sub?: string | null }) {
+  const blank = isBlank(value);
+  return (
+    <>
+      <div className="text-gray-500">{label}</div>
+      <div className="min-w-0 break-words">
+        {blank ? (
+          required
+            ? <span className="text-amber-600 italic">Empty — required</span>
+            : <span className="text-gray-400 italic">Empty</span>
+        ) : (
+          <span className={mono ? 'font-mono text-xs text-gray-900' : 'text-gray-900'}>{value}</span>
+        )}
+        {sub && <div className="text-xs text-gray-400 font-mono break-all">{sub}</div>}
+      </div>
+    </>
+  );
+}
+
+function CityDetailGroup({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div>
+      <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2">{title}</div>
+      <div className="grid grid-cols-[140px_1fr] gap-y-1.5 text-sm">{children}</div>
+    </div>
+  );
+}
+
+function CityDetailPanel({ city, onClose, onEdit }: { city: City; onClose: () => void; onEdit: () => void }) {
+  const [copied, setCopied] = useState(false);
+  const missing = missingCityFields(city);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose();
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  async function copyId() {
+    try {
+      await navigator.clipboard.writeText(city.id);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // clipboard unavailable: nothing to do
+    }
+  }
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/20 z-40" onClick={onClose} />
+      <div className="fixed inset-y-0 right-0 w-full max-w-md bg-white shadow-xl border-l border-gray-200 z-50 flex flex-col">
+        <div className="p-5 border-b border-gray-200">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h3 className="text-base font-semibold text-gray-900 break-words">{city.city_full_name || city.city_name}</h3>
+              <div className="mt-1.5"><CityCompletenessPill city={city} /></div>
+              {missing.length > 0 && <div className="text-xs text-amber-700 mt-1.5">Missing: {missing.join(', ')}</div>}
+            </div>
+            <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 rounded"><X className="w-5 h-5" /></button>
+          </div>
+          <div className="flex items-center gap-2 mt-4">
+            <button onClick={onEdit} className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-blue-600 rounded hover:bg-blue-700 transition-colors">
+              <Pencil className="w-3.5 h-3.5" /> Edit
+            </button>
+            <button onClick={copyId} className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 border border-gray-300 rounded hover:bg-gray-50 transition-colors">
+              {copied ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
+              {copied ? 'Copied' : 'Copy ID'}
+            </button>
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+          <CityDetailGroup title="Location">
+            <CityDetailRow label="City Name" value={city.city_name} required />
+            <CityDetailRow label="Full Name" value={city.city_full_name} />
+            <CityDetailRow label="City Code" value={city.city_code} required />
+            <CityDetailRow label="State / Province" value={city.state_code} required />
+            <CityDetailRow label="Country" value={city.country_code} required />
+          </CityDetailGroup>
+          <CityDetailGroup title="Market">
+            <CityDetailRow label="Market" value={city.market_name} required />
+            <CityDetailRow label="Market Code" value={city.market_code} required />
+          </CityDetailGroup>
+          <CityDetailGroup title="Border & references">
+            <CityDetailRow label="Border Crossing City" value={city.is_border_crossing_city ? 'Yes' : 'No'} />
+            <CityDetailRow label="PKey" value={city.pkey} />
+          </CityDetailGroup>
+          <CityDetailGroup title="System information">
+            <CityDetailRow label="ID" value={city.id} mono />
+            <CityDetailRow label="Created At" value={city.created_at ? new Date(city.created_at).toLocaleString() : null} />
+            <CityDetailRow label="Created By" value={city.created_by_name} sub={city.created_by} />
+            <CityDetailRow label="Last Modified" value={city.updated_at ? new Date(city.updated_at).toLocaleString() : null} />
+            <CityDetailRow label="Modified By" value={city.updated_by_name} sub={city.updated_by} />
+          </CityDetailGroup>
+        </div>
+      </div>
+    </>
+  );
+}
+
+const EMPTY_CITY_FORM = { city_name: '', city_code: '', city_full_name: '', state_code: '', country_code: '', market_name: '', market_code: '', pkey: '', is_border_crossing_city: false };
 
 function ManageCities() {
   const [cities, setCities] = useState<City[]>([]);
@@ -542,18 +739,49 @@ function ManageCities() {
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<City | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [form, setForm] = useState({ city_name: '', state_code: '', country_code: '', market_name: '', is_border_crossing_city: false });
+  const [form, setForm] = useState(EMPTY_CITY_FORM);
+  const [cityCodeTouched, setCityCodeTouched] = useState(false);
+  const [marketCodeTouched, setMarketCodeTouched] = useState(false);
+  const [fullNameTouched, setFullNameTouched] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [detailCity, setDetailCity] = useState<City | null>(null);
+  const [visibleColumns, setVisibleColumns] = useState<string[]>(loadVisibleCityColumns);
+  const [showColumnMenu, setShowColumnMenu] = useState(false);
+  const columnMenuRef = useRef<HTMLDivElement>(null);
   const filterTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { sorted, sortKey, sortDir, toggle } = useSortable(cities);
 
   const totalPages = Math.ceil(totalCount / CITIES_PAGE_SIZE);
 
-  const hasActiveFilters = appliedFilters.cityName || appliedFilters.state || appliedFilters.country || appliedFilters.market || appliedFilters.borderCrossing !== 'all';
+  const hasActiveFilters = appliedFilters.cityName || appliedFilters.state || appliedFilters.country || appliedFilters.market || appliedFilters.borderCrossing !== 'all' || appliedFilters.onlyIncomplete;
 
-  function handleFilterChange(field: keyof CityFilters, value: string) {
+  const shownColumns = CITY_COLUMNS.filter(c => visibleColumns.includes(c.key));
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(CITY_COLUMNS_STORAGE_KEY, JSON.stringify(visibleColumns));
+    } catch {
+      // storage unavailable: the choice just won't persist
+    }
+  }, [visibleColumns]);
+
+  useEffect(() => {
+    if (!showColumnMenu) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (columnMenuRef.current && !columnMenuRef.current.contains(e.target as Node)) setShowColumnMenu(false);
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showColumnMenu]);
+
+  function toggleColumn(key: string) {
+    if (key === 'city_name') return;
+    setVisibleColumns(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
+  }
+
+  function handleFilterChange(field: Exclude<keyof CityFilters, 'onlyIncomplete'>, value: string) {
     const updated = { ...filters, [field]: value };
     setFilters(updated);
     if (filterTimer.current) clearTimeout(filterTimer.current);
@@ -561,6 +789,14 @@ function ManageCities() {
       setAppliedFilters(updated);
       setPage(0);
     }, 300);
+  }
+
+  function handleOnlyIncompleteChange(value: boolean) {
+    if (filterTimer.current) clearTimeout(filterTimer.current);
+    const updated = { ...filters, onlyIncomplete: value };
+    setFilters(updated);
+    setAppliedFilters(updated);
+    setPage(0);
   }
 
   function clearFilters() {
@@ -578,7 +814,7 @@ function ManageCities() {
 
     let query = supabase
       .from('cities')
-      .select('id, city_name, state_code, country_code, market_name, city_full_name, is_border_crossing_city', { count: 'exact' })
+      .select('*', { count: 'exact' })
       .order('city_name');
 
     if (f.cityName.trim()) query = query.ilike('city_name', `%${f.cityName.trim()}%`);
@@ -587,27 +823,63 @@ function ManageCities() {
     if (f.market.trim()) query = query.ilike('market_name', `%${f.market.trim()}%`);
     if (f.borderCrossing === 'yes') query = query.eq('is_border_crossing_city', true);
     if (f.borderCrossing === 'no') query = query.eq('is_border_crossing_city', false);
+    if (f.onlyIncomplete) {
+      query = query.or(
+        'state_code.is.null,state_code.eq.,country_code.is.null,country_code.eq.,market_name.is.null,market_name.eq.,city_code.is.null,city_code.eq.,market_code.is.null,market_code.eq.'
+      );
+    }
 
     query = query.range(from, to);
 
     const { data, count } = await query;
-    if (data) setCities(data);
+    if (data) setCities(data as City[]);
     if (count !== null) setTotalCount(count);
     setLoading(false);
   }
 
   function openAdd() {
     setEditing(null);
-    setForm({ city_name: '', state_code: '', country_code: '', market_name: '', is_border_crossing_city: false });
+    setForm(EMPTY_CITY_FORM);
+    setCityCodeTouched(false);
+    setMarketCodeTouched(false);
+    setFullNameTouched(false);
     setErrors({});
     setShowModal(true);
   }
 
   function openEdit(c: City) {
     setEditing(c);
-    setForm({ city_name: c.city_name, state_code: c.state_code || '', country_code: c.country_code || '', market_name: c.market_name || '', is_border_crossing_city: c.is_border_crossing_city || false });
+    const cityName = c.city_name || '';
+    const stateCode = c.state_code || '';
+    const marketName = c.market_name || '';
+    setForm({
+      city_name: cityName,
+      city_code: c.city_code || suggestCityCode(cityName),
+      city_full_name: c.city_full_name || suggestCityFullName(cityName, stateCode),
+      state_code: stateCode,
+      country_code: c.country_code || '',
+      market_name: marketName,
+      market_code: c.market_code || suggestMarketCode(marketName),
+      pkey: c.pkey || '',
+      is_border_crossing_city: c.is_border_crossing_city || false,
+    });
+    setCityCodeTouched(true);
+    setMarketCodeTouched(true);
+    setFullNameTouched(true);
     setErrors({});
     setShowModal(true);
+  }
+
+  function updateForm(field: keyof typeof EMPTY_CITY_FORM, value: string) {
+    setForm(f => {
+      const next = { ...f, [field]: value };
+      if (!editing) {
+        if (!cityCodeTouched && field !== 'city_code') next.city_code = suggestCityCode(next.city_name);
+        if (!marketCodeTouched && field !== 'market_code') next.market_code = suggestMarketCode(next.market_name);
+        if (!fullNameTouched && field !== 'city_full_name') next.city_full_name = suggestCityFullName(next.city_name, next.state_code);
+      }
+      return next;
+    });
   }
 
   function validate() {
@@ -615,6 +887,7 @@ function ManageCities() {
     if (!form.city_name.trim()) e.city_name = 'Required';
     if (!form.state_code.trim()) e.state_code = 'Required';
     if (!form.country_code.trim()) e.country_code = 'Required';
+    if (!form.city_full_name.trim()) e.city_full_name = 'Required';
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -622,21 +895,34 @@ function ManageCities() {
   async function save() {
     if (!validate()) return;
     setSaving(true);
-    const cityFullName = `${form.city_name}, ${form.state_code}`;
-    if (editing) {
-      const { error } = await supabase.from('cities').update({ ...form, city_full_name: cityFullName }).eq('id', editing.id);
-      if (!error) setCities(prev => prev.map(c => c.id === editing.id ? { ...c, ...form, city_full_name: cityFullName } : c));
-    } else {
-      const { data, error } = await supabase.from('cities').insert({
-        ...form,
-        city_full_name: cityFullName,
-        city_code: form.city_name.substring(0, 3).toUpperCase(),
-        market_code: form.market_name.substring(0, 3).toUpperCase(),
-        is_border_crossing_city: form.is_border_crossing_city,
-      }).select().single();
-      if (!error && data) setCities(prev => [data, ...prev]);
-    }
+    const orNull = (v: string) => (v.trim() ? v.trim() : null);
+    const upperOrNull = (v: string) => (v.trim() ? v.trim().toUpperCase() : null);
+    const payload = {
+      city_name: form.city_name.trim(),
+      city_full_name: form.city_full_name.trim(),
+      state_code: form.state_code.trim().toUpperCase(),
+      country_code: form.country_code.trim().toUpperCase(),
+      city_code: upperOrNull(form.city_code),
+      market_name: orNull(form.market_name),
+      market_code: upperOrNull(form.market_code),
+      pkey: orNull(form.pkey),
+      is_border_crossing_city: form.is_border_crossing_city,
+    };
+    const { data, error } = editing
+      ? await supabase.from('cities').update(payload).eq('id', editing.id).select().single()
+      : await supabase.from('cities').insert(payload).select().single();
     setSaving(false);
+    if (error || !data) {
+      setErrors({ city_name: error?.message || 'Could not save the city' });
+      return;
+    }
+    const savedCity = data as City;
+    if (editing) {
+      setCities(prev => prev.map(c => c.id === savedCity.id ? savedCity : c));
+    } else {
+      setCities(prev => [savedCity, ...prev]);
+    }
+    setDetailCity(d => (d && d.id === savedCity.id ? savedCity : d));
     setShowModal(false);
   }
 
@@ -644,7 +930,63 @@ function ManageCities() {
     if (!deleteId) return;
     await supabase.from('cities').delete().eq('id', deleteId);
     setCities(prev => prev.filter(c => c.id !== deleteId));
+    setDetailCity(d => (d && d.id === deleteId ? null : d));
     setDeleteId(null);
+  }
+
+  function renderCell(c: City, key: string) {
+    if (key === 'is_border_crossing_city') {
+      return (
+        <td key={key} className="px-4 py-3 text-center">
+          {c.is_border_crossing_city ? (
+            <span className="inline-flex items-center justify-center w-5 h-5 bg-green-100 rounded-full">
+              <Check className="w-3 h-3 text-green-700" />
+            </span>
+          ) : (
+            <span className="inline-flex items-center justify-center w-5 h-5 bg-gray-100 rounded-full">
+              <X className="w-3 h-3 text-gray-400" />
+            </span>
+          )}
+        </td>
+      );
+    }
+    if (key === 'completeness') {
+      return <td key={key} className="px-4 py-3 whitespace-nowrap"><CityCompletenessPill city={c} /></td>;
+    }
+    if (key === 'id') {
+      return <td key={key} className="px-4 py-3 font-mono text-xs text-gray-500" title={c.id}>{c.id.substring(0, 8)}</td>;
+    }
+    if (CITY_DATE_COLUMNS.includes(key)) {
+      const v = c[key as keyof City] as string | null;
+      return <td key={key} className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{formatCityDate(v)}</td>;
+    }
+    const value = c[key as keyof City] as string | null;
+    const blank = isBlank(value);
+    return (
+      <td key={key} className={`px-4 py-3 text-sm whitespace-nowrap ${key === 'city_name' ? 'font-medium text-gray-900' : 'text-gray-600'}`}>
+        {blank
+          ? <span className={REQUIRED_CITY_KEYS.includes(key) ? 'text-amber-500' : 'text-gray-300'}>—</span>
+          : value}
+      </td>
+    );
+  }
+
+  const suggestedCityCode = suggestCityCode(form.city_name);
+  const suggestedMarketCode = suggestMarketCode(form.market_name);
+  const suggestedFullName = suggestCityFullName(form.city_name, form.state_code);
+  const fullNameChanged = !!editing && form.city_full_name.trim() !== (editing.city_full_name || '').trim();
+
+  const inputClass = (hasError?: boolean) =>
+    `w-full px-3 py-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${hasError ? 'border-red-500' : 'border-gray-300'}`;
+  const completeTag = <span className="ml-1.5 text-[10px] font-normal px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">needed to be complete</span>;
+
+  function suggestionLink(value: string, suggestion: string, apply: () => void) {
+    if (!editing || !suggestion || !value.trim() || value.trim().toUpperCase() === suggestion.toUpperCase()) return null;
+    return (
+      <button type="button" onClick={apply} className="text-xs text-blue-600 hover:text-blue-800 mt-1">
+        Use suggestion: {suggestion}
+      </button>
+    );
   }
 
   return (
@@ -662,7 +1004,7 @@ function ManageCities() {
             </button>
           )}
         </div>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wider">City Name</label>
             <div className="relative">
@@ -743,6 +1085,17 @@ function ManageCities() {
               <option value="no">No</option>
             </select>
           </div>
+          <div className="flex items-end">
+            <label className="flex items-center gap-2 py-2 text-sm text-gray-700 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={filters.onlyIncomplete}
+                onChange={e => handleOnlyIncompleteChange(e.target.checked)}
+                className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              Only incomplete
+            </label>
+          </div>
         </div>
       </div>
 
@@ -753,51 +1106,75 @@ function ManageCities() {
           </span>
         )}
         {loading && <span className="text-sm text-gray-400">Searching...</span>}
-        <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors ml-auto">
-          <Plus className="w-4 h-4" /> Add City
-        </button>
+        <div className="flex items-center gap-2 ml-auto">
+          <div className="relative" ref={columnMenuRef}>
+            <button
+              onClick={() => setShowColumnMenu(v => !v)}
+              className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 border border-gray-300 bg-white rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              <Columns3 className="w-4 h-4" /> Columns
+            </button>
+            {showColumnMenu && (
+              <div className="absolute right-0 mt-1 w-56 bg-white border border-gray-200 rounded-lg shadow-lg z-20 p-2">
+                <div className="max-h-72 overflow-y-auto">
+                  {CITY_COLUMNS.map(col => {
+                    const locked = col.key === 'city_name';
+                    return (
+                      <label key={col.key} className={`flex items-center gap-2 px-2 py-1.5 rounded text-sm ${locked ? 'text-gray-400' : 'text-gray-700 hover:bg-gray-50 cursor-pointer'}`}>
+                        <input
+                          type="checkbox"
+                          checked={visibleColumns.includes(col.key)}
+                          disabled={locked}
+                          onChange={() => toggleColumn(col.key)}
+                          className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        {col.label}
+                      </label>
+                    );
+                  })}
+                </div>
+                <div className="border-t border-gray-100 mt-1 pt-1.5 px-2">
+                  <button onClick={() => setVisibleColumns(DEFAULT_CITY_COLUMNS)} className="text-xs text-blue-600 hover:text-blue-800 font-medium">
+                    Reset to default
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+          <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors">
+            <Plus className="w-4 h-4" /> Add City
+          </button>
+        </div>
       </div>
 
-      <div className="border border-gray-200 rounded-lg overflow-hidden">
+      <div className="border border-gray-200 rounded-lg overflow-x-auto">
         <table className="w-full">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
-              <SortTh<City> label="City Name" col="city_name" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} />
-              <SortTh<City> label="State/Province" col="state_code" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} />
-              <SortTh<City> label="Country" col="country_code" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} />
-              <SortTh<City> label="Market" col="market_name" sortKey={sortKey} sortDir={sortDir} onToggle={toggle} />
-              <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Border Crossing City</th>
-              <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
+              {shownColumns.map(col => (
+                col.key === 'is_border_crossing_city' || col.key === 'completeness' ? (
+                  <th key={col.key} className={`px-4 py-3 text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap ${col.key === 'is_border_crossing_city' ? 'text-center' : 'text-left'}`}>{col.label}</th>
+                ) : (
+                  <SortTh<City> key={col.key} label={col.label} col={col.key as keyof City} sortKey={sortKey} sortDir={sortDir} onToggle={toggle} className="whitespace-nowrap" />
+                )
+              ))}
+              <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {loading ? (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-500">Loading...</td></tr>
+              <tr><td colSpan={shownColumns.length + 1} className="px-4 py-8 text-center text-sm text-gray-500">Loading...</td></tr>
             ) : sorted.length === 0 ? (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-500">
+              <tr><td colSpan={shownColumns.length + 1} className="px-4 py-8 text-center text-sm text-gray-500">
                 {hasActiveFilters ? 'No cities found matching the selected filters.' : 'No cities found'}
               </td></tr>
             ) : sorted.map(c => (
-              <tr key={c.id} className="hover:bg-gray-50 transition-colors">
-                <td className="px-4 py-3 text-sm font-medium text-gray-900">{c.city_name}</td>
-                <td className="px-4 py-3 text-sm text-gray-600">{c.state_code}</td>
-                <td className="px-4 py-3 text-sm text-gray-600">{c.country_code}</td>
-                <td className="px-4 py-3 text-sm text-gray-600">{c.market_name}</td>
-                <td className="px-4 py-3 text-center">
-                  {c.is_border_crossing_city ? (
-                    <span className="inline-flex items-center justify-center w-5 h-5 bg-green-100 rounded-full">
-                      <Check className="w-3 h-3 text-green-700" />
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center justify-center w-5 h-5 bg-gray-100 rounded-full">
-                      <X className="w-3 h-3 text-gray-400" />
-                    </span>
-                  )}
-                </td>
+              <tr key={c.id} onClick={() => setDetailCity(c)} className="hover:bg-gray-50 transition-colors cursor-pointer">
+                {shownColumns.map(col => renderCell(c, col.key))}
                 <td className="px-4 py-3 text-right">
                   <div className="flex items-center justify-end gap-2">
-                    <button onClick={() => openEdit(c)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"><Pencil className="w-4 h-4" /></button>
-                    <button onClick={() => setDeleteId(c.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded transition-colors"><Trash2 className="w-4 h-4" /></button>
+                    <button onClick={e => { e.stopPropagation(); openEdit(c); }} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"><Pencil className="w-4 h-4" /></button>
+                    <button onClick={e => { e.stopPropagation(); setDeleteId(c.id); }} className="p-1.5 text-red-500 hover:bg-red-50 rounded transition-colors"><Trash2 className="w-4 h-4" /></button>
                   </div>
                 </td>
               </tr>
@@ -842,9 +1219,17 @@ function ManageCities() {
         </div>
       )}
 
+      {detailCity && (
+        <CityDetailPanel
+          city={detailCity}
+          onClose={() => setDetailCity(null)}
+          onEdit={() => { const c = detailCity; setDetailCity(null); openEdit(c); }}
+        />
+      )}
+
       {showModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
+          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-5">
               <h3 className="text-base font-semibold text-gray-900">{editing ? 'Edit City' : 'Add City'}</h3>
               <button onClick={() => setShowModal(false)} className="p-1 text-gray-400 hover:text-gray-600 rounded"><X className="w-5 h-5" /></button>
@@ -852,26 +1237,52 @@ function ManageCities() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1"><span className="text-red-500">*</span> City Name</label>
-                <input type="text" value={form.city_name} onChange={e => setForm(f => ({ ...f, city_name: e.target.value }))}
-                  className={`w-full px-3 py-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.city_name ? 'border-red-500' : 'border-gray-300'}`} />
+                <input type="text" value={form.city_name} onChange={e => updateForm('city_name', e.target.value)} className={inputClass(!!errors.city_name)} />
                 {errors.city_name && <div className="text-xs text-red-500 mt-0.5">{errors.city_name}</div>}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1"><span className="text-red-500">*</span> State/Province</label>
-                <input type="text" value={form.state_code} onChange={e => setForm(f => ({ ...f, state_code: e.target.value }))}
-                  className={`w-full px-3 py-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.state_code ? 'border-red-500' : 'border-gray-300'}`} />
+                <input type="text" value={form.state_code} onChange={e => updateForm('state_code', e.target.value)} className={inputClass(!!errors.state_code)} />
                 {errors.state_code && <div className="text-xs text-red-500 mt-0.5">{errors.state_code}</div>}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1"><span className="text-red-500">*</span> Country</label>
-                <input type="text" value={form.country_code} onChange={e => setForm(f => ({ ...f, country_code: e.target.value }))}
-                  className={`w-full px-3 py-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.country_code ? 'border-red-500' : 'border-gray-300'}`} />
+                <input type="text" value={form.country_code} onChange={e => updateForm('country_code', e.target.value)} className={inputClass(!!errors.country_code)} />
                 {errors.country_code && <div className="text-xs text-red-500 mt-0.5">{errors.country_code}</div>}
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Market</label>
-                <input type="text" value={form.market_name} onChange={e => setForm(f => ({ ...f, market_name: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                <label className="block text-sm font-medium text-gray-700 mb-1"><span className="text-red-500">*</span> City Full Name</label>
+                <input type="text" value={form.city_full_name}
+                  onChange={e => { setFullNameTouched(true); updateForm('city_full_name', e.target.value); }}
+                  className={inputClass(!!errors.city_full_name)} />
+                {errors.city_full_name && <div className="text-xs text-red-500 mt-0.5">{errors.city_full_name}</div>}
+                {suggestionLink(form.city_full_name, suggestedFullName, () => setForm(f => ({ ...f, city_full_name: suggestedFullName })))}
+                {fullNameChanged && (
+                  <div className="text-xs text-amber-600 mt-1">Lanes store this name as text. Changing it does not update existing lanes or quotes.</div>
+                )}
+              </div>
+              <div>
+                <label className="flex items-center text-sm font-medium text-gray-700 mb-1">City Code{completeTag}</label>
+                <input type="text" value={form.city_code}
+                  onChange={e => { setCityCodeTouched(true); updateForm('city_code', e.target.value); }}
+                  className={inputClass()} />
+                {suggestionLink(form.city_code, suggestedCityCode, () => setForm(f => ({ ...f, city_code: suggestedCityCode })))}
+              </div>
+              <div>
+                <label className="flex items-center text-sm font-medium text-gray-700 mb-1">Market{completeTag}</label>
+                <input type="text" value={form.market_name} onChange={e => updateForm('market_name', e.target.value)} className={inputClass()} />
+              </div>
+              <div>
+                <label className="flex items-center text-sm font-medium text-gray-700 mb-1">Market Code{completeTag}</label>
+                <input type="text" value={form.market_code}
+                  onChange={e => { setMarketCodeTouched(true); updateForm('market_code', e.target.value); }}
+                  className={inputClass()} />
+                {suggestionLink(form.market_code, suggestedMarketCode, () => setForm(f => ({ ...f, market_code: suggestedMarketCode })))}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">PKey</label>
+                <p className="text-xs text-gray-500 mb-1">External key (optional).</p>
+                <input type="text" value={form.pkey} onChange={e => updateForm('pkey', e.target.value)} className={inputClass()} />
               </div>
               <div className="flex items-center gap-3 pt-1">
                 <button
@@ -1059,7 +1470,7 @@ function ManageBorderCrossings() {
     setLoading(true);
     const { data } = await supabase
       .from('cities')
-      .select('id, city_name, state_code, country_code, market_name, city_full_name, is_border_crossing_city')
+      .select('*')
       .eq('is_border_crossing_city', true)
       .order('city_name');
     if (data) setCities(data);
