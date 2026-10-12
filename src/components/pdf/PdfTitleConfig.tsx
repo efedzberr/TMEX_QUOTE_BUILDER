@@ -6,6 +6,7 @@ import { HEADER_FIELD_OPTIONS } from '../../lib/pdfConfigTypes';
 interface Props {
   config: TitleConfig;
   onChange: (config: TitleConfig) => void;
+  hideStyling?: boolean;
 }
 
 const ZONE_KEYS = ['left', 'center', 'right'] as const;
@@ -223,7 +224,7 @@ function ZoneEditor({
   );
 }
 
-export function PdfTitleConfig({ config, onChange }: Props) {
+export function PdfTitleConfig({ config, onChange, hideStyling = false }: Props) {
   const [showStyling, setShowStyling] = useState(false);
 
   function updateZone(zone: ZoneKey, elements: TitleElement[]) {
@@ -243,6 +244,7 @@ export function PdfTitleConfig({ config, onChange }: Props) {
         ))}
       </div>
 
+      {!hideStyling && (
       <div className="border-t border-gray-100 pt-2">
         <button
           onClick={() => setShowStyling(!showStyling)}
@@ -330,6 +332,7 @@ export function PdfTitleConfig({ config, onChange }: Props) {
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }

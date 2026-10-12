@@ -5,7 +5,7 @@ export type PermissionKey =
   | 'admin.partner_accounts' | 'admin.bill_to' | 'admin.shippers' | 'admin.cities' | 'admin.global_variables' | 'admin.picklists'
   | 'admin.border_crossings' | 'admin.accessorials' | 'admin.terms_conditions'
   | 'admin.account_lanes' | 'admin.cost_structure' | 'admin.market_information' | 'admin.sla' | 'admin.users' | 'admin.profiles' | 'admin.roles'
-  | 'admin.password_policies' | 'admin.security_logs'
+  | 'admin.password_policies' | 'admin.security_logs' | 'admin.pdf_format'
   | 'quote.header' | 'quote.history' | 'quote.tab_lanes' | 'quote.tab_accessorials' | 'quote.tab_terms' | 'quote.tab_pdf'
   | 'quote.field_history_config';
 
@@ -56,6 +56,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: 'admin.border_crossings', label: 'Border Crossing Cities', description: 'Admin → Border Crossing Cities tab', levels: ['view', 'edit'] },
       { key: 'admin.accessorials', label: 'Accessorials', description: 'Admin → Accessorials tab', levels: ['view', 'edit'] },
       { key: 'admin.terms_conditions', label: 'Terms & Conditions', description: 'Admin → Terms & Conditions tab', levels: ['view', 'edit'] },
+      { key: 'admin.pdf_format', label: 'Quote PDF Format', description: 'Admin → Quote PDF Format (logo, header, banner and footer of the standard quote PDF)', levels: ['view', 'edit'] },
       { key: 'admin.account_lanes', label: 'Account Lanes', description: 'Admin → Account Lanes tab', levels: ['view', 'edit'] },
       { key: 'admin.cost_structure', label: 'Cost Structure', description: 'Admin → Cost Structure tab', levels: ['view', 'edit'] },
       { key: 'admin.market_information', label: 'Market Information', description: 'Admin → Market Information tab', levels: ['view', 'edit'] },
