@@ -16,12 +16,13 @@ import { SecurityTab } from './admin/SecurityTab';
 import { PasswordPoliciesTab } from './admin/PasswordPoliciesTab';
 import { ObjectPage } from './admin/ObjectPage';
 import { GlobalPicklistsTab } from './admin/GlobalPicklistsTab';
+import { PdfFormatTab } from './admin/PdfFormatTab';
 import { usePicklist, getPicklistDefault } from '../lib/picklists';
 import { usePermissions } from '../lib/permissions';
 import type { PermissionKey } from '../lib/permissionCatalog';
 
 
-type AdminTab = 'accounts' | 'bill_to' | 'shippers' | 'cities' | 'global_variables' | 'picklists' | 'border_crossings' | 'accessorials' | 'terms_conditions' | 'account_lanes' | 'cost_structure' | 'market_information' | 'sla' | 'users' | 'profiles' | 'roles' | 'wolke' | 'update_log' | 'quotes_object' | 'quote_lanes_object' | 'security_logs' | 'password_policies';
+type AdminTab = 'accounts' | 'bill_to' | 'shippers' | 'cities' | 'global_variables' | 'picklists' | 'border_crossings' | 'accessorials' | 'terms_conditions' | 'account_lanes' | 'cost_structure' | 'market_information' | 'sla' | 'users' | 'profiles' | 'roles' | 'wolke' | 'update_log' | 'quotes_object' | 'quote_lanes_object' | 'security_logs' | 'password_policies' | 'pdf_format';
 
 
 interface BillTo {
@@ -1710,6 +1711,7 @@ const MENU: MenuSection[] = [
       { id: 'market_information', label: 'Market Information', permission: 'admin.market_information' },
       { id: 'accessorials', label: 'Accessorials', permission: 'admin.accessorials' },
       { id: 'terms_conditions', label: 'Terms & Conditions', permission: 'admin.terms_conditions' },
+      { id: 'pdf_format', label: 'Quote PDF Format', permission: 'admin.pdf_format' },
       { id: 'sla', label: 'SLA', permission: 'admin.sla' },
     ],
   },
@@ -1911,6 +1913,7 @@ export function AdministrationView() {
                   {activeTab === 'security_logs' && <SecurityTab />}
                   {activeTab === 'password_policies' && <PasswordPoliciesTab onToast={handleToast} />}
                   {activeTab === 'sla' && <SlaTab onToast={handleToast} />}
+                  {activeTab === 'pdf_format' && <PdfFormatTab onToast={handleToast} />}
                 </>
               )}
             </div>

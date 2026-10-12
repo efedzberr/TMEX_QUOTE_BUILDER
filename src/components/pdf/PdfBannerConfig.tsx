@@ -5,6 +5,7 @@ import { HEADER_FIELD_OPTIONS } from '../../lib/pdfConfigTypes';
 interface Props {
   config: BannerConfig;
   onChange: (config: BannerConfig) => void;
+  hideStyling?: boolean;
 }
 
 function CellEditor({
@@ -55,7 +56,7 @@ function CellEditor({
   );
 }
 
-export function PdfBannerConfig({ config, onChange }: Props) {
+export function PdfBannerConfig({ config, onChange, hideStyling = false }: Props) {
   const [showStyling, setShowStyling] = useState(false);
 
   function updateCell(idx: number, cell: BannerCell) {
@@ -92,6 +93,7 @@ export function PdfBannerConfig({ config, onChange }: Props) {
             ))}
           </div>
 
+          {!hideStyling && (
           <div className="border-t border-gray-100 pt-2">
             <button
               onClick={() => setShowStyling(!showStyling)}
@@ -156,6 +158,7 @@ export function PdfBannerConfig({ config, onChange }: Props) {
               </div>
             )}
           </div>
+          )}
         </>
       )}
     </div>

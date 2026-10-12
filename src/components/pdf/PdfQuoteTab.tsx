@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabase';
 import type { PdfConfig, PdfConfigTemplate } from '../../lib/pdfConfigTypes';
 import { buildDefaultConfig, buildDefaultTitleConfig, buildDefaultBannerConfig, buildDefaultFullViewFontColors } from '../../lib/pdfConfigTypes';
 import { assemblePDFDocument, type GlobalVariables, type PDFDocument } from '../../lib/pdfAssembler';
+import { applyStandardFormat, loadStandardFormat } from '../../lib/pdfStandardFormat';
 import {
   generatePdfBlob,
   buildPdfFileName,
@@ -178,7 +179,7 @@ export function PdfQuoteTab({ quote, lanes, onToast, onQuoteUpdate, onViewRespon
         attached_files: data.attached_files || [],
       });
     } else {
-      setConfig(buildDefaultConfig(quote.id));
+      setConfig(applyStandardFormat(buildDefaultConfig(quote.id), await loadStandardFormat()));
     }
     setLoading(false);
   }
@@ -312,8 +313,9 @@ export function PdfQuoteTab({ quote, lanes, onToast, onQuoteUpdate, onViewRespon
     loadTemplates();
   }
 
-  function handleReset() {
-    setConfig(prev => ({ ...buildDefaultConfig(quote.id), id: prev.id, quote_id: prev.quote_id }));
+  async function handleReset() {
+    const format = await loadStandardFormat();
+    setConfig(prev => ({ ...applyStandardFormat(buildDefaultConfig(quote.id), format), id: prev.id, quote_id: prev.quote_id }));
     onToast?.('Configuration reset to defaults', 'success');
   }
 
