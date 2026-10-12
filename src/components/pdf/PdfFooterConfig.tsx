@@ -279,7 +279,7 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function AttachmentsSection({
+export function AttachmentsSection({
   files, onChange,
 }: {
   files: AttachedFile[];

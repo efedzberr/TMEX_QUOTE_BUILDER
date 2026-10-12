@@ -3,7 +3,7 @@ import { usePermissions } from '../lib/permissions';
 import { Plus, ChevronDown, ChevronRight, X, Search, Check, DollarSign, Globe } from 'lucide-react';
 import { QuoteLanes } from './QuoteLanes';
 import { TermsConditionsTab } from './TermsConditionsTab';
-import { PdfQuoteTab } from './pdf/PdfQuoteTab';
+import { PdfSimpleTab } from './pdf/PdfSimpleTab';
 import { QuoteLane, Quote, supabase } from '../lib/supabase';
 import { CURRENCIES, CurrencyCode } from '../lib/constants';
 import { usePicklist, getPicklistDefault, getPicklistOptions } from '../lib/picklists';
@@ -644,7 +644,7 @@ export function QuoteTabs({
         )}
 
         {activeTab === 'pdf' && (
-          <PdfQuoteTab quote={quote} lanes={lanes} onToast={onToast} onQuoteUpdate={onUpdateQuote} onViewResponse={onViewResponse} />
+          <PdfSimpleTab quote={quote} lanes={lanes} onToast={onToast} onQuoteUpdate={onUpdateQuote} onViewResponse={onViewResponse} />
         )}
       </div>
     </div>
