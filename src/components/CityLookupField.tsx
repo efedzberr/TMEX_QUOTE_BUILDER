@@ -4,7 +4,7 @@ import { ChevronDown, Search, ExternalLink } from 'lucide-react';
 import { supabase, City } from '../lib/supabase';
 import { abbreviationOrClause, exactAbbreviationFirst, singleExactAbbreviation, normalizeAbbreviation } from '../lib/citySearch';
 
-type SearchCity = City & { city_abbreviation_compact?: string | null };
+type SearchCity = City & { city_abbreviation?: string | null; city_abbreviation_compact?: string | null };
 
 export interface CityInfo {
   cityFullName: string;
@@ -341,6 +341,14 @@ export function CityLookupField({
                               {city.city_code}
                             </span>
                           )}
+                          {city.city_abbreviation && (
+                            <span
+                              className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 font-mono"
+                              title="City abbreviation"
+                            >
+                              {city.city_abbreviation}
+                            </span>
+                          )}
                           {city.country_code && (
                             <span className="text-sm text-gray-600">
                               · {city.country_code === 'USA' ? 'USA' : city.country_code === 'MEX' ? 'México' : city.country_code}
@@ -444,6 +452,14 @@ export function CityLookupField({
                           {city.city_code && (
                             <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
                               {city.city_code}
+                            </span>
+                          )}
+                          {city.city_abbreviation && (
+                            <span
+                              className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 font-mono ml-1"
+                              title="City abbreviation"
+                            >
+                              {city.city_abbreviation}
                             </span>
                           )}
                         </div>
