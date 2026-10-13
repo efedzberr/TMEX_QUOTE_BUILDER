@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, Search } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { abbreviationOrClause, exactAbbreviationFirst, singleExactAbbreviation } from '../lib/citySearch';
 
 interface MarketCity {
   id: string;
@@ -10,6 +11,7 @@ interface MarketCity {
   state_code: string;
   country_code: string;
   market_name: string;
+  city_abbreviation_compact?: string | null;
 }
 
 interface MarketFilteredCityLookupProps {
@@ -49,7 +51,7 @@ export function MarketFilteredCityLookup({
     const fetchCities = async () => {
       let q = supabase
         .from('cities')
-        .select('id, city_name, city_full_name, state_code, country_code, market_name')
+        .select('id, city_name, city_full_name, state_code, country_code, market_name, city_abbreviation_compact')
         .eq('market_name', marketFilter)
         .order('city_name');
 
@@ -58,11 +60,11 @@ export function MarketFilteredCityLookup({
       }
 
       if (query.length >= 2) {
-        q = q.or(`city_full_name.ilike.%${query}%,city_name.ilike.%${query}%`);
+        q = q.or(`city_full_name.ilike.%${query}%,city_name.ilike.%${query}%${abbreviationOrClause(query)}`);
       }
 
       const { data } = await q.limit(100);
-      if (data) setCities(data as MarketCity[]);
+      if (data) setCities(exactAbbreviationFirst(data as MarketCity[], query));
       setLoading(false);
     };
     fetchCities();
@@ -148,6 +150,14 @@ export function MarketFilteredCityLookup({
                 type="text"
                 value={query}
                 onChange={e => setQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key !== 'Enter') return;
+                  const match = singleExactAbbreviation(cities, query);
+                  if (match) {
+                    e.preventDefault();
+                    handleSelect(match);
+                  }
+                }}
                 placeholder="Search..."
                 className="w-full pl-7 pr-3 py-1.5 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
               />

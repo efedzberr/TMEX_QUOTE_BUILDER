@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, Search } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { normalizeAbbreviation, exactAbbreviationFirst, singleExactAbbreviation } from '../lib/citySearch';
 
 interface BorderCity {
   id: string;
@@ -9,6 +10,7 @@ interface BorderCity {
   city_full_name: string | null;
   state_code: string | null;
   country_code: string | null;
+  city_abbreviation_compact?: string | null;
 }
 
 interface BorderCrossingLookupProps {
@@ -31,7 +33,7 @@ export function useBorderCrossingCities() {
       setLoading(true);
       const { data } = await supabase
         .from('cities')
-        .select('id, city_name, city_full_name, state_code, country_code')
+        .select('id, city_name, city_full_name, state_code, country_code, city_abbreviation_compact')
         .eq('is_border_crossing_city', true)
         .order('city_name');
       if (!cancelled && data) setCities(data);
@@ -62,8 +64,13 @@ export function BorderCrossingLookup({
   const buttonRef = useRef<HTMLButtonElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const filtered = cities.filter(c =>
-    (c.city_full_name || c.city_name).toLowerCase().includes(query.toLowerCase())
+  const compactQuery = normalizeAbbreviation(query);
+  const filtered = exactAbbreviationFirst(
+    cities.filter(c =>
+      (c.city_full_name || c.city_name).toLowerCase().includes(query.toLowerCase())
+      || (compactQuery.length >= 2 && (c.city_abbreviation_compact || '').includes(compactQuery))
+    ),
+    query,
   );
 
   useEffect(() => {
@@ -157,6 +164,14 @@ export function BorderCrossingLookup({
                 type="text"
                 value={query}
                 onChange={e => setQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key !== 'Enter') return;
+                  const match = singleExactAbbreviation(filtered, query);
+                  if (match) {
+                    e.preventDefault();
+                    handleSelect(match);
+                  }
+                }}
                 placeholder="Search..."
                 className="w-full pl-7 pr-3 py-1.5 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
               />

@@ -1,5 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase, City } from '../lib/supabase';
+import { abbreviationOrClause, exactAbbreviationFirst, singleExactAbbreviation } from '../lib/citySearch';
+
+type SearchCity = City & { city_abbreviation_compact?: string | null };
 
 interface CityAutocompleteInputProps {
   value: string;
@@ -15,7 +18,7 @@ export function CityAutocompleteInput({
   className = '',
 }: CityAutocompleteInputProps) {
   const [searchTerm, setSearchTerm] = useState(value);
-  const [suggestions, setSuggestions] = useState<City[]>([]);
+  const [suggestions, setSuggestions] = useState<SearchCity[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
@@ -35,12 +38,12 @@ export function CityAutocompleteInput({
     const { data, error } = await supabase
       .from('cities')
       .select('*')
-      .or(`city_full_name.ilike.%${term}%,city_name.ilike.%${term}%,city_code.ilike.%${term}%`)
+      .or(`city_full_name.ilike.%${term}%,city_name.ilike.%${term}%,city_code.ilike.%${term}%${abbreviationOrClause(term)}`)
       .order('city_name', { ascending: true })
       .limit(20);
 
     if (!error && data) {
-      setSuggestions(data);
+      setSuggestions(exactAbbreviationFirst(data as SearchCity[], term));
     }
   }
 
@@ -75,6 +78,14 @@ export function CityAutocompleteInput({
         value={searchTerm}
         onChange={handleInputChange}
         onFocus={() => setShowSuggestions(true)}
+        onKeyDown={(e) => {
+          if (e.key !== 'Enter') return;
+          const match = singleExactAbbreviation(suggestions, searchTerm);
+          if (match) {
+            e.preventDefault();
+            handleSelect(match);
+          }
+        }}
         placeholder={placeholder}
         className={className}
       />

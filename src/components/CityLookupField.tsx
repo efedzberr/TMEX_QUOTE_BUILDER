@@ -2,6 +2,9 @@ import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, Search, ExternalLink } from 'lucide-react';
 import { supabase, City } from '../lib/supabase';
+import { abbreviationOrClause, exactAbbreviationFirst, singleExactAbbreviation, normalizeAbbreviation } from '../lib/citySearch';
+
+type SearchCity = City & { city_abbreviation_compact?: string | null };
 
 export interface CityInfo {
   cityFullName: string;
@@ -31,10 +34,10 @@ export function CityLookupField({
 }: CityLookupFieldProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [cities, setCities] = useState<City[]>([]);
+  const [cities, setCities] = useState<SearchCity[]>([]);
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
-  const [modalCities, setModalCities] = useState<City[]>([]);
+  const [modalCities, setModalCities] = useState<SearchCity[]>([]);
   const [modalSearchTerm, setModalSearchTerm] = useState('');
   const [modalLoading, setModalLoading] = useState(false);
   const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; width: number } | null>(null);
@@ -62,29 +65,36 @@ export function CityLookupField({
     setLoading(true);
 
     const parts = term.split(',').map(p => p.trim());
+    const compact = normalizeAbbreviation(term);
+    const useExact = compact.length >= 2;
 
     if (includeBorderCrossing && countryFilter) {
       const buildTextFilter = (q: any) => {
         if (parts.length === 2 && parts[1].length <= 2) {
           return q.ilike('city_name', `%${parts[0]}%`).ilike('state_code', `${parts[1]}%`);
         }
-        return q.or(`city_full_name.ilike.%${term}%,city_name.ilike.%${term}%,city_code.ilike.%${term}%`);
+        return q.or(`city_full_name.ilike.%${term}%,city_name.ilike.%${term}%,city_code.ilike.%${term}%${abbreviationOrClause(term)}`);
       };
 
-      let qCountry = supabase.from('cities').select('*');
-      if (countryFilter === 'US_CAN') {
-        qCountry = qCountry.in('country_code', ['USA', 'US', 'CAN', 'CA']);
-      } else {
-        qCountry = qCountry.eq('country_code', countryFilter);
-      }
-      qCountry = buildTextFilter(qCountry);
+      const countryQuery = () => {
+        const q = supabase.from('cities').select('*');
+        return countryFilter === 'US_CAN'
+          ? q.in('country_code', ['USA', 'US', 'CAN', 'CA'])
+          : q.eq('country_code', countryFilter);
+      };
+      const borderQuery = () => supabase.from('cities').select('*').eq('is_border_crossing_city', true);
 
-      let qBorder = supabase.from('cities').select('*').eq('is_border_crossing_city', true);
-      qBorder = buildTextFilter(qBorder);
+      const qCountry = buildTextFilter(countryQuery());
+      const qBorder = buildTextFilter(borderQuery());
 
-      const [r1, r2] = await Promise.all([qCountry.limit(30), qBorder.limit(30)]);
-      const merged = new Map<string, City>();
-      for (const c of [...(r1.data || []), ...(r2.data || [])]) {
+      const [r1, r2, r3, r4] = await Promise.all([
+        qCountry.limit(30),
+        qBorder.limit(30),
+        useExact ? countryQuery().eq('city_abbreviation_compact', compact).limit(10) : Promise.resolve({ data: [] as SearchCity[] }),
+        useExact ? borderQuery().eq('city_abbreviation_compact', compact).limit(10) : Promise.resolve({ data: [] as SearchCity[] }),
+      ]);
+      const merged = new Map<string, SearchCity>();
+      for (const c of [...(r1.data || []), ...(r2.data || []), ...(r3.data || []), ...(r4.data || [])] as SearchCity[]) {
         const key = `${c.city_full_name}|${c.market_name}`;
         if (!merged.has(key)) merged.set(key, c);
       }
@@ -102,31 +112,39 @@ export function CityLookupField({
         if (bStarts && !aStarts) return 1;
         return aNameLower.localeCompare(bNameLower);
       });
-      setCities(sorted.slice(0, 6));
+      setCities(exactAbbreviationFirst(sorted, term).slice(0, 6));
       setLoading(false);
       return;
     }
 
-    let query = supabase.from('cities').select('*');
+    const baseQuery = () => {
+      const q = supabase.from('cities').select('*');
+      if (countryFilter === 'US_CAN') return q.in('country_code', ['USA', 'US', 'CAN', 'CA']);
+      if (countryFilter) return q.eq('country_code', countryFilter);
+      return q;
+    };
 
-    if (countryFilter === 'US_CAN') {
-      query = query.in('country_code', ['USA', 'US', 'CAN', 'CA']);
-    } else if (countryFilter) {
-      query = query.eq('country_code', countryFilter);
-    }
+    let query = baseQuery();
 
     if (parts.length === 2 && parts[1].length <= 2) {
       query = query
         .ilike('city_name', `%${parts[0]}%`)
         .ilike('state_code', `${parts[1]}%`);
     } else {
-      query = query.or(`city_full_name.ilike.%${term}%,city_name.ilike.%${term}%,city_code.ilike.%${term}%`);
+      query = query.or(`city_full_name.ilike.%${term}%,city_name.ilike.%${term}%,city_code.ilike.%${term}%${abbreviationOrClause(term)}`);
     }
 
-    const { data, error } = await query.limit(50);
+    const [{ data, error }, exactRes] = await Promise.all([
+      query.limit(50),
+      useExact ? baseQuery().eq('city_abbreviation_compact', compact).limit(10) : Promise.resolve({ data: [] as SearchCity[] }),
+    ]);
 
     if (!error && data) {
-      const sorted = data.sort((a, b) => {
+      const byId = new Map<string, SearchCity>();
+      for (const c of [...data, ...(exactRes.data || [])] as SearchCity[]) {
+        if (!byId.has(c.id)) byId.set(c.id, c);
+      }
+      const sorted = Array.from(byId.values()).sort((a, b) => {
         const searchLower = term.toLowerCase();
         const aNameLower = a.city_name.toLowerCase();
         const bNameLower = b.city_name.toLowerCase();
@@ -139,7 +157,7 @@ export function CityLookupField({
         return aNameLower.localeCompare(bNameLower);
       });
 
-      setCities(sorted.slice(0, 6));
+      setCities(exactAbbreviationFirst(sorted, term).slice(0, 6));
     }
     setLoading(false);
   }
@@ -154,19 +172,19 @@ export function CityLookupField({
       } else {
         qCountry = qCountry.eq('country_code', countryFilter);
       }
-      qCountry = qCountry.or(`city_full_name.ilike.%${term}%,city_name.ilike.%${term}%,city_code.ilike.%${term}%,market_name.ilike.%${term}%,state_code.ilike.%${term}%,country_code.ilike.%${term}%`);
+      qCountry = qCountry.or(`city_full_name.ilike.%${term}%,city_name.ilike.%${term}%,city_code.ilike.%${term}%,market_name.ilike.%${term}%,state_code.ilike.%${term}%,country_code.ilike.%${term}%${abbreviationOrClause(term)}`);
 
       let qBorder = supabase.from('cities').select('*').eq('is_border_crossing_city', true);
-      qBorder = qBorder.or(`city_full_name.ilike.%${term}%,city_name.ilike.%${term}%,city_code.ilike.%${term}%,market_name.ilike.%${term}%,state_code.ilike.%${term}%,country_code.ilike.%${term}%`);
+      qBorder = qBorder.or(`city_full_name.ilike.%${term}%,city_name.ilike.%${term}%,city_code.ilike.%${term}%,market_name.ilike.%${term}%,state_code.ilike.%${term}%,country_code.ilike.%${term}%${abbreviationOrClause(term)}`);
 
       const [r1, r2] = await Promise.all([qCountry.order('city_name').limit(60), qBorder.order('city_name').limit(60)]);
-      const merged = new Map<string, City>();
+      const merged = new Map<string, SearchCity>();
       for (const c of [...(r1.data || []), ...(r2.data || [])]) {
         const key = `${c.city_full_name}|${c.market_name}`;
         if (!merged.has(key)) merged.set(key, c);
       }
       const all = Array.from(merged.values()).sort((a, b) => a.city_name.localeCompare(b.city_name));
-      setModalCities(all.slice(0, 100));
+      setModalCities(exactAbbreviationFirst(all.slice(0, 100), term));
       setModalLoading(false);
       return;
     }
@@ -182,12 +200,12 @@ export function CityLookupField({
     }
 
     const { data, error } = await query
-      .or(`city_full_name.ilike.%${term}%,city_name.ilike.%${term}%,city_code.ilike.%${term}%,market_name.ilike.%${term}%,state_code.ilike.%${term}%,country_code.ilike.%${term}%`)
+      .or(`city_full_name.ilike.%${term}%,city_name.ilike.%${term}%,city_code.ilike.%${term}%,market_name.ilike.%${term}%,state_code.ilike.%${term}%,country_code.ilike.%${term}%${abbreviationOrClause(term)}`)
       .order('city_name', { ascending: true })
       .limit(100);
 
     if (!error && data) {
-      setModalCities(data);
+      setModalCities(exactAbbreviationFirst(data as SearchCity[], term));
     }
     setModalLoading(false);
   }
@@ -279,6 +297,14 @@ export function CityLookupField({
                   type="text"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter') return;
+                    const match = singleExactAbbreviation(cities, searchTerm);
+                    if (match) {
+                      e.preventDefault();
+                      handleSelect(match);
+                    }
+                  }}
                   placeholder="Type to search..."
                   className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   autoFocus
@@ -369,6 +395,14 @@ export function CityLookupField({
                   type="text"
                   value={modalSearchTerm}
                   onChange={(e) => setModalSearchTerm(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter') return;
+                    const match = singleExactAbbreviation(modalCities, modalSearchTerm);
+                    if (match) {
+                      e.preventDefault();
+                      handleSelect(match);
+                    }
+                  }}
                   placeholder="Search by city, state, code, market, or country..."
                   className="w-full pl-10 pr-4 py-3 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   autoFocus
