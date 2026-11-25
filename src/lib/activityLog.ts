@@ -13,7 +13,7 @@ export interface ActivityOptions {
  */
 export function logActivity(event: string, opts: ActivityOptions = {}): void {
   let sessionId: string | null = null;
-  try { sessionId = sessionStorage.getItem('sph.session_id'); } catch { /* ignore */ }
+  try { sessionId = localStorage.getItem('sph.session_id'); } catch { /* ignore */ }
   void supabase
     .rpc('log_activity', {
       p_event: event,

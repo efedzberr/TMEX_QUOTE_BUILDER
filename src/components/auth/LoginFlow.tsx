@@ -38,9 +38,8 @@ function AuthShell({ children }: { children: React.ReactNode }) {
 function PasswordStep() {
   const { refreshAuthState } = useAuth();
   const [logoutReason] = useState<string | null>(() => {
-    const r = sessionStorage.getItem('sph.logout_reason');
-    sessionStorage.removeItem('sph.logout_reason');
-    return r;
+    // Written by SessionGuard (shared by all tabs); it is cleared when the next session starts
+    try { return localStorage.getItem('sph.logout_reason'); } catch { return null; }
   });
   const [forgotMode, setForgotMode] = useState(false);
   const [forgotSent, setForgotSent] = useState(false);
@@ -99,6 +98,8 @@ function PasswordStep() {
         setError('No fue posible iniciar sesión. Intenta de nuevo.');
         return;
       }
+      // Fresh login: drop any app-session id left behind by a previous login on this browser
+      try { localStorage.removeItem('sph.session_id'); } catch { /* ignore */ }
       if (data.login_id) sessionStorage.setItem('sph.login_id', String(data.login_id));
       if (data.must_change_password) sessionStorage.setItem('sph.must_change_password', '1');
       await refreshAuthState();
@@ -122,10 +123,15 @@ function PasswordStep() {
         </div>
       </div>
 
-      {logoutReason === 'timeout' && !forgotMode && (
+      {logoutReason && ['timeout', 'midnight', 'expired', 'unverified'].includes(logoutReason) && !forgotMode && (
         <div className="mb-4 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
           <Lock className="w-4 h-4 mt-0.5 flex-shrink-0" />
-          <span>Tu sesión expiró por inactividad. Vuelve a iniciar sesión.</span>
+          <span>
+            {logoutReason === 'timeout' && 'Tu sesión expiró por inactividad. Vuelve a iniciar sesión.'}
+            {logoutReason === 'midnight' && 'Por seguridad, las sesiones se cierran todos los días a la medianoche. Vuelve a iniciar sesión.'}
+            {logoutReason === 'expired' && 'Tu sesión expiró. Vuelve a iniciar sesión.'}
+            {logoutReason === 'unverified' && 'No fue posible verificar tu sesión. Vuelve a iniciar sesión.'}
+          </span>
         </div>
       )}
 

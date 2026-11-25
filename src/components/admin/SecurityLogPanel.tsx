@@ -35,7 +35,7 @@ const STATUS_BADGE: Record<string, string> = {
   unknown_user: 'bg-gray-100 text-gray-600 border-gray-200',
   error: 'bg-gray-100 text-gray-600 border-gray-200',
 };
-const END_LABEL: Record<string, string> = { logout: 'Signed out', timeout: 'Timed out', admin: 'Ended by admin' };
+const END_LABEL: Record<string, string> = { logout: 'Signed out', timeout: 'Timed out', admin: 'Ended by admin', midnight: 'Daily sign-out' };
 
 export function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });

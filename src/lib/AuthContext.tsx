@@ -45,6 +45,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const evaluateSession = useCallback(async (s: Session | null) => {
     if (!s) {
+      // No auth session: any stored app-session id is stale (next login starts a new one)
+      try { localStorage.removeItem('sph.session_id'); } catch { /* ignore */ }
       setSession(null);
       setStatus('signed_out');
       return;
@@ -89,9 +91,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = useCallback(async () => {
     // Close the app session row (if any) before dropping the auth session.
     // SessionGuard removes the key first when it already ended the session itself.
-    const sid = sessionStorage.getItem('sph.session_id');
+    let sid: string | null = null;
+    try { sid = localStorage.getItem('sph.session_id'); } catch { /* ignore */ }
     if (sid) {
-      sessionStorage.removeItem('sph.session_id');
+      try { localStorage.removeItem('sph.session_id'); } catch { /* ignore */ }
       try { await supabase.rpc('end_session', { p_session_id: sid, p_reason: 'logout' }); } catch { /* ignore */ }
     }
     await supabase.auth.signOut();
