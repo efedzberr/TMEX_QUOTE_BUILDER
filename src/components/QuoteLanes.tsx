@@ -1969,7 +1969,7 @@ export function QuoteLanes({
               <div className="w-full px-2 py-1 text-xs rounded text-right text-gray-500" style={{ backgroundColor: '#F3F4F6' }}>—</div>
             ) : (
               <>
-                <input type="number" step="0.01" value={currentData.us_miles || 0} onChange={(e) => handleFieldChange(lane.id, 'us_miles', parseFloat(e.target.value) || 0)} className={`w-full px-2 py-1 text-xs border rounded text-right bg-white ${laneErrs.us_miles ? 'border-2 border-red-500' : 'border-gray-300'}`} />
+                <GridNumberInput value={currentData.us_miles || 0} onChange={(v) => handleFieldChange(lane.id, 'us_miles', v)} className={`w-full px-2 py-1 text-xs border rounded text-right bg-white ${laneErrs.us_miles ? 'border-2 border-red-500' : 'border-gray-300'}`} />
                 {laneErrs.us_miles && <div className="text-[10px] text-red-500 mt-0.5">{laneErrs.us_miles}</div>}
               </>
             )}
@@ -2039,7 +2039,7 @@ export function QuoteLanes({
               <div className="w-full px-2 py-1 text-xs rounded text-right text-gray-500" style={{ backgroundColor: '#F3F4F6' }}>—</div>
             ) : (
               <>
-                <input type="number" step="0.01" value={currentData.mx_miles || 0} onChange={(e) => handleFieldChange(lane.id, 'mx_miles', parseFloat(e.target.value) || 0)} className={`w-full px-2 py-1 text-xs border rounded text-right bg-white ${laneErrs.mx_miles ? 'border-2 border-red-500' : 'border-gray-300'}`} />
+                <GridNumberInput value={currentData.mx_miles || 0} onChange={(v) => handleFieldChange(lane.id, 'mx_miles', v)} className={`w-full px-2 py-1 text-xs border rounded text-right bg-white ${laneErrs.mx_miles ? 'border-2 border-red-500' : 'border-gray-300'}`} />
                 {laneErrs.mx_miles && <div className="text-[10px] text-red-500 mt-0.5">{laneErrs.mx_miles}</div>}
               </>
             )}
@@ -2521,7 +2521,7 @@ export function QuoteLanes({
                   </td>
 
                   <td style={{ minWidth: '80px', backgroundColor: usDisabled ? disabledBg : sbUsEditBg }} className="px-2 py-2">
-                    {usDisabled ? <div className="w-full px-2 py-1 text-xs rounded text-right text-gray-500">—</div> : <input type="number" step="0.01" value={lane.us_miles || 0} onChange={(e) => handleSplitBillingLaneChange(index, 'us_miles', parseFloat(e.target.value) || 0)} className="w-full px-2 py-1 text-xs border border-gray-300 rounded text-right bg-white" />}
+                    {usDisabled ? <div className="w-full px-2 py-1 text-xs rounded text-right text-gray-500">—</div> : <GridNumberInput value={lane.us_miles || 0} onChange={(v) => handleSplitBillingLaneChange(index, 'us_miles', v)} className="w-full px-2 py-1 text-xs border border-gray-300 rounded text-right bg-white" />}
                   </td>
                   <td style={{ minWidth: '100px', backgroundColor: usDisabled ? disabledBg : sbUsEditBg }} className="px-2 py-2">
                     <GridCurrencyInput value={lane.us_fuel_rate || 0} onChange={(v) => handleSplitBillingLaneChange(index, 'us_fuel_rate', v)} currencyCode={sbCurrency} disabled={usDisabled} />
@@ -2561,7 +2561,7 @@ export function QuoteLanes({
                   </td>
 
                   <td style={{ minWidth: '80px', backgroundColor: mxDisabled ? disabledBg : sbMxEditBg }} className="px-2 py-2">
-                    {mxDisabled ? <div className="w-full px-2 py-1 text-xs rounded text-right text-gray-500">—</div> : <input type="number" step="0.01" value={lane.mx_miles || 0} onChange={(e) => handleSplitBillingLaneChange(index, 'mx_miles', parseFloat(e.target.value) || 0)} className="w-full px-2 py-1 text-xs border border-gray-300 rounded text-right bg-white" />}
+                    {mxDisabled ? <div className="w-full px-2 py-1 text-xs rounded text-right text-gray-500">—</div> : <GridNumberInput value={lane.mx_miles || 0} onChange={(v) => handleSplitBillingLaneChange(index, 'mx_miles', v)} className="w-full px-2 py-1 text-xs border border-gray-300 rounded text-right bg-white" />}
                   </td>
                   <td style={{ minWidth: '100px', backgroundColor: mxDisabled ? disabledBg : sbMxEditBg }} className="px-2 py-2">
                     <GridCurrencyInput value={lane.mx_fuel_rate || 0} onChange={(v) => handleSplitBillingLaneChange(index, 'mx_fuel_rate', v)} currencyCode={sbCurrency} disabled={mxDisabled} />
@@ -2807,7 +2807,7 @@ export function QuoteLanes({
                 <td style={{ minWidth: '80px', backgroundColor: addUsEditBg }} className="px-2 py-2">
                   {addUsDisabled ? <div className="w-full px-2 py-1 text-xs rounded text-right text-gray-500" style={{ backgroundColor: '#F3F4F6' }}>—</div> : (
                     <>
-                      <input type="number" step="0.01" value={editData.us_miles || 0} onChange={(e) => setEditData({ ...editData, us_miles: parseFloat(e.target.value) || 0 })} className={`w-full px-2 py-1 text-xs border rounded text-right bg-white ${validationErrors.lane1?.us_miles ? 'border-2 border-red-500' : 'border-gray-300'}`} />
+                      <GridNumberInput value={editData.us_miles || 0} onChange={(v) => setEditData({ ...editData, us_miles: v })} className={`w-full px-2 py-1 text-xs border rounded text-right bg-white ${validationErrors.lane1?.us_miles ? 'border-2 border-red-500' : 'border-gray-300'}`} />
                       {validationErrors.lane1?.us_miles && <div className="text-[10px] text-red-500 mt-0.5">{validationErrors.lane1.us_miles}</div>}
                     </>
                   )}
@@ -2867,7 +2867,7 @@ export function QuoteLanes({
                 <td style={{ minWidth: '80px', backgroundColor: addMxEditBg }} className="px-2 py-2">
                   {addMxDisabled ? <div className="w-full px-2 py-1 text-xs rounded text-right text-gray-500" style={{ backgroundColor: '#F3F4F6' }}>—</div> : (
                     <>
-                      <input type="number" step="0.01" value={editData.mx_miles || 0} onChange={(e) => setEditData({ ...editData, mx_miles: parseFloat(e.target.value) || 0 })} className={`w-full px-2 py-1 text-xs border rounded text-right bg-white ${validationErrors.lane1?.mx_miles ? 'border-2 border-red-500' : 'border-gray-300'}`} />
+                      <GridNumberInput value={editData.mx_miles || 0} onChange={(v) => setEditData({ ...editData, mx_miles: v })} className={`w-full px-2 py-1 text-xs border rounded text-right bg-white ${validationErrors.lane1?.mx_miles ? 'border-2 border-red-500' : 'border-gray-300'}`} />
                       {validationErrors.lane1?.mx_miles && <div className="text-[10px] text-red-500 mt-0.5">{validationErrors.lane1.mx_miles}</div>}
                     </>
                   )}
@@ -3093,7 +3093,7 @@ export function QuoteLanes({
                   <td style={{ minWidth: '80px', backgroundColor: l2UsEditBg }} className="px-2 py-2">
                     {lane2UsDisabled ? <div className="w-full px-2 py-1 text-xs rounded text-right text-gray-500" style={{ backgroundColor: '#F3F4F6' }}>—</div> : (
                       <>
-                        <input type="number" step="0.01" value={editData2.us_miles || 0} onChange={(e) => setEditData2({ ...editData2, us_miles: parseFloat(e.target.value) || 0 })} className={`w-full px-2 py-1 text-xs border rounded text-right bg-white ${validationErrors.lane2?.us_miles ? 'border-2 border-red-500' : 'border-gray-300'}`} />
+                        <GridNumberInput value={editData2.us_miles || 0} onChange={(v) => setEditData2({ ...editData2, us_miles: v })} className={`w-full px-2 py-1 text-xs border rounded text-right bg-white ${validationErrors.lane2?.us_miles ? 'border-2 border-red-500' : 'border-gray-300'}`} />
                         {validationErrors.lane2?.us_miles && <div className="text-[10px] text-red-500 mt-0.5">{validationErrors.lane2.us_miles}</div>}
                       </>
                     )}
@@ -3153,7 +3153,7 @@ export function QuoteLanes({
                   <td style={{ minWidth: '80px', backgroundColor: l2MxEditBg }} className="px-2 py-2">
                     {lane2MxDisabled ? <div className="w-full px-2 py-1 text-xs rounded text-right text-gray-500" style={{ backgroundColor: '#F3F4F6' }}>—</div> : (
                       <>
-                        <input type="number" step="0.01" value={editData2.mx_miles || 0} onChange={(e) => setEditData2({ ...editData2, mx_miles: parseFloat(e.target.value) || 0 })} className={`w-full px-2 py-1 text-xs border rounded text-right bg-white ${validationErrors.lane2?.mx_miles ? 'border-2 border-red-500' : 'border-gray-300'}`} />
+                        <GridNumberInput value={editData2.mx_miles || 0} onChange={(v) => setEditData2({ ...editData2, mx_miles: v })} className={`w-full px-2 py-1 text-xs border rounded text-right bg-white ${validationErrors.lane2?.mx_miles ? 'border-2 border-red-500' : 'border-gray-300'}`} />
                         {validationErrors.lane2?.mx_miles && <div className="text-[10px] text-red-500 mt-0.5">{validationErrors.lane2.mx_miles}</div>}
                       </>
                     )}
