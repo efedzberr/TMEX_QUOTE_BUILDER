@@ -19,6 +19,50 @@ import { GridHeader } from './GridHeader';
 import { supabase } from '../lib/supabase';
 import { createSplitBillingLanes } from '../lib/splitBillingHelper';
 
+/** Text shown for a grid amount: empty when the value is 0, otherwise at least `minDecimals` decimals (up to 4). */
+function formatGridNumber(v: number, minDecimals: number): string {
+  if (!v || isNaN(v)) return '';
+  let s = v.toFixed(4);
+  while (s.includes('.') && s.endsWith('0') && s.length - s.indexOf('.') - 1 > minDecimals) s = s.slice(0, -1);
+  return s.endsWith('.') ? s.slice(0, -1) : s;
+}
+
+/**
+ * Numeric grid input that stays EMPTY when the value is 0 (gray placeholder instead of a real "0"),
+ * so typed digits never get glued to a leftover zero. Selects its content on focus.
+ */
+function GridNumberInput({ value, onChange, className, minDecimals = 0 }: { value: number; onChange: (v: number) => void; className?: string; minDecimals?: number }) {
+  const [text, setText] = useState(formatGridNumber(value, minDecimals));
+  const focusedRef = useRef(false);
+
+  useEffect(() => {
+    if (!focusedRef.current) setText(formatGridNumber(value, minDecimals));
+  }, [value, minDecimals]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let raw = e.target.value.replace(/[^0-9.]/g, '');
+    const dot = raw.indexOf('.');
+    if (dot !== -1) raw = raw.slice(0, dot + 1) + raw.slice(dot + 1).replace(/\./g, '');
+    setText(raw);
+    const parsed = parseFloat(raw);
+    onChange(isNaN(parsed) ? 0 : parsed);
+  };
+
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      autoComplete="off"
+      placeholder={minDecimals > 0 ? (0).toFixed(minDecimals) : '0'}
+      value={text}
+      onChange={handleChange}
+      onFocus={(e) => { focusedRef.current = true; e.target.select(); }}
+      onBlur={() => { focusedRef.current = false; setText(formatGridNumber(parseFloat(text) || 0, minDecimals)); }}
+      className={`placeholder-gray-300 ${className || ''}`}
+    />
+  );
+}
+
 function GridCurrencyInput({ value, onChange, disabled, currencyCode = 'USD', hasError }: { value: number; onChange: (v: number) => void; disabled?: boolean; currencyCode?: string; hasError?: boolean }) {
   if (disabled) {
     return <div className="w-full px-2 py-1 text-xs rounded text-right text-gray-500" style={{ backgroundColor: '#F3F4F6' }}>—</div>;
@@ -26,11 +70,10 @@ function GridCurrencyInput({ value, onChange, disabled, currencyCode = 'USD', ha
   return (
     <div className="relative">
       <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-gray-400 text-[10px] whitespace-nowrap">{currencyCode} $</span>
-      <input
-        type="number"
-        step="0.01"
+      <GridNumberInput
         value={value || 0}
-        onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
+        onChange={onChange}
+        minDecimals={2}
         className={`w-full pl-12 pr-1 py-1 text-xs border rounded text-right ${hasError ? 'border-2 border-red-500' : 'border-gray-300'}`}
       />
     </div>
